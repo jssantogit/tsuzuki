@@ -53,7 +53,7 @@ class SignedCode9LiveReaderContract(unittest.TestCase):
     def test_existing_code8_gate_kept_and_code9_explicit(self):
         script = SCRIPT.read_text(encoding="utf-8")
         self.assertIn('readonly signed_code="${MANGAALL_SIGNED_CODE:-8}"', script)
-        self.assertIn("8|9) ;;", script)
+        self.assertIn("8|9|10) ;;", script)
         self.assertIn("LIVE_PAGE_HARD_STOP|reason=UNRECOGNIZED_SIGNED_CODE", script)
         self.assertIn('Code${signed_code}LivePages_downloadAndDecodeAtMostTwo', script)
         self.assertIn('Code${signed_code}LiveReaderDisplaysCdnPixels', script)
@@ -87,7 +87,7 @@ class SignedCode9LiveReaderContract(unittest.TestCase):
         script = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("failure.error.code.name", probe)
         self.assertIn('failure.error.pageFailureStage?.name ?: "NONE"', probe)
-        self.assertIn("signedCode == 9L", probe)
+        self.assertIn('9L -> "0.5.4"', probe)
         self.assertIn("providerError=(", script)
         self.assertIn("pageFailureStage=(", script)
         matched = re.search(r"grep -oE '([^']+)'", script)

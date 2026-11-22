@@ -1,0 +1,191 @@
+name: MangaAll signed code10 — real Android CDN transport and Reader pixels
+
+# PRs and narrowly-scoped branch pushes run ONLY offline lint/compile checks.
+# Real source and CDN traffic requires an explicit workflow_dispatch with
+# an exact operator chapter HID; green canonical smoke never launches it.
+on:
+  push:
+    branches: ['test/mangaall-code10-real-reader-cdn-opt-in-*', 'fix/mangaall-code10-real-reader-cdn-opt-in-*']
+    paths:
+      - '.github/workflows/mangaall-code10-live-reader-android.yml'
+      - '.github/scripts/test_mangaall_code10_live_reader_contract.py'
+      - '.github/scripts/run_mangaall_live_pages_android.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
+  pull_request:
+    paths:
+      - '.github/workflows/mangaall-code10-live-reader-android.yml'
+      - '.github/scripts/test_mangaall_code10_live_reader_contract.py'
+      - '.github/scripts/run_mangaall_live_pages_android.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
+  workflow_dispatch:
+    inputs:
+      work_id:
+        description: 'Exact source work ID observed from a genuine signed lookup'
+        type: string
+        required: true
+      chapter_id:
+        description: 'Exact chapter ID belonging to that source work'
+        type: string
+        required: true
+      chapter_number:
+        description: 'Exact observed chapter number (Reader fixture only; validated against signed chapter)'
+        type: string
+        required: false
+        default: '1'
+      language:
+        description: 'Captured language facet (English first)'
+        type: choice
+        options: [en]
+        default: en
+        required: true
+      mode:
+        description: 'transport: decode up to 2 CDN images; reader: verify real ReaderActivity pixels'
+        type: choice
+        options: [transport, reader]
+        default: transport
+        required: true
+      acknowledge:
+        description: 'Type I_ACCEPT_SIGNED_CODE10_LIVE_READER to authorize real HTTPS and CDN'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-code10-live-reader-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-contract:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate manual-only live gate and closed identifiers (NO NETWORK)
+        run: |
+          python3 .github/scripts/test_mangaall_code10_live_reader_contract.py
+          python3 .github/scripts/test_mangaall_code9_live_reader_contract.py
+          bash -n .github/scripts/run_mangaall_live_pages_android.sh
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Compile real code10 Android tests without running any source/CDN access
+        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebugAndroidTest
+
+  signed-code10-live-android:
+    if: github.event_name == 'workflow_dispatch'
+    name: Exact signed code10 -> source chapter -> Android CDN / Reader pixels
+    runs-on: ubuntu-24.04
+    timeout-minutes: 95
+    env:
+      MANGAALL_SIGNED_CODE: '10'
+      MANGAALL_GATE_MODE: ${{ inputs.mode }}
+      MANGAALL_WORK_ID: ${{ inputs.work_id }}
+      MANGAALL_CHAPTER_ID: ${{ inputs.chapter_id }}
+      MANGAALL_CHAPTER_NUMBER: ${{ inputs.chapter_number }}
+      MANGAALL_LANGUAGE: ${{ inputs.language }}
+      MANGAALL_READER_ACK: ${{ inputs.acknowledge }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Reject all unapproved live requests BEFORE upstream traffic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/test_mangaall_code10_live_reader_contract.py
+          bash -n .github/scripts/run_mangaall_live_pages_android.sh
+          python3 - <<'PY'
+          import os, re
+          assert os.environ['MANGAALL_READER_ACK'] == 'I_ACCEPT_SIGNED_CODE10_LIVE_READER', 'Missing manual consent'
+          work = os.environ['MANGAALL_WORK_ID']
+          chapter = os.environ['MANGAALL_CHAPTER_ID']
+          number = os.environ['MANGAALL_CHAPTER_NUMBER']
+          assert re.fullmatch(r'[1-9][0-9]{0,3}', number), 'Invalid chapter number'
+          assert re.fullmatch(r'(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}', work), 'Invalid source HID'
+          assert re.fullmatch(r'[A-Za-z0-9._:-]{1,160}', chapter), 'Invalid chapter HID'
+          assert chapter.startswith(work.split(':', 1)[0] + ':'), 'Cross-source chapter prohibited'
+          assert os.environ['MANGAALL_LANGUAGE'] == 'en', 'Uncaptured language not authorized'
+          assert os.environ['MANGAALL_GATE_MODE'] in ('transport', 'reader'), 'Unrecognized live mode'
+          print('MANGAALL_CODE10_LIVE_READER_PREFLIGHT|consent=EXPLICIT|identity=SOURCE_SCOPED|language=en|upstream=NOT_YET_CALLED')
+          PY
+      - name: Checkout immutable official signed code10 Provider (NO publication/signing)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 195502f981bd776a68feebde3efc6d20f55cca65
+          path: signed-code10-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify original P-256 sequence36 and immutable code10 archive, then stage test bytes
+        working-directory: signed-code10-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tooling/verify_index.mjs
+          python3 tooling/build_provider.py providers/mangaall /tmp/mangaall-code10-reader-proof.tsz
+          python3 - <<'PY'
+          import hashlib, json, shutil
+          from pathlib import Path
+          root = Path('.')
+          payload = json.loads((root / 'dist/index.payload.json').read_text())
+          assert payload['repositoryId'] == 'app.tsuzuki.providers'
+          assert payload['sequence'] == 36
+          matches = [p for p in payload['providers'] if p['providerId'] == 'app.tsuzuki.mangaall']
+          assert len(matches) == 1
+          entry = matches[0]
+          sha = 'bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f'
+          assert entry['versionCode'] == 10 and entry['versionName'] == '0.5.5' and entry['sha256'] == sha
+          archive = root / 'dist/providers/app.tsuzuki.mangaall-10.tsz'
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == sha
+          assert hashlib.sha256(Path('/tmp/mangaall-code10-reader-proof.tsz').read_bytes()).hexdigest() == sha
+          staged = Path('../app/src/androidTest/assets/mangaall/code10-published-package.tsz')
+          staged.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copyfile(archive, staged)
+          print('MANGAALL_CODE10_LIVE_READER_PACKAGE|source=P256_SIGNED|code=10|sequence=36|archive=SHA_REVIEWED|binding=TEST_ONLY')
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Build disposable Android app and signed-code10 Reader instrumentation
+        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM on disposable Ubuntu host
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run explicitly selected code10 source chapter through actual Android CDN / Reader gate
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_live_pages_android.sh
+      - name: Preserve CLOSED verdict only (no URLs, cookies, image bytes or screenshots)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-code10-live-reader-closed-verdict
+          path: .github/results/mangaall-live-pages-android/verdict.txt
+          if-no-files-found: warn
+          retention-days: 3

@@ -2330,8 +2330,14 @@ class ScriptProviderReadingGatewayIsolationTest {
         runPublishedMangaAllLivePages(9L)
     }
 
+    /** Exact P-256 code10 from the published sequence36, with no V2 editorial grant. */
+    @Test(timeout = 300_000L)
+    fun mangaAllSignedCode10LivePages_downloadAndDecodeAtMostTwo() = runBlocking {
+        runPublishedMangaAllLivePages(10L)
+    }
+
     private suspend fun runPublishedMangaAllLivePages(signedCode: Long) {
-        require(signedCode == 8L || signedCode == 9L)
+        require(signedCode == 8L || signedCode == 9L || signedCode == 10L)
 
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
@@ -2348,12 +2354,21 @@ class ScriptProviderReadingGatewayIsolationTest {
         val parsed = ProviderPackageParser().parse(archive)
         assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
         assertEquals(signedCode, parsed.manifest.version.code)
-        assertEquals(if (signedCode == 9L) "0.5.4" else "0.5.3", parsed.manifest.version.name)
-        if (signedCode == 9L) {
-            assertEquals(
-                "d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622",
-                tachiyomi.core.provider.supplychain.sha256Hex(archive),
-            )
+        assertEquals(
+            when (signedCode) {
+                10L -> "0.5.5"
+                9L -> "0.5.4"
+                else -> "0.5.3"
+            },
+            parsed.manifest.version.name,
+        )
+        val expectedSignedSha = when (signedCode) {
+            10L -> "bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f"
+            9L -> "d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622"
+            else -> null
+        }
+        if (expectedSignedSha != null) {
+            assertEquals(expectedSignedSha, tachiyomi.core.provider.supplychain.sha256Hex(archive))
         }
         val providerId = ProviderId(parsed.manifest.id)
         val permission = requireNotNull(parsed.manifest.permissions.network)
@@ -2437,7 +2452,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             // enums. Preserve them in test-only output; never export exception
             // text, source URLs, HTTP bodies or volatile CDN URLs.
             val failure = response as? ProviderCallResult.Failure
-            val closedCode9Cause = if (signedCode == 9L && failure != null) {
+            val closedSignedCause = if (signedCode >= 9L && failure != null) {
                 "|providerError=${failure.error.code.name}" +
                     "|pageFailureStage=${failure.error.pageFailureStage?.name ?: "NONE"}"
             } else {
@@ -2445,7 +2460,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             }
             MangaAllInstrumentationVerdict.publish(
                 "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=PROVIDER_PAGES_UNAVAILABLE" +
-                    closedCode9Cause,
+                    closedSignedCause,
             )
             return
         }

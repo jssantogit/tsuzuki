@@ -10,7 +10,7 @@ readonly mode="${MANGAALL_GATE_MODE:-transport}"
 # manually authorized Android workflow and must be selected explicitly.
 readonly signed_code="${MANGAALL_SIGNED_CODE:-8}"
 case "$signed_code" in
-  8|9) ;;
+  8|9|10) ;;
   *)
     echo 'LIVE_PAGE_HARD_STOP|reason=UNRECOGNIZED_SIGNED_CODE' >&2
     exit 2
