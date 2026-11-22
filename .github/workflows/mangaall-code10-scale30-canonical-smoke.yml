@@ -52,10 +52,9 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json, os, pathlib, re, uuid
-          from importlib.machinery import SourceFileLoader
-          checker=SourceFileLoader(
-              'mangaall_code10_plan', '.github/scripts/mangaall_code10_canonical_smoke_plan.py',
-          ).load_module()
+          import sys
+          sys.path.insert(0, '.github/scripts')
+          from mangaall_code10_canonical_smoke_plan import parse_plan
           if os.environ['MANGAALL_SCALE30_EVENT'] == 'push':
               ref=os.environ['GITHUB_REF']
               assert re.fullmatch(r'refs/heads/probe/mangaall-code10-scale30-[a-z0-9-]{1,70}', ref), 'Invalid scale30 probe branch'
@@ -72,13 +71,13 @@ jobs:
               raise ValueError('Only manual or scoped one-shot commit can launch source traffic')
           assert acknowledgement=='I_ACCEPT_SIGNED_CODE10_SCALE30_LIVE', 'Explicit scale30 authorization required'
           assert isinstance(works,str), 'Invalid work vector'
-          assert len(checker.parse_plan(
+          assert len(parse_plan(
               works, 'scale', 'I_ACCEPT_CODE10_CANONICAL_SMOKE',
           ))==30, 'Exactly 30 individually validated works required'
           end='END_'+uuid.uuid4().hex
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as out:
-              out.write(f'works<<{end}\\n{works.rstrip(chr(10))}\\n{end}\\n')
-              out.write('acknowledge=I_ACCEPT_SIGNED_CODE10_SCALE30_LIVE\\n')
+              out.write(f'works<<{end}\n{works.rstrip(chr(10))}\n{end}\n')
+              out.write('acknowledge=I_ACCEPT_SIGNED_CODE10_SCALE30_LIVE\n')
           print('MANGAALL_SCALE30_REQUEST|source=EXPLICIT_OPERATOR|works=30|internalSources=3|network=NOT_STARTED')
           PY
       - name: Fail closed before external traffic unless acknowledged and count verified
