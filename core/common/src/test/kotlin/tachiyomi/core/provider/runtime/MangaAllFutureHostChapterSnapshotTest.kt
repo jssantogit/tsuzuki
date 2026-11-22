@@ -430,19 +430,21 @@ class MangaAllFutureHostChapterSnapshotTest {
         val headerText = storage.get("mangaall_private_chapters_index")!!
         val header = Json.parseToJsonElement(headerText).jsonObject
         val generation = header["generation"]!!.jsonPrimitive.content
-        val originalRows = (1..400).map { number ->
-            JsonArray(
-                listOf(
-                    JsonPrimitive((13100000 + number).toString()),
-                    JsonPrimitive(number.toDouble()),
-                    JsonPrimitive(0),
-                    JsonPrimitive("$title $number"),
-                    JsonPrimitive("en"),
-                    JsonPrimitive("Ju-Ni"),
-                    JsonNull,
-                ),
-            )
+        // Reuse the exact *serialized* compact tuples as chunker input.
+        // Rebuilding them manually from source metadata would accidentally
+        // test field normalization (including numeric rendering) instead of
+        // isolating the array-partition algorithm under test here.
+        val originalRows = header["ranges"]!!.jsonArray.indices.flatMap { index ->
+            val stored = storage.get("mangaall_private_chapters_part_$index")
+                ?: throw AssertionError("MANGAALL_CJK_PARITY|missingPart=$index")
+            Json.parseToJsonElement(stored).jsonObject["rows"]!!.jsonArray.map { it.jsonArray }
         }
+        originalRows.size shouldBe 400
+        originalRows.map { it[0].jsonPrimitive.content } shouldBe
+            (1..400).map { (13100000 + it).toString() }
+        originalRows.first()[3].jsonPrimitive.content shouldBe "$title 1"
+        originalRows.first()[4].jsonPrimitive.content shouldBe "en"
+        originalRows.first()[5].jsonPrimitive.content shouldBe "Ju-Ni"
         val referenceParts = mutableListOf<List<JsonArray>>()
         var current = mutableListOf<JsonArray>()
         for (row in originalRows) {
