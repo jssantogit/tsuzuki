@@ -85,6 +85,27 @@ jobs:
         run: ./gradlew :core:common:spotlessKotlinCheck --stacktrace
       - name: Full private snapshot capacity regression on JVM
         run: ./gradlew :core:common:testDebugUnitTest --tests 'tachiyomi.core.provider.runtime.MangaAllFutureHostChapterSnapshotTest' --stacktrace
+      - name: Report only closed snapshot assertion diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for path in Path('core/common/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+              if 'MangaAllFutureHostChapterSnapshotTest' not in path.name:
+                  continue
+              root=ET.parse(path).getroot()
+              for case in root.findall('.//testcase'):
+                  for failure in list(case.findall('failure'))+list(case.findall('error')):
+                      message=failure.get('message','')
+                      marker=message.find('MANGAALL_CJK_PARITY|')
+                      if marker >= 0:
+                          print('MANGAALL_OFFLINE_PARITY|'+message[marker+len('MANGAALL_CJK_PARITY|'):][:300].splitlines()[0])
+                      else:
+                          print('MANGAALL_OFFLINE_PARITY|failure_class='+
+                                str(failure.get('type','UNKNOWN')).split('.')[-1][:80])
+          PY
       - name: Verify same-JVM and second-process MangaALL storage lock regressions
         run: ./gradlew :core:common:testDebugUnitTest --tests 'tachiyomi.core.provider.runtime.ProviderStateHostServicesTest' --stacktrace
       - name: Regress all existing core-common JUnit Jupiter tests
