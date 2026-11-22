@@ -106,7 +106,7 @@ jobs:
                   target+=int(root.get('tests','0'))
           assert target>=3, 'Future snapshot regression must run at least three JVM tests'
           storage=sum(int(ET.parse(f).getroot().get('tests','0')) for f in reports if 'ProviderStateHostServicesTest' in f.name)
-          assert storage>=8, 'MangaALL cross-instance and cross-process JVM storage tests must be discovered'
+          assert storage>=9, 'MangaALL instance, JVM timeout and cross-process JVM storage regressions must run'
           assert counts['failures']==0 and counts['errors']==0
           print('MANGAALL_HOST_PRIVATE_SNAPSHOT|JUNIT_CLASS_DISCOVERED='+str(target)+
                 '|CORE_COMMON_JUNIT_TESTS='+str(counts['tests'])+'|result=PASS')
