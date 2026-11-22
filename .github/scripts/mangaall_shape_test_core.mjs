@@ -61,6 +61,7 @@ export function makeTestOnlyMangaFireFetch({ fetchImpl, browserFactory, enabled 
   let started = false;
   let browser = null;
   let attempts = 0;
+  let browserAttempts = 0;
   let lastOutcome = 'NOT_TRIGGERED';
   const fetchWithShapeRecovery = async (url, options = {}) => {
     if (!isAllowedApi(url, options)) return fetchImpl(url, options);
@@ -75,14 +76,18 @@ export function makeTestOnlyMangaFireFetch({ fetchImpl, browserFactory, enabled 
     const detected = await classifyMangaFireChallenge(response);
     if (started) return response; // Preserve the first failed solve's diagnostic.
     lastOutcome = detected;
-    if (detected !== 'SHAPE_CAPTCHA_REQUIRED') return response;
-    started = true; attempts++;
+    if (!['SHAPE_CAPTCHA_REQUIRED', 'CLOUDFLARE_CHALLENGE'].includes(detected)) return response;
+    started = true;
+    if (detected === 'SHAPE_CAPTCHA_REQUIRED') attempts++;
+    else browserAttempts++;
     let candidate;
     try {
       candidate = await browserFactory();
-      const solved = await candidate.solve();
+      const solved = detected === 'SHAPE_CAPTCHA_REQUIRED'
+        ? await candidate.solve() : await candidate.openCloudflareSession();
       if (!solved) {
-        lastOutcome = 'SHAPE_SOLVE_FAILED';
+        lastOutcome = detected === 'SHAPE_CAPTCHA_REQUIRED'
+          ? 'SHAPE_SOLVE_FAILED' : 'CLOUDFLARE_BROWSER_UNRESOLVED';
         await candidate.close();
         candidate = null;
         return response;
@@ -100,17 +105,19 @@ export function makeTestOnlyMangaFireFetch({ fetchImpl, browserFactory, enabled 
       // the only proof that the session works for this particular request.
       browser = candidate;
       candidate = null;
-      lastOutcome = 'SIGNED_API_JSON_200_AFTER_SHAPE';
+      lastOutcome = detected === 'SHAPE_CAPTCHA_REQUIRED'
+        ? 'SIGNED_API_JSON_200_AFTER_SHAPE' : 'SIGNED_API_JSON_200_AFTER_BROWSER';
       return retry;
     } catch {
-      lastOutcome = 'SHAPE_SOLVE_ERROR';
+      lastOutcome = detected === 'SHAPE_CAPTCHA_REQUIRED'
+        ? 'SHAPE_SOLVE_ERROR' : 'CLOUDFLARE_BROWSER_ERROR';
       if (candidate) await candidate.close().catch(() => {});
       return response;
     }
   };
   return {
     fetch: fetchWithShapeRecovery,
-    get status() { return { mode: 'TEST_ONLY', shapeAttempts: attempts, outcome: lastOutcome }; },
+    get status() { return { mode: 'TEST_ONLY', shapeAttempts: attempts, cloudflareBrowserAttempts: browserAttempts, outcome: lastOutcome }; },
     async close() { if (browser) { const b = browser; browser = null; await b.close(); } },
   };
 }
