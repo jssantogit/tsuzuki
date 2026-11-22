@@ -33,6 +33,7 @@ def summaries():
                 "position":x["position"],"caseId":x["caseId"],
                 "outcome":"INCONCLUSIVE_SOURCE","readerPixels":"NOT_TESTED_REAL_CDN",
                 "sourceIncomplete":True,"sqliteConfirmed":0,
+                "hostResultLimitResponses":0,
                 "sqliteProvisional":0,"sqliteBindings":0,
                 "editorialObservation":"NO_CHAPTER_BINDING_OBSERVED",
             } for i,x in enumerate(cases) if i%3==shard]
@@ -49,6 +50,7 @@ class TestScale30Aggregator(unittest.TestCase):
         self.assertEqual(result["shardCount"],3)
         self.assertEqual(result["outcomes"],{"INCONCLUSIVE_SOURCE":30})
         self.assertFalse(result["allThirtyFunctional"])
+        self.assertEqual(result["hostResultLimitResponses"], 0)
         self.assertEqual(result["readerPixels"],"NOT_TESTED_REAL_CDN")
         self.assertFalse(result["automaticEditorialBindingFromPartialV1"])
         self.assertFalse(result["releaseSigningAuthorized"])
@@ -68,11 +70,24 @@ class TestScale30Aggregator(unittest.TestCase):
         x=copy.deepcopy(cases);x[0]["results"][0]["readerPixels"]="REAL_CDN_VISIBLE";bads.append(x)
         x=copy.deepcopy(cases);x[0]["results"][0]["sqliteConfirmed"]=999999;bads.append(x)
         x=copy.deepcopy(cases);x[0]["results"][0]["outcome"]="FAKE_FUNCTIONAL_PASS";bads.append(x)
+        x=copy.deepcopy(cases);x[0]["results"][0]["hostResultLimitResponses"]=-1;bads.append(x)
+        x=copy.deepcopy(cases);x[0]["results"][0]["hostResultLimitResponses"]=1
+        x[0]["results"][0]["sourceIncomplete"]=False;bads.append(x)
         x=copy.deepcopy(cases);x[1]["allThreeSourcesInOneMangaAllLookup"]=False;bads.append(x)
         x=copy.deepcopy(cases);x[2]["signedIndexSequence"]=35;bads.append(x)
         for idx,bad in enumerate(bads):
             with self.subTest(idx=idx),self.assertRaises(ValueError):
                 summarize(WORKS,ACK,bad)
+
+    def test_host_limit_is_aggregated_without_claiming_signed_provider_success(self):
+        cases = summaries()
+        cases[0]["results"][0]["hostResultLimitResponses"] = 2
+        cases[1]["results"][0]["hostResultLimitResponses"] = 3
+        result = summarize(WORKS, ACK, cases)
+        self.assertEqual(result["hostResultLimitResponses"], 5)
+        self.assertFalse(result["allThirtyFunctional"])
+        self.assertEqual(result["results"][0]["hostResultLimitResponses"], 2)
+        self.assertEqual(result["results"][1]["hostResultLimitResponses"], 3)
 
     def test_cli_original_three_summary_inputs(self):
         with tempfile.TemporaryDirectory() as folder:
