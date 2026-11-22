@@ -2,10 +2,13 @@ package tachiyomi.core.provider.runtime
 
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -409,4 +412,61 @@ class MangaAllFutureHostChapterSnapshotTest {
         page.items[4]["releaseDateMillis"]!!.jsonPrimitive.content shouldBe "0"
         requests() shouldBe 1
     }
+
+    @Test
+    fun optimized_snapshot_chunking_is_byte_identical_to_reference_json_arrays_with_cjk(): Unit = runBlocking {
+        // Deliberately use a *quadratic reference* on just 400 synthetic rows
+        // to lock output compatibility. Production now performs each row's
+        // serialization once, not once per growing intermediate array.
+        val title = "界".repeat(30)
+        val storage = FileProviderStorageHostService(
+            root = tempDir.resolve("cjk-boundary-parity").toFile(),
+            providerId = providerId,
+        )
+        val (service, calls) = fixture(existingStorage = storage) {
+            source(400, padding = 0, title = title)
+        }
+        service.start("mangadot:131", "en")
+        val headerText = storage.get("mangaall_private_chapters_index")!!
+        val header = Json.parseToJsonElement(headerText).jsonObject
+        val generation = header["generation"]!!.jsonPrimitive.content
+        val originalRows = (1..400).map { number ->
+            JsonArray(
+                listOf(
+                    JsonPrimitive((13100000 + number).toString()),
+                    JsonPrimitive(number.toDouble()),
+                    JsonPrimitive(0),
+                    JsonPrimitive("$title $number"),
+                    JsonPrimitive("en"),
+                    JsonPrimitive("Ju-Ni"),
+                    JsonNull,
+                ),
+            )
+        }
+        val referenceParts = mutableListOf<List<JsonArray>>()
+        var current = mutableListOf<JsonArray>()
+        for (row in originalRows) {
+            val proposed = JsonArray(current + row).toString()
+            if (proposed.length > 48 * 1024 || proposed.encodeToByteArray().size > 48 * 1024) {
+                referenceParts += current
+                current = mutableListOf()
+            }
+            current += row
+        }
+        if (current.isNotEmpty()) referenceParts += current
+        (referenceParts.size >= 2) shouldBe true
+        header["ranges"]!!.jsonArray.map { it.jsonPrimitive.content.toInt() } shouldBe
+            referenceParts.map { it.size }
+        for ((index, part) in referenceParts.withIndex()) {
+            val expected = JsonObject(
+                mapOf(
+                    "generation" to JsonPrimitive(generation),
+                    "rows" to JsonArray(part),
+                ),
+            ).toString()
+            storage.get("mangaall_private_chapters_part_$index") shouldBe expected
+        }
+        calls() shouldBe 1
+    }
+
 }
