@@ -13,7 +13,7 @@ if [[ "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" != '1' ]]; then
 fi
 mapfile -t target < <(find app/build/outputs/apk/debug -type f \( -name '*universal*.apk' -o -name 'app-debug.apk' \))
 mapfile -t instrument < <(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk')
-if [[ "\${#target[@]}" -ne 1 || "\${#instrument[@]}" -ne 1 ]]; then
+if [[ "${#target[@]}" -ne 1 || "${#instrument[@]}" -ne 1 ]]; then
   echo 'MANGAALL_REAL_JS_CODE11|apk_count=INVALID|outcome=DENIED' >&2
   exit 3
 fi
@@ -22,8 +22,8 @@ cleanup() {
   adb shell pm clear "$app" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
-adb install -r "\${target[0]}" >/dev/null
-adb install -r "\${instrument[0]}" >/dev/null
+adb install -r "${target[0]}" >/dev/null
+adb install -r "${instrument[0]}" >/dev/null
 adb shell pm list instrumentation | tr -d '\r' | grep -Fq "instrumentation:$runner (target=$app)"
 adb shell cmd connectivity airplane-mode enable >/dev/null
 if [[ "$(adb shell settings get global airplane_mode_on | tr -d '\r')" != '1' ]]; then
