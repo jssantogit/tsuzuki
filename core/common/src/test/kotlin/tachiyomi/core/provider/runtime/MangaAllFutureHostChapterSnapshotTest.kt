@@ -42,7 +42,10 @@ class MangaAllFutureHostChapterSnapshotTest {
         return JsonArray(records).toString()
     }
 
-    private fun fixture(rawSource: () -> String): Pair<MangaAllFutureHostChapterSnapshot, () -> Int> {
+    private fun fixture(
+        rawSource: () -> String,
+        existingStorage: FileProviderStorageHostService? = null,
+    ): Pair<MangaAllFutureHostChapterSnapshot, () -> Int> {
         val owner = ProviderResourceOwner(providerId, "test-invocation")
         val resources = ProviderResourceStore()
         var calls = 0
@@ -64,7 +67,7 @@ class MangaAllFutureHostChapterSnapshotTest {
             owner = owner,
             http = http,
             resources = resources,
-            storage = FileProviderStorageHostService(
+            storage = existingStorage ?: FileProviderStorageHostService(
                 root = tempDir.resolve("snapshots").toFile(),
                 providerId = providerId,
             ),
@@ -139,6 +142,49 @@ class MangaAllFutureHostChapterSnapshotTest {
             }.exceptionOrNull() is ProviderHostServiceException
             ) shouldBe true
         calls() shouldBe 2
+    }
+
+    @Test
+    fun chapter_identity_keeps_upload_and_independent_source_chapter_with_same_numeric_id(): Unit = runBlocking {
+        val raw = """[
+            {"id":171,"chapter_number":2,"language":"en","source":"user"},
+            {"id":171,"chapter_number":2,"language":"en","source":"other"},
+            {"id":171,"chapter_number":2,"language":"en","source":"user"}
+        ]""".trimIndent()
+        val (service, calls) = fixture { raw }
+        val result = service.start("mangadot:131", "en")
+        result.items.map { it["providerChapterId"]!!.jsonPrimitive.content } shouldBe listOf(
+            "mangadot:uploads:171",
+            "mangadot:chapters:171",
+        )
+        result.nextCursor shouldBe null
+        calls() shouldBe 1
+    }
+
+    @Test
+    fun failed_shared_quota_preflight_keeps_unrelated_storage_and_previous_snapshot(): Unit = runBlocking {
+        val shared = FileProviderStorageHostService(
+            root = tempDir.resolve("shared-storage").toFile(),
+            providerId = providerId,
+        )
+        repeat(6) { shared.set("other" + it, "a".repeat(60 * 1024)) }
+        var current = source(400, 0)
+        val (service, _) = fixture({ current }, existingStorage = shared)
+        val committed = service.start("mangadot:131", "en")
+        val oldCursor = committed.nextCursor!!
+        val oldIndex = shared.get("mangaall_private_chapters_index")
+        (oldIndex != null) shouldBe true
+
+        // Compact source rows fit the dedicated 440KiB envelope, but the
+        // combined full provider storage exceeds 512KiB due to unrelated keys.
+        current = source(4341, 0)
+        (runCatching {
+            service.start("mangadot:131", "en")
+        }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
+
+        shared.get("mangaall_private_chapters_index") shouldBe oldIndex
+        repeat(6) { shared.get("other" + it) shouldBe "a".repeat(60 * 1024) }
+        service.next("mangadot:131", "en", oldCursor).items.isNotEmpty() shouldBe true
     }
 
     @Test
