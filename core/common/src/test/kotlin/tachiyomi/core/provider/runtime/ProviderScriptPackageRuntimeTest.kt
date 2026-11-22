@@ -264,6 +264,62 @@ class ProviderScriptPackageRuntimeTest {
     }
 
     @Test
+    fun `future snapshot Host binding is chapter only even if incorrectly injected directly`(): Unit = runBlocking {
+        val main = """
+            export default {
+              reading: {
+                chapters: async () => JSON.parse(
+                  await tsuzuki.mangaAllChapterSnapshot.start("mangadot:131", "en")
+                ),
+                pages: async () => JSON.parse(
+                  await tsuzuki.mangaAllChapterSnapshot.start("mangadot:131", "en")
+                ),
+              }
+            };
+        """.trimIndent()
+        val original = providerPackage(main)
+        val granted = original.copy(
+            manifest = original.manifest.copy(
+                id = "app.tsuzuki.mangaall",
+                version = ProviderManifestVersion("0.6.0-unsigned", 11),
+                minHostApi = 2,
+                capabilities = listOf(
+                    ProviderManifestCapability("reading.chapters", 1),
+                    ProviderManifestCapability("reading.pages", 1),
+                ),
+                permissions = ProviderManifestPermissions(
+                    network = ProviderManifestNetworkPermission(origins = setOf("https://mangadot.net")),
+                    mangaAllChapterSnapshot = ProviderManifestMangaAllChapterSnapshotPermission(enabled = true),
+                ),
+            ),
+        )
+        var nativeCalls = 0
+        val bridge = object : ProviderMangaAllChapterSnapshotHostService {
+            override suspend fun start(workId: String, language: String): String {
+                nativeCalls++
+                return """{"items":[],"nextCursor":null}"""
+            }
+
+            override suspend fun next(workId: String, language: String, cursor: String): String =
+                error("Continuation not requested")
+        }
+        val runtime = ProviderScriptPackageRuntime()
+        val services = ProviderHostServices(mangaAllChapterSnapshot = bridge)
+
+        // Exercise the core entry point directly, bypassing BOTH production
+        // policy-reducing gateways. The valid code11 manifest is insufficient
+        // authorization for a reading.pages invocation.
+        runtime.invoke(granted, "reading.pages", 1, "{}", services) shouldBe
+            ProviderPackageExecution.Failure(ProviderPackageFailure.MODULE_ERROR)
+        nativeCalls shouldBe 0
+
+        // The exact same grant remains available for reading.chapters only.
+        runtime.invoke(granted, "reading.chapters", 1, "{}", services) shouldBe
+            ProviderPackageExecution.Success("""{"items":[],"nextCursor":null}""")
+        nativeCalls shouldBe 1
+    }
+
+    @Test
     fun `future Host JS bridge rejects oversized and malformed native page results`(): Unit = runBlocking {
         val base = providerPackage(
             main = """
