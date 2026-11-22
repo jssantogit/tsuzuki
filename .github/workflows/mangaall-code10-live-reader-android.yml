@@ -63,6 +63,7 @@ jobs:
       - name: Validate manual-only live gate and closed identifiers (NO NETWORK)
         run: |
           python3 .github/scripts/test_mangaall_code10_live_reader_contract.py
+          python3 .github/scripts/test_mangaall_code9_live_reader_contract.py
           bash -n .github/scripts/run_mangaall_live_pages_android.sh
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
