@@ -141,13 +141,13 @@ jobs:
           entry = matches[0]
           sha = 'bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f'
           assert entry['versionCode'] == 10 and entry['versionName'] == '0.5.5' and entry['sha256'] == sha
-          archive = root / 'dist/providers/app.tsuzuki.mangaall-9.tsz'
+          archive = root / 'dist/providers/app.tsuzuki.mangaall-10.tsz'
           assert hashlib.sha256(archive.read_bytes()).hexdigest() == sha
           assert hashlib.sha256(Path('/tmp/mangaall-code10-reader-proof.tsz').read_bytes()).hexdigest() == sha
           staged = Path('../app/src/androidTest/assets/mangaall/code10-published-package.tsz')
           staged.parent.mkdir(parents=True, exist_ok=True)
           shutil.copyfile(archive, staged)
-          print('MANGAALL_CODE10_LIVE_READER_PACKAGE|source=P256_SIGNED|code=9|sequence=36|archive=SHA_REVIEWED|binding=TEST_ONLY')
+          print('MANGAALL_CODE10_LIVE_READER_PACKAGE|source=P256_SIGNED|code=10|sequence=36|archive=SHA_REVIEWED|binding=TEST_ONLY')
           PY
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
