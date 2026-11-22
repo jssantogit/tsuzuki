@@ -361,4 +361,52 @@ class MangaAllFutureHostChapterSnapshotTest {
             statusDenied.close()
         }
     }
+
+    @Test
+    fun future_source_numeric_ids_numbers_and_explicit_utc_dates_match_signed_source_semantics(): Unit = runBlocking {
+        // Fixed offline source fixture, never live MangaDot data. The source
+        // JS accepts 1e3/1.0 numbers after JS String(number) normalization,
+        // rejects unsafe numeric IDs but permits 16-digit STRING chapter IDs.
+        // UTC date-only and offset timestamps must retain their real millis;
+        // dates before 1970 are null in the original dateMillis helper.
+        val raw = """
+            [
+              {"id":1001,"chapter_number":1.0,"language":"EN","source":"user",
+               "chapter_title":"  First  ","date_added":"2026-11-22"},
+              {"id":1002,"chapter_number":1e3,"language":"en","source":"scanlator",
+               "date_added":"2026-11-22T10:00:00+03:00"},
+              {"id":1003,"chapter_number":0.001,"language":"en","source":"user",
+               "date_added":"1969-12-31T23:59:59Z"},
+              {"id":9007199254740992,"chapter_number":4,"language":"en","source":"user"},
+              {"id":"9007199254740992","chapter_number":5,"language":"en","source":"user"},
+              {"id":1004,"chapter_number":1e10,"language":"en","source":"user"},
+              {"id":1e3,"chapter_number":3.0,"language":"en","source":"user",
+               "date_added":"1970-01-01T00:00:00Z"}
+            ]
+        """.trimIndent()
+        val (service, requests) = fixture { raw }
+        val page = service.start("mangadot:131", "en")
+        page.nextCursor shouldBe null
+        page.items.map { it["providerChapterId"]!!.jsonPrimitive.content } shouldBe listOf(
+            "mangadot:uploads:1001",
+            "mangadot:chapters:1002",
+            "mangadot:uploads:1003",
+            "mangadot:uploads:9007199254740992",
+            "mangadot:uploads:1000",
+        )
+        page.items.map { it["rawLabel"]!!.jsonPrimitive.content } shouldBe listOf(
+            "Ch. 1 First",
+            "Ch. 1000",
+            "Ch. 0.001",
+            "Ch. 5",
+            "Ch. 3",
+        )
+        page.items[0]["language"]!!.jsonPrimitive.content shouldBe "en"
+        page.items[0]["title"]!!.jsonPrimitive.content shouldBe "First"
+        page.items[0]["releaseDateMillis"]!!.jsonPrimitive.content shouldBe "1795305600000"
+        page.items[1]["releaseDateMillis"]!!.jsonPrimitive.content shouldBe "1795330800000"
+        page.items[2]["releaseDateMillis"] shouldBe JsonNull
+        page.items[4]["releaseDateMillis"]!!.jsonPrimitive.content shouldBe "0"
+        requests() shouldBe 1
+    }
 }

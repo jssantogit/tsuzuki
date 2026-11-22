@@ -11,6 +11,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 import java.time.Instant
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.util.UUID
 
 /**
@@ -292,9 +295,10 @@ internal class MangaAllFutureHostChapterSnapshot(
             val scanlator = text(firstGroup?.get("name"), 1024)
                 ?: text(row["group_name"], 1024)
                 ?: text(row["scanlator_name"], 1024)
-            val date = row["date_added"]?.primitiveText()?.let { raw ->
-                runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
-            }
+            // Match the original source's UTC date-only/RFC3339 subset.
+            // A negative timestamp is not valid source evidence (JS dateMillis
+            // returns null before 1970). Ambiguous local-time strings stay null.
+            val date = row["date_added"]?.primitiveText()?.let(::sourceDateMillis)
             result += JsonArray(
                 listOf(
                     JsonPrimitive(id),
@@ -406,18 +410,55 @@ internal class MangaAllFutureHostChapterSnapshot(
     private fun JsonElement?.sourceId(): String? {
         val primitive = this as? JsonPrimitive ?: return null
         val raw = if (primitive.isString) {
+            // The source JS accepts 16-digit string IDs literally, even when
+            // they exceed Number.MAX_SAFE_INTEGER. Do not coerce to Double.
             primitive.content
         } else {
-            primitive.longOrNull?.takeIf { it > 0 }?.toString() ?: return null
+            // JSON number IDs follow JS Number.isSafeInteger, not Kotlin Long.
+            // JS also accepts 1e3 / 1000.0 as the integer ID 1000.
+            val number = primitive.doubleOrNull ?: return null
+            if (!number.isFinite() || number < 1.0 ||
+                number > MAX_SAFE_JS_INTEGER || number != number.toLong().toDouble()
+            ) {
+                return null
+            }
+            number.toLong().toString()
         }
         return raw.takeIf(ID::matches)
     }
 
     private fun JsonElement?.sourceNumber(): Double? {
         val primitive = this as? JsonPrimitive ?: return null
-        val raw = primitive.content
+        val raw = if (primitive.isString) {
+            primitive.content
+        } else {
+            // JavaScript chapterNumber validates String(number), rather than
+            // its raw JSON token: 1e3 becomes "1000", 1.0 becomes "1".
+            val number = primitive.doubleOrNull ?: return null
+            if (!number.isFinite()) return null
+            if (number == 0.0) {
+                "0"
+            } else if (number >= 1.0 && number <= 999999.0 &&
+                number == number.toLong().toDouble()
+            ) {
+                number.toLong().toString()
+            } else {
+                number.toString()
+            }
+        }
         if (!NUMBER.matches(raw)) return null
         return raw.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }
+    }
+
+    private fun sourceDateMillis(raw: String): Long? {
+        // Date.parse in the current source accepts these explicit, stable UTC
+        // forms. Avoid guessing timezone for ambiguous unqualified local times.
+        val timestamp = runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
+            ?: runCatching { OffsetDateTime.parse(raw).toInstant().toEpochMilli() }.getOrNull()
+            ?: runCatching {
+                LocalDate.parse(raw).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            }.getOrNull()
+        return timestamp?.takeIf { it >= 0L }
     }
 
     private fun text(value: JsonElement?, max: Int): String? =
@@ -462,6 +503,7 @@ internal class MangaAllFutureHostChapterSnapshot(
         const val MAX_PAGE_ROWS = 256
         const val MAX_OUTPUT = 48 * 1024
         const val TTL_MS = 5 * 60 * 1000L
+        const val MAX_SAFE_JS_INTEGER = 9_007_199_254_740_991.0
 
         fun fail(reason: String): Nothing = throw ProviderHostServiceException(reason)
     }
