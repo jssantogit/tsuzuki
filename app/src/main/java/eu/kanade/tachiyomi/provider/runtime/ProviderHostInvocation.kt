@@ -53,10 +53,13 @@ data class ProviderHostInvocationPolicy(
     init {
         require(PROVIDER_ID.matches(providerId)) { "Provider ID is invalid" }
         require(INVOCATION_ID.matches(invocationId)) { "Provider invocation ID is invalid" }
-        require(!mangaAllChapterSnapshotEnabled ||
-            (providerId == "app.tsuzuki.mangaall" &&
-                "https://mangadot.net" in networkOrigins &&
-                !allowLocalNetwork)
+        require(
+            !mangaAllChapterSnapshotEnabled ||
+                (
+                    providerId == "app.tsuzuki.mangaall" &&
+                        "https://mangadot.net" in networkOrigins &&
+                        !allowLocalNetwork
+                    ),
         ) { "Future MangaALL snapshot permission has an invalid Host scope" }
         require(maxHostOperations in 1..4096) {
             "Provider Host Service operation budget is outside supported bounds"
@@ -92,11 +95,11 @@ data class ProviderHostInvocationPolicy(
                 storageEnabled = manifest.permissions.storage.enabled,
                 mangaAllChapterSnapshotEnabled =
                     manifest.id == "app.tsuzuki.mangaall" &&
-                        manifest.version.code >= 11L &&
-                        manifest.minHostApi >= 2 &&
-                        manifest.permissions.mangaAllChapterSnapshot.enabled &&
-                        manifest.permissions.network?.localNetwork == false &&
-                        "https://mangadot.net" in manifest.permissions.network?.origins.orEmpty(),
+                    manifest.version.code >= 11L &&
+                    manifest.minHostApi >= 2 &&
+                    manifest.permissions.mangaAllChapterSnapshot.enabled &&
+                    manifest.permissions.network?.localNetwork == false &&
+                    "https://mangadot.net" in manifest.permissions.network?.origins.orEmpty(),
                 allowedSecrets = manifest.permissions.secrets,
             )
 
