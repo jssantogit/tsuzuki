@@ -86,7 +86,7 @@ class MangaAllOfflineCollectorSqliteCapacityTest {
                             descriptor = ProviderDescriptor(
                                 id = providerId,
                                 name = "MangaALL (offline test)",
-                                version = ProviderVersion("0.5.5-test", 11),
+                                version = ProviderVersion("0.5.5", 11),
                                 origin = ProviderOrigin.Repository("app.tsuzuki.providers"),
                                 runtime = ProviderRuntimeKind.SCRIPT,
                                 capabilities = setOf(
