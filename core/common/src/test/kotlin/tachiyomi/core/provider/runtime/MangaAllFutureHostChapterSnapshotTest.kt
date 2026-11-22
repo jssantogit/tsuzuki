@@ -468,5 +468,4 @@ class MangaAllFutureHostChapterSnapshotTest {
         }
         calls() shouldBe 1
     }
-
 }
