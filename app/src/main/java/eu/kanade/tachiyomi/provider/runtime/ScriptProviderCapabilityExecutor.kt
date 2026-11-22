@@ -150,7 +150,7 @@ class ScriptProviderCapabilityExecutor(
                 // Even a hypothetical signed code11 MangaALL package may use
                 // large chapter snapshots ONLY during reading.chapters.
                 mangaAllChapterSnapshotEnabled =
-                    active.parsed.manifest.permissions.mangaAllChapterSnapshot.enabled &&
+                active.parsed.manifest.permissions.mangaAllChapterSnapshot.enabled &&
                     capability == tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.ReadingChaptersV1 &&
                     active.parsed.manifest.id == "app.tsuzuki.mangaall" &&
                     active.parsed.manifest.version.code >= 11L &&
