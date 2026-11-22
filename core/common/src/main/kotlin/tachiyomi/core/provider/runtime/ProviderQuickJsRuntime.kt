@@ -11,6 +11,10 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.util.concurrent.atomic.AtomicBoolean
 
 data class ProviderRuntimeLimits(
@@ -316,9 +320,19 @@ private fun Array<Any?>.optionalStringArgument(index: Int): String? =
 private fun boundedMangaAllChapterSnapshotResult(value: String): String {
     if (value.length > 48 * 1024 ||
         value.encodeToByteArray().size > 48 * 1024 ||
-        runCatching { HOST_JSON.parseToJsonElement(value) }.isFailure
+        !MangaAllFutureStrictJson.accepts(value)
     ) {
-        throw ProviderHostServiceException("Future MangaALL chapter output exceeds the Host boundary")
+        throw ProviderHostServiceException("Future MangaALL chapter output violates the Host boundary")
+    }
+    // The service returns a chapter page, never an arbitrary JSON primitive.
+    // Validate both the strict lexical grammar and the exact outer envelope.
+    val page = runCatching { HOST_JSON.parseToJsonElement(value) }.getOrNull() as? JsonObject
+    val next = page?.get("nextCursor")
+    if (page?.keys != setOf("items", "nextCursor") ||
+        page["items"] !is JsonArray ||
+        (next != JsonNull && (next !is JsonPrimitive || !next.isString))
+    ) {
+        throw ProviderHostServiceException("Future MangaALL chapter page is malformed")
     }
     return value
 }
