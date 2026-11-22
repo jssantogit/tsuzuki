@@ -214,8 +214,17 @@ def bounded_source_observations(source_case):
     }
 
 
-def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
-    vector = parse_plan(works, tier, ACK)
+def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows,
+          shard_index=0, shard_count=1):
+    complete_vector = parse_plan(works, tier, ACK)
+    if type(shard_index) is not int or type(shard_count) is not int or (
+        shard_count, shard_index
+    ) not in ((1, 0), (3, 0), (3, 1), (3, 2)):
+        raise ValueError("Unsupported signed-code10 Host correlation shard")
+    if shard_count == 3 and (tier != "scale" or len(complete_vector) != 30):
+        raise ValueError("Three source/Host shards require exact 30-title scale vector")
+    vector = [entry for index, entry in enumerate(complete_vector)
+              if index % shard_count == shard_index]
     if (source.get("schemaVersion") != 1 or
             source.get("captureKind") != "REAL_PROVIDER_NORMALIZED_ENVELOPE_BATCH" or
             source.get("origin") != "LIVE_SIGNED_PROVIDER_JS" or
@@ -225,7 +234,8 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
             source.get("signedIndexSequence") != 36 or
             source.get("packageSha256") != SHA or
             source.get("selectionSource") != "USER_INPUT" or
-            source.get("shardIndex") != 0 or source.get("shardCount") != 1):
+            source.get("shardIndex") != shard_index or
+            source.get("shardCount") != shard_count):
         raise ValueError("Not an authentic sequence36/code10 capture identity")
     if (catalog.get("schemaVersion") != 1 or
             catalog.get("origin") != "DIRECT_LIVE_ANDROID_CATALOG_ONLY" or
@@ -234,7 +244,8 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
         raise ValueError("Catalog proof cannot be promoted or spoofed")
     if (matrix.get("provider") != "app.tsuzuki.mangaall" or
             matrix.get("version") != "0.5.5" or
-            matrix.get("shardCount") != 1 or matrix.get("shardIndex") != 0 or
+            matrix.get("shardCount") != shard_count or
+            matrix.get("shardIndex") != shard_index or
             matrix.get("selectionSource") != "USER_INPUT"):
         raise ValueError("Source matrix not from the same code10 vector")
     chosen = [v["caseId"] for v in vector]
@@ -328,7 +339,7 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
             "readerObservation": reader_observation(counts),
             "readerPixels": "NOT_TESTED_REAL_CDN",
         })
-    return {
+    report = {
         "schemaVersion": 1, "runScope": "CODE10_SIGNED_V1_CAPTURE_TO_CANONICAL_SQLITE",
         "signedIndexSequence": 36, "providerCode": 10, "works": len(rows),
         "ordered": True, "catalogIndependent": True, "allThreeSourcesInOneMangaAllLookup": True,
@@ -336,6 +347,13 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
         "canonicalGrantFromV2": False,
         "results": rows,
     }
+    if shard_count == 3:
+        report.update({
+            "shardIndex": shard_index, "shardCount": shard_count,
+            "fullVectorWorks": len(complete_vector),
+            "shardSource": "ORIGINAL_SIGNED_CODE10_PROVIDER_CAPTURE",
+        })
+    return report
 
 def has_internal_replay_gap(summary):
     """Missing exact Host request/response tape is an internal failure, not source 403."""
@@ -346,10 +364,13 @@ def main():
     if len(sys.argv) != 7:
         raise SystemExit("usage: report.py SOURCE.json MATRIX.json CATALOG.json COLLECTOR.xml SQLITE.xml OUT.json")
     source, matrix, catalog = map(json_object, sys.argv[1:4])
+    shard_index = int(os.environ.get("MANGAALL_SHARD_INDEX", "0"))
+    shard_count = int(os.environ.get("MANGAALL_SHARD_COUNT", "1"))
     result = merge(os.environ["MANGAALL_WORKS"], os.environ["MANGAALL_SMOKE_TIER"],
                    source, matrix, catalog,
                    closed_lines(sys.argv[4], COL),
-                   closed_lines(sys.argv[5], SQL))
+                   closed_lines(sys.argv[5], SQL),
+                   shard_index=shard_index, shard_count=shard_count)
     Path(sys.argv[6]).parent.mkdir(parents=True, exist_ok=True)
     Path(sys.argv[6]).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     counts = {}
