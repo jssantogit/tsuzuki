@@ -366,7 +366,8 @@ class ChapterEvidenceRepositoryImplTest {
         val afterReplay = evidenceRepository.getByCanonicalTitleId("title-1")
         afterReplay shouldHaveSize 4_341
         afterReplay.associate { it.evidence.externalChapterKey to it.evidence.id } shouldBe originalEvidenceIds
-        afterReplay.associate { it.evidence.externalChapterKey to it.mappedCanonicalChapterId } shouldBe originalChapterIds
+        afterReplay.associate { it.evidence.externalChapterKey to it.mappedCanonicalChapterId } shouldBe
+            originalChapterIds
         chapterRepository.getByCanonicalTitleId("title-1") shouldHaveSize 4_341
         println(
             "MANGAALL_SQLITE_CAPACITY|source_only=TRUE|partial_batches=2|" +
