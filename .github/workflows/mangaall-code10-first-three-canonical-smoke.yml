@@ -35,7 +35,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Test isolated/scale preflight (offline)
-        run: python3 .github/scripts/test_mangaall_code10_canonical_smoke_plan.py
+        run: |
+          python3 .github/scripts/test_mangaall_code10_canonical_smoke_plan.py
+          python3 .github/scripts/test_mangaall_code10_canonical_smoke_report.py
       - name: Fail closed before external traffic unless acknowledged and count verified
         env:
           MANGAALL_WORKS: |
