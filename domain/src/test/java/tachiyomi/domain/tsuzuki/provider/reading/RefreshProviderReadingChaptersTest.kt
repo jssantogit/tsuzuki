@@ -386,7 +386,7 @@ class RefreshProviderReadingChaptersTest {
                     val pageIndex = request.cursor?.value?.removePrefix("batch-")?.toInt() ?: 0
                     ProviderCallResult.Success(
                         ProviderPage(
-                            items = (0 until if (pageIndex == 31) lastPageCount else 500).map { index ->
+                            items = (0 until (if (pageIndex == 31) lastPageCount else 500)).map { index ->
                                 ProviderChapterObservation("id-$pageIndex-$index", "Chapter $pageIndex-$index")
                             },
                             nextCursor = if (pageIndex == 31) null else ProviderCursor("batch-${pageIndex + 1}"),
