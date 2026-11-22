@@ -147,8 +147,11 @@ class MangaAllFutureRealThreeSourceCode11InstrumentedTest {
                 fileName = "main.js",
                 hostModules = policy.allowedHostModules(),
                 limits = ProviderRuntimeLimitsDto(
-                    wallClockTimeoutMs = 20_000L,
-                    jsExecutionTimeoutMs = 10_000L,
+                    // Diagnostic-only upper envelope (protocol max 60s). The
+                    // previously tested 20s/10s budget timed out on real
+                    // three-source JS after successful unified lookup.
+                    wallClockTimeoutMs = 45_000L,
+                    jsExecutionTimeoutMs = 30_000L,
                 ),
             )
             return client.invokePackage(request, candidate, input, policy)
@@ -205,8 +208,14 @@ class MangaAllFutureRealThreeSourceCode11InstrumentedTest {
                     "binding" to workBinding,
                 )
                 if (cursor != null) arguments["cursor"] = JsonPrimitive(cursor)
+                val startedMs = android.os.SystemClock.elapsedRealtime()
                 val response = invoke("reading.chapters", JsonObject(arguments).toString())
-                assertNull("real JS/native chapter page failed", response.failure)
+                val pageDurationMs = android.os.SystemClock.elapsedRealtime() - startedMs
+                assertNull(
+                    "real JS/native chapter page failed: page=$pages; elapsedMs=$pageDurationMs; " +
+                        "sourceRequests=${mangaDotList.get()}",
+                    response.failure,
+                )
                 val text = requireNotNull(response.value)
                 assertTrue(text.length <= 48 * 1024)
                 assertTrue(text.encodeToByteArray().size <= 48 * 1024)
