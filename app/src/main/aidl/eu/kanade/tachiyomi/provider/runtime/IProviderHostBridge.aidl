@@ -18,4 +18,7 @@ interface IProviderHostBridge {
     String imageCrop(String resourceHandle, int x, int y, int width, int height);
     String imagePixel(String resourceHandle, int x, int y);
     void logInfo(String message);
+    // Future code11-only. Append transactions; never renumber existing methods.
+    String mangaAllChapterSnapshotStart(String workId, String language);
+    String mangaAllChapterSnapshotNext(String workId, String language, String cursor);
 }
