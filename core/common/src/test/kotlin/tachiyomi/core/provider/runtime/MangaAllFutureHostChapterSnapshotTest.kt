@@ -7,9 +7,14 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 
 class MangaAllFutureHostChapterSnapshotTest {
     @TempDir
@@ -229,5 +234,131 @@ class MangaAllFutureHostChapterSnapshotTest {
                 )
             }.exceptionOrNull() is IllegalArgumentException
             ) shouldBe true
+    }
+
+    @Test
+    fun real_host_http_broker_imports_over_2mib_source_without_script_text_ipc(): Unit = runBlocking {
+        val raw = source(4341, 550)
+        (raw.toByteArray().size > 2 * 1024 * 1024) shouldBe true
+        val owner = ProviderResourceOwner(providerId, "broker-test")
+        val resources = ProviderResourceStore()
+        val calls = AtomicInteger()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            chain.request().url.toString() shouldBe
+                "https://mangadot.net/api/manga/131/chapters/list?lang=en"
+            calls.incrementAndGet()
+            Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .body(raw.toResponseBody())
+                .build()
+        }.build()
+        val host = DefaultProviderHttpHostService(
+            owner = owner,
+            resources = resources,
+            policy = ProviderNetworkPolicy(
+                allowedOrigins = setOf("https://mangadot.net"),
+                allowLocalNetwork = true,
+            ),
+            cookieJar = ProviderHttpSessionStore().cookieJar(providerId),
+            baseClient = client,
+        )
+        try {
+            val service = MangaAllFutureHostChapterSnapshot(
+                owner = owner,
+                http = host,
+                resources = resources,
+                storage = FileProviderStorageHostService(
+                    root = tempDir.resolve("real-host-broker").toFile(),
+                    providerId = providerId,
+                ),
+            )
+            var page = service.start("mangadot:131", "en")
+            val ids = mutableListOf<String>()
+            var countPages = 0
+            while (true) {
+                countPages++
+                ids += page.items.map { it["providerChapterId"]!!.jsonPrimitive.content }
+                val cursor = page.nextCursor ?: break
+                page = service.next("mangadot:131", "en", cursor)
+                (countPages <= 32) shouldBe true
+            }
+            (countPages in 17..32) shouldBe true
+            ids.size shouldBe 4341
+            ids.toSet().size shouldBe 4341
+            calls.get() shouldBe 1
+        } finally {
+            host.close()
+        }
+    }
+
+    @Test
+    fun real_host_broker_denies_unlisted_origin_and_http_403_without_committing_inventory(): Unit = runBlocking {
+        val owner = ProviderResourceOwner(providerId, "denied-broker-test")
+        val resources = ProviderResourceStore()
+        val calls = AtomicInteger()
+        val status = 403
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            calls.incrementAndGet()
+            Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(status)
+                .message("Denied")
+                .body("challenge".toResponseBody())
+                .build()
+        }.build()
+        val storage = FileProviderStorageHostService(
+            root = tempDir.resolve("denied-host-broker").toFile(),
+            providerId = providerId,
+        )
+        fun broker(origins: Set<String>) = DefaultProviderHttpHostService(
+            owner = owner,
+            resources = resources,
+            policy = ProviderNetworkPolicy(
+                allowedOrigins = origins,
+                allowLocalNetwork = true,
+            ),
+            cookieJar = ProviderHttpSessionStore().cookieJar(providerId),
+            baseClient = client,
+        )
+        val forbiddenOrigin = broker(setOf("https://api.mangadex.org"))
+        try {
+            val service = MangaAllFutureHostChapterSnapshot(
+                owner,
+                forbiddenOrigin,
+                resources,
+                storage,
+            )
+            (
+                runCatching {
+                    service.start("mangadot:131", "en")
+                }.exceptionOrNull() is ProviderNetworkPolicyException
+                ) shouldBe true
+            calls.get() shouldBe 0
+        } finally {
+            forbiddenOrigin.close()
+        }
+
+        val statusDenied = broker(setOf("https://mangadot.net"))
+        try {
+            val service = MangaAllFutureHostChapterSnapshot(
+                owner,
+                statusDenied,
+                resources,
+                storage,
+            )
+            (
+                runCatching {
+                    service.start("mangadot:131", "en")
+                }.exceptionOrNull() is ProviderHostServiceException
+                ) shouldBe true
+            calls.get() shouldBe 1
+            storage.get("mangaall_private_chapters_index") shouldBe null
+        } finally {
+            statusDenied.close()
+        }
     }
 }
