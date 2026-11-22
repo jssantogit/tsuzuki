@@ -117,5 +117,43 @@ class SignedCode10LiveReaderContract(unittest.TestCase):
             self.assertEqual(result.stdout.strip(), value)
 
 
+    def test_closed_chapter_attestation_failure_preserves_no_private_http_data(self):
+        probe = GATEWAY.read_text(encoding="utf-8")
+        kotlin = VERDICT.read_text(encoding="utf-8")
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("reason=CHAPTER_ATTESTATION_UNAVAILABLE", probe)
+        self.assertIn('failure.error.sourceFailureCode?.name ?: "NONE"', probe)
+        self.assertIn('failure.error.httpStatus?.toString() ?: "NONE"', probe)
+        self.assertIn("failure.error.retryable", probe)
+        self.assertIn("Code10 real Android chapter attestation", kotlin)
+        self.assertIn(r"\|sourceFailure=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|UNCLASSIFIED_ERROR)", kotlin)
+        self.assertIn(r"\|httpStatus=(NONE|[1-5][0-9]{2})\|retryable=(true|false)", kotlin)
+        matched = re.search(r"grep -oE '([^']+)'", script)
+        self.assertIsNotNone(matched)
+        extractor = matched.group(1)
+        prefix = ("INSTRUMENTATION_STATUS: stream=MANGAALL_LIVE_PAGE_GATE"
+                  "|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE")
+        for suffix in (
+            "|providerError=SOURCE_READ_ERROR|sourceFailure=HTTP_ERROR|httpStatus=429|retryable=true",
+            "|providerError=SOURCE_READ_ERROR|sourceFailure=UNCLASSIFIED_ERROR|httpStatus=NONE|retryable=false",
+            "|providerError=TIMEOUT|sourceFailure=NONE|httpStatus=NONE|retryable=true",
+        ):
+            value = prefix + suffix
+            result = subprocess.run(["grep", "-oE", extractor], input=value + "\n",
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.stdout.strip(), value)
+            private = value + "|url=https://api.mangadex.org/private?token=NEVER_EXPORT"
+            result = subprocess.run(["grep", "-oE", extractor], input=private + "\n",
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.stdout.strip(), value)
+        for invalid in ("|providerError=UPSTREAM_PRIVATE_ERROR",
+                        "|providerError=SOURCE_READ_ERROR|sourceFailure=PRIVATE",
+                        "|providerError=SOURCE_READ_ERROR|sourceFailure=HTTP_ERROR|httpStatus=999"):
+            result = subprocess.run(["grep", "-oE", extractor], input=prefix + invalid + "\n",
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.stdout.strip(), prefix)
+
+
+
 if __name__ == "__main__":
     unittest.main()
