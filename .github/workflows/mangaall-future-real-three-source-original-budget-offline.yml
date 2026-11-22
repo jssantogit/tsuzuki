@@ -29,7 +29,7 @@ jobs:
           base="$(git merge-base origin/main HEAD)"
           git diff --name-only "$base" HEAD | tee /tmp/mangaall-real-three-source-ipc-files.txt
           test "$(wc -l < /tmp/mangaall-real-three-source-ipc-files.txt)" -eq 2
-          if grep -Ev '^(\.github/workflows/mangaall-future-real-three-source-original-budget-offline\.yml|app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureRealThreeSourceCode11InstrumentedTest\.kt)
+          if grep -Ev '^(\.github/workflows/mangaall-future-real-three-source-original-budget-offline\.yml|app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureRealThreeSourceCode11InstrumentedTest\.kt)$' /tmp/mangaall-real-three-source-ipc-files.txt; then
             echo '::error::No production Host, provider, signing or index changes allowed'
             exit 1
           fi
