@@ -25,6 +25,7 @@ function createScenario({ first, retry = response(200, { items: [] }), solved = 
       browserCount++;
       return {
         async solve() { return solved; },
+        async openCloudflareSession() { return solved; },
         async request() { browserReads++; return retry; },
         async close() { closed++; },
       };
@@ -34,10 +35,18 @@ function createScenario({ first, retry = response(200, { items: [] }), solved = 
 }
 {
   const s = createScenario({ first: cloudflare });
-  assert.equal((await s.recovery.fetch(url)).status, 403);
-  assert.equal(s.recovery.status.outcome, 'CLOUDFLARE_CHALLENGE');
-  assert.equal(s.counters().browserCount, 0, 'CF challenge never runs Keiyoushi shape solver');
+  assert.equal((await s.recovery.fetch(url)).status, 200);
+  assert.equal(s.recovery.status.outcome, 'SIGNED_API_JSON_200_AFTER_BROWSER');
+  assert.equal(s.recovery.status.shapeAttempts, 0, 'CF only attempts native browser JS');
+  assert.equal(s.recovery.status.cloudflareBrowserAttempts, 1);
+  assert.equal(s.counters().browserCount, 1);
   await s.recovery.close();
+}
+{
+  const s = createScenario({ first: cloudflare, solved: false });
+  assert.equal((await s.recovery.fetch(url)).status, 403);
+  assert.equal(s.recovery.status.outcome, 'CLOUDFLARE_BROWSER_UNRESOLVED');
+  assert.equal(s.counters().closed, 1);
 }
 {
   const s = createScenario({ first: response(403, { error: 'captcha_required' }) });
