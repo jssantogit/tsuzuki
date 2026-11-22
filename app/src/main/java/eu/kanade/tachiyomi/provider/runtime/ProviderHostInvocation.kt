@@ -66,6 +66,21 @@ data class ProviderHostInvocationPolicy(
         }
     }
 
+    /**
+     * The future chapter snapshot is an operation-specific privilege, not a
+     * general Provider permission. Both normal script execution and the
+     * independent production reading gateway must apply this same reduction
+     * after inspecting the verified package manifest and before Binder.
+     *
+     * Never widen an existing false grant for any capability.
+     */
+    fun forCapability(capabilityId: String): ProviderHostInvocationPolicy =
+        if (capabilityId == "reading.chapters") {
+            this
+        } else {
+            copy(mangaAllChapterSnapshotEnabled = false)
+        }
+
     fun allowedHostModules(): Set<ProviderHostModule> = buildSet {
         add(ProviderHostModule.DOM)
         add(ProviderHostModule.BINARY)
