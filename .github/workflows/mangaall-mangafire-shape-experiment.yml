@@ -111,9 +111,15 @@ jobs:
           MANGAALL_SHARD_COUNT: '1'
           MANGAALL_SIGNED_CODE10_CANONICAL_SMOKE: I_ACCEPT_SIGNED_CODE10_CANONICAL_SMOKE
           MANGAALL_TEST_ONLY_AUTO_SHAPE: I_ACCEPT_TEST_ONLY_AUTO_SHAPE
+          MANGAALL_TEST_ONLY_HEADED: '1'
           MANGAALL_TEST_ONLY_SOLVER_HTML: ${{ github.workspace }}/.github/scripts/keiyoushi-mangafire-solver.runtime.html
         run: |
-          node "$GITHUB_WORKSPACE/.github/scripts/mangaall_shape_test_launcher.mjs" --live \
+          set -euo pipefail
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y xvfb
+          fi
+          xvfb-run -a node "$GITHUB_WORKSPACE/.github/scripts/mangaall_shape_test_launcher.mjs" --live \
             --output mangaall-shape-test-matrix.json \
             --real-envelopes mangaall-shape-test-envelopes.json
       - name: Retain sanitized source observations, never cookies or solver data
