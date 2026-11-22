@@ -497,4 +497,3 @@ internal class MangaAllFutureChapterSnapshotHostBridge(
             }
         }
 }
-
