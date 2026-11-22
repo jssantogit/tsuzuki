@@ -28,3 +28,9 @@ Keiyoushi `extensions-source`, Apache License 2.0: <https://github.com/keiyoushi
 1. Offline tests pass with exact Cloudflare-vs-JSON distinction, bounded solve attempts, opt-in and no session leakage.
 2. The two-work experiment yields real sanitized source evidence and explicitly reports the shape attempt outcome.
 3. Only an observed successful session should justify enabling the full 30-work experiment. An unresolved Cloudflare challenge, the independent >64 KiB Host result limit and real Reader pixels remain separate blockers.
+
+## Live observations (2026-11-22)
+
+- [Run #45085281359](https://github.com/jssantogit/tsuzuki/actions/runs/45085281359): CI SUCCESS, offline shape suite SUCCESS; 2 inconclusive source cases; 6 MangaDex/5 MangaDot HTTP200, MangaFire 1 HTTP403 `cf-mitigated: challenge`. Shape solver correctly not invoked (0 shape attempts). Browser challenge not tried.
+- [Run #45085541343](https://github.com/jssantogit/tsuzuki/actions/runs/45085541343): CI SUCCESS, 2 inconclusive cases; one native headless Chromium JavaScript challenge probe, no `cf_clearance` (`CLOUDFLARE_BROWSER_UNRESOLVED`). This result does not show that the shape CAPTCHA solver was exercised.
+- Follow-up compares headed Chromium on Xvfb, permits origin-scoped Cloudflare challenge POST, and requires parsed non-error JSON from the original signed API. If unresolved, stop CI retries and validate access on physical Android. Neither attempt validates Reader pixels or Host's 64-KiB bound.
