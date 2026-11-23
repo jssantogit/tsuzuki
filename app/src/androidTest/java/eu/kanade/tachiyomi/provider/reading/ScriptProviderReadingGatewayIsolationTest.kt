@@ -2728,7 +2728,7 @@ class ScriptProviderReadingGatewayIsolationTest {
      * title; ONLY the unique returned MangaFire source HID is used to inspect
      * real MangaFire chapter cursors. Nothing is bound canonically/persisted.
      */
-    @Test(timeout = 360_000L)
+    @Test(timeout = 480_000L)
     fun mangaAllCode10CiWebviewMangaFireChapters_checksRealPagination() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         assertEquals(
@@ -2781,25 +2781,81 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
         var readyWorks = 0
         for ((id, title) in listOf("punpun" to "Oyasumi Punpun", "koe" to "Koe no Katachi")) {
-            val lookup = runCatching {
-                withTimeout(48_000L) {
-                    gateway.lookup(
-                        providerId,
-                        ProviderReadingLookupRequest(titles = listOf(title), requestedLanguage = "en"),
-                    )
+            // Code10 is a single three-source router with deferred source
+            // continuations. Page one alone does not establish an exhaustive
+            // MangaFire selection. Drain at most eight bounded Host pages.
+            val found = linkedMapOf<String, tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate>()
+            val seenLookupCursors = hashSetOf<String>()
+            var lookupCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+            var lookupPages = 0
+            var lookupOutcome = "CURSOR_LIMIT"
+            runCatching {
+                withTimeout(70_000L) {
+                    for (page in 0 until 8) {
+                        val response = withTimeout(20_000L) {
+                            gateway.lookup(
+                                providerId,
+                                ProviderReadingLookupRequest(
+                                    titles = listOf(title),
+                                    cursor = lookupCursor,
+                                    requestedLanguage = "en",
+                                ),
+                            )
+                        }
+                        if (response is ProviderCallResult.Failure) {
+                            lookupOutcome = when (response.error.code.name) {
+                                "SOURCE_READ_ERROR" -> "READ_ERROR"
+                                "SOURCE_TOO_LARGE" -> "TOO_LARGE"
+                                "TIMEOUT" -> "TIMEOUT"
+                                else -> "OTHER"
+                            }
+                            break
+                        }
+                        val success = response as ProviderCallResult.Success
+                        lookupPages++
+                        for (candidate in success.value.items) {
+                            if (!candidate.externalWorkId.startsWith("mangafire:")) continue
+                            val workId = candidate.externalWorkId
+                            if (!Regex("mangafire:[A-Za-z0-9_-]{1,128}").matches(workId)) {
+                                lookupOutcome = "INVALID_IDENTITY"
+                                break
+                            }
+                            val prior = found[workId]
+                            if (prior != null && prior.title != candidate.title) {
+                                lookupOutcome = "IDENTITY_CONFLICT"
+                                break
+                            }
+                            found[workId] = candidate
+                        }
+                        if (lookupOutcome == "INVALID_IDENTITY" || lookupOutcome == "IDENTITY_CONFLICT") {
+                            break
+                        }
+                        val next = success.value.nextCursor
+                        if (next == null) {
+                            lookupOutcome = "COMPLETE"
+                            break
+                        }
+                        if (!seenLookupCursors.add(next.toString())) break
+                        lookupCursor = next
+                    }
                 }
-            }.getOrNull()
-            val sourceMatches = (lookup as? ProviderCallResult.Success)
-                ?.value?.items?.filter { it.externalWorkId.startsWith("mangafire:") }
-                .orEmpty()
-            val workId = sourceMatches.singleOrNull()?.externalWorkId
-            val validWorkId = workId != null &&
-                Regex("mangafire:[A-Za-z0-9_-]{1,128}").matches(workId)
-            if (!validWorkId) {
+            }.onFailure {
+                lookupOutcome = "TIMEOUT"
+            }
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_CHAPTER|work=$id|phase=LOOKUP|outcome=$lookupOutcome" +
+                    "|pages=$lookupPages|candidates=${found.size.coerceAtMost(99)}",
+            )
+            val workId = if (lookupOutcome == "COMPLETE") found.keys.singleOrNull() else null
+            if (workId == null) {
+                val reason = when {
+                    lookupOutcome != "COMPLETE" -> "LOOKUP_INCOMPLETE"
+                    found.size > 1 -> "LOOKUP_AMBIGUOUS"
+                    else -> "LOOKUP_UNAVAILABLE"
+                }
                 MangaAllInstrumentationVerdict.publish(
                     "MANGAALL_CI_CHAPTER|work=$id|outcome=INCONCLUSIVE|pages=0|count=0" +
-                        "|chapterOne=UNVERIFIED|reason=" +
-                        (if (sourceMatches.size > 1) "LOOKUP_AMBIGUOUS" else "LOOKUP_UNAVAILABLE"),
+                        "|chapterOne=UNVERIFIED|reason=$reason",
                 )
                 continue
             }
