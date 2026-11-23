@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicReference
  */
 internal object MangaFireCiShapeSolverGate {
     const val ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE"
+    const val OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_OFFLINE"
 
     private val latch = AtomicReference(CountDownLatch(1))
     private val status = AtomicReference("TIMEOUT")
@@ -50,6 +51,7 @@ internal object MangaFireCiShapeSolverGate {
                 "TLS_REJECTED",
                 "RENDERER_EXITED",
                 "ASSET_INVALID",
+                "BRIDGE_READY",
             ),
         )
         if (status.compareAndSet("TIMEOUT", outcome)) {
@@ -71,7 +73,9 @@ class MangaFireCiShapeSolverActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (intent?.getStringExtra("ciOptIn") != MangaFireCiShapeSolverGate.ACK) {
+        val optIn = intent?.getStringExtra("ciOptIn")
+        val bridgeOnly = optIn == MangaFireCiShapeSolverGate.OFFLINE_ACK
+        if (!bridgeOnly && optIn != MangaFireCiShapeSolverGate.ACK) {
             finish()
             return
         }
@@ -82,9 +86,15 @@ class MangaFireCiShapeSolverActivity : Activity() {
             finish()
             return
         }
-        val html = runCatching {
-            assets.open("mangafire-ci-solver.html").bufferedReader().use { it.readText() }
-        }.getOrNull()
+        val html = if (bridgeOnly) {
+            // No external script, WAF endpoint, image, or HTTP request. The
+            // same-origin JS bridge can be tested in CI without a challenge.
+            "<!doctype html><html><head><script>bridge.postMessage('probe')</script></head><body></body></html>"
+        } else {
+            runCatching {
+                assets.open("mangafire-ci-solver.html").bufferedReader().use { it.readText() }
+            }.getOrNull()
+        }
         if (html.isNullOrBlank() || !html.contains("bridge.postMessage")) {
             MangaFireCiShapeSolverGate.complete("ASSET_INVALID")
             finish()
@@ -111,9 +121,15 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 sourceOrigin.scheme == "https" &&
                 sourceOrigin.host == "mangafire.to"
             ) {
-                when (message.data) {
-                    "true" -> MangaFireCiShapeSolverGate.complete("SOLVED")
-                    "false" -> MangaFireCiShapeSolverGate.complete("UNSOLVED")
+                if (bridgeOnly) {
+                    if (message.data == "probe") {
+                        MangaFireCiShapeSolverGate.complete("BRIDGE_READY")
+                    }
+                } else {
+                    when (message.data) {
+                        "true" -> MangaFireCiShapeSolverGate.complete("SOLVED")
+                        "false" -> MangaFireCiShapeSolverGate.complete("UNSOLVED")
+                    }
                 }
             }
         }
@@ -136,6 +152,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 request: WebResourceRequest?,
             ): WebResourceResponse? {
                 if (request == null) return null
+                if (bridgeOnly) return blockedResponse()
                 val uri = request.url
                 val allowed = uri.scheme == "https" && uri.port == -1 &&
                     (
