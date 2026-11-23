@@ -15,7 +15,7 @@ def fixture():
             )
         records.append(
             f"MANGAALL_CI_CHAPTER|work={work}|phase=API"
-            "|signedUrl=OBSERVED|http=403|browser=VALID_JSON"
+            "|signedUrl=OBSERVED|http=403|transport=BROWSER|json=VALIDATED"
         )
         records.append(
             f"MANGAALL_CI_CHAPTER|work={work}|outcome=READY|pages=2"
@@ -59,9 +59,16 @@ reject_modified(1, good[1].replace("outcome=COMPLETE", "outcome=READ_ERROR"), "L
 reject_modified(1, good[1].replace("candidates=1", "candidates=2"), "LOOKUP_NOT_COMPLETE_AND_UNIQUE")
 reject_modified(4, good[4].replace("candidates=1", "candidates=2"), "MANGAFIRE_CANDIDATE_NOT_UNIQUE")
 reject_modified(4, good[4].replace("lookup=COMPLETE", "lookup=PARTIAL"), "THREE_SOURCE_EVIDENCE_INCOMPLETE")
-reject_modified(5, good[5].replace("browser=VALID_JSON", "browser=INCONCLUSIVE"), "SIGNED_API_NOT_VALIDATED")
+reject_modified(5, good[5].replace("json=VALIDATED", "json=UNVERIFIED"), "SIGNED_API_NOT_VALIDATED")
+reject_modified(5, good[5].replace("transport=BROWSER", "transport=NONE"), "SIGNED_API_TRANSPORT_INCONSISTENT")
+reject_modified(5, good[5].replace("transport=BROWSER", "transport=HTTP"), "SIGNED_API_TRANSPORT_INCONSISTENT")
 reject_modified(5, good[5].replace("signedUrl=OBSERVED", "signedUrl=NOT_OBSERVED"), "SIGNED_API_NOT_VALIDATED")
 reject_modified(6, good[6].replace("outcome=READY", "outcome=INCONCLUSIVE"), "CHAPTER_PAGINATION_INCOMPLETE")
 reject_modified(6, good[6].replace("chapterOne=YES", "chapterOne=NO"), "CHAPTER_PAGINATION_INCOMPLETE")
 
-print("MANGAALL_CI_THREE_CONTRACT|result=PASS|checks=17|network=NOT_STARTED")
+# The provider can also parse valid JSON from an ordinary HTTP 200
+# response, with no Browser Host fallback.
+http200 = [line.replace("http=403|transport=BROWSER", "http=200|transport=HTTP")
+           for line in good]
+assert evaluate(http200) == (True, "SIGNED_CI_THREE_WORKS_ACCEPTED")
+print("MANGAALL_CI_THREE_CONTRACT|result=PASS|checks=20|network=NOT_STARTED")
