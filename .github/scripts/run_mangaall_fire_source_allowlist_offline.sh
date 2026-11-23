@@ -30,13 +30,13 @@ run_offline_test() {
     exit 1
   fi
 }
+# Cold-start differential: the FIRST real Chromium instrumentation probe
+# uses live WebSettings, but intercepts ALL requests before any remote access.
+# Test the loaded document's final native URL class and JavaScript origin.
+run_offline_test 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork'
 run_offline_test 'mangaAllCiBrowserVerdictContract_rejectsUnboundedOrUntrustedData'
 run_offline_test 'mangaAllCiShapeNativeNavigationClassifier_offline'
 run_offline_test 'mangaAllCiShapeSolverBridge_offlineWithoutNetwork'
-# The real 921-line solver asset must load and emit its first JS stage in
-# the same Chromium profile while *all* HTTP requests are blocked.
+# Second differential: the exact 921-line HTML asset with blockNetworkLoads.
 run_offline_test 'mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork'
-# Enable the live WebView network setting, but intercept and block every
-# request. The exact 921-line asset must still emit DOCUMENT_READY.
-run_offline_test 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork'
 echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=PASS|source_records=STRICT|bridge=REAL_CHROMIUM|exact_asset=FIRST_JS_STAGE|intercepted_live_setting=PASS|network=NOT_STARTED'
