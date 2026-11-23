@@ -24,7 +24,7 @@ LOOKUP = re.compile(
 API = re.compile(
     r"MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)\|phase=API"
     r"\|signedUrl=(OBSERVED|NOT_OBSERVED)\|http=(NONE|200|403|OTHER)"
-    r"\|browser=(VALID_JSON|INCONCLUSIVE)"
+    r"\|transport=(HTTP|BROWSER|NONE)\|json=(VALIDATED|UNVERIFIED)"
 )
 CHAPTER = re.compile(
     r"MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)"
@@ -43,7 +43,7 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
     records = [line.strip() for line in lines if line.strip()]
     source: dict[tuple[str, str], tuple[int, str]] = {}
     lookup: dict[str, tuple[str, int, int]] = {}
-    api: dict[str, tuple[str, str]] = {}
+    api: dict[str, tuple[str, str, str, str]] = {}
     chapter: dict[str, tuple[str, int, int, str, str]] = {}
     for line in records:
         if (match := SOURCE.fullmatch(line)):
@@ -58,10 +58,10 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
                 return False, "DUPLICATE_LOOKUP_VERDICT"
             lookup[work] = (state, int(pages), int(count))
         elif (match := API.fullmatch(line)):
-            work, signed, http, browser = match.groups()
+            work, signed, http, transport, json_status = match.groups()
             if work in api:
                 return False, "DUPLICATE_API_VERDICT"
-            api[work] = (signed, browser)
+            api[work] = (signed, http, transport, json_status)
         elif (match := CHAPTER.fullmatch(line)):
             work, state, pages, count, one, reason = match.groups()
             if work in chapter:
@@ -77,8 +77,15 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
                 return False, "THREE_SOURCE_EVIDENCE_INCOMPLETE"
         if source[(work, "mangafire")][0] != 1:
             return False, "MANGAFIRE_CANDIDATE_NOT_UNIQUE"
-        if api.get(work) != ("OBSERVED", "VALID_JSON"):
+        observed_api = api.get(work)
+        if observed_api is None or observed_api[0] != "OBSERVED" or observed_api[3] != "VALIDATED":
             return False, "SIGNED_API_NOT_VALIDATED"
+        # A 200 response can complete directly; a challenged source must
+        # have its real same-profile Browser Host fallback accepted by the
+        # unmodified signed provider. A synthetic navigation flag is not proof.
+        http, transport = observed_api[1], observed_api[2]
+        if transport == "NONE" or (transport == "HTTP" and http != "200"):
+            return False, "SIGNED_API_TRANSPORT_INCONSISTENT"
         result = chapter.get(work)
         if result is None or result[0] != "READY" or result[1] < 1 or result[2] < 1 or (
             result[3], result[4]
