@@ -14,6 +14,7 @@ internal class MangaAllBrowserHttpContinuation(
 ) {
     private var navigationGeneration = 0
     private var rejectedGeneration = -1
+
     @Volatile
     private var firstRejection: ProviderBrowserFailure? = null
 
@@ -27,8 +28,10 @@ internal class MangaAllBrowserHttpContinuation(
      */
     fun deferFirstRejection(failure: ProviderBrowserFailure): Boolean {
         if (!enabled || firstRejection != null ||
-            (failure != ProviderBrowserFailure.HTTP_REJECTED &&
-                failure != ProviderBrowserFailure.UPSTREAM_CHALLENGE)
+            (
+                failure != ProviderBrowserFailure.HTTP_REJECTED &&
+                    failure != ProviderBrowserFailure.UPSTREAM_CHALLENGE
+                )
         ) {
             return false
         }
