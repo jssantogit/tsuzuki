@@ -80,6 +80,13 @@ internal object MangaAllInstrumentationVerdict {
             """MANGAALL_CI_SHAPE_DOCUMENT\|origin=(PENDING|EXPECTED|SAME_SITE|""" +
                 """OPAQUE|FOREIGN|JS_UNAVAILABLE)\|mode=DEBUG_ONLY""",
         ),
+        // Native WebView callback URI is classified without exposing its URL.
+        // This does not authorize a bridge or attest remote server acceptance.
+        Regex(
+            """MANGAALL_CI_SHAPE_NAV\\|phase=(START|COMMIT|FINISH)""" +
+                """\\|kind=(PENDING|EXPECTED|SAME_SITE|ABOUT|DATA|NO_URL|OTHER)""" +
+                """\\|mode=DEBUG_ONLY""",
+        ),
         // Existing production Browser Host diagnostic enums, not HTTP bodies,
         // HTML, challenge tokens, cookies, response headers or full URLs.
         Regex(
