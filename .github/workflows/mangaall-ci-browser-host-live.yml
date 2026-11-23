@@ -8,6 +8,14 @@ on:
         description: 'Type I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE to authorize two real signed-code10 title checks'
         required: true
         type: string
+      gate_mode:
+        description: 'Choose strict source access or chapter cursor test, both on Android emulator'
+        required: true
+        type: choice
+        default: api
+        options:
+          - api
+          - chapters
   push:
     branches: ['probe/mangaall-a54-browser-profile-validation-*']
     paths:
@@ -30,9 +38,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Verify exact scope and authorized live request before any source access
+        id: approve
         env:
           EVENT: ${{ github.event_name }}
           MANUAL_ACK: ${{ inputs.acknowledge }}
+          MANUAL_GATE: ${{ inputs.gate_mode }}
         run: |
           set -euo pipefail
           bash -n .github/scripts/run_mangaall_ci_webview_android.sh
@@ -46,16 +56,21 @@ jobs:
               record = Path('.github/mangaall-ci-webview-request.json').read_bytes()
               assert len(record) <= 256
               manifest = json.loads(record)
-              assert type(manifest) is dict and set(manifest) == {'acknowledge', 'works'}
-              assert manifest == {'acknowledge': approved, 'works': works}
+              assert type(manifest) is dict and set(manifest) == {'acknowledge', 'works', 'gate'}
+              assert manifest['acknowledge'] == approved and manifest['works'] == works
+              gate = manifest['gate']
           else:
               assert os.environ['EVENT'] == 'workflow_dispatch'
               assert os.environ['MANUAL_ACK'] == approved
+              gate = os.environ['MANUAL_GATE']
+          assert gate in ('api', 'chapters')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write('gate=' + gate + '\n')
           release = Path('app/src/main/AndroidManifest.xml').read_text()
           debug = Path('app/src/debug/AndroidManifest.xml').read_text()
           assert 'MangaFireCiBrowserWarmupActivity' in debug
           assert 'MangaFireCiBrowserWarmupActivity' not in release
-          print('MANGAALL_CI_WEBVIEW|scope=2_WORKS|code10=ORIGINAL_SIGNED|profile=ISOLATED|external=NOT_STARTED')
+          print('MANGAALL_CI_WEBVIEW|scope=2_WORKS|code10=ORIGINAL_SIGNED|profile=ISOLATED|gate=' + gate + '|external=NOT_STARTED')
           PY
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -105,10 +120,11 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Execute actual signed code10 2-work API gate on emulated Android WebView
+      - name: Execute selected code10 real MangaFire API or chapters gate on Android WebView
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         env:
           MANGAALL_CI_WEBVIEW_ACK: I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE
+          MANGAALL_CI_GATE_MODE: ${{ steps.approve.outputs.gate }}
         with:
           api-level: 35
           target: google_apis
@@ -116,11 +132,11 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: bash .github/scripts/run_mangaall_ci_webview_android.sh
-      - name: Retain sanitized session/JSON verdict only; never browser data
+      - name: Retain sanitized API/chapter verdict only; never browser data
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: mangaall-ci-webview-signed-api-verdict
+          name: mangaall-ci-webview-signed-source-verdict
           path: .github/results/mangaall-ci-webview/verdict.txt
           if-no-files-found: warn
           retention-days: 3
