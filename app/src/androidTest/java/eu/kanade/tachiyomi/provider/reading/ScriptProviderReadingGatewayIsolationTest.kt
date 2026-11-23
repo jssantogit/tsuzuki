@@ -3097,7 +3097,7 @@ class ScriptProviderReadingGatewayIsolationTest {
 
     @Test
     fun mangaAllCiMangaFire403Classifier_offlineResponseOnly() {
-        fun response(code: Int, body: String): Response =
+        fun response(code: Int, body: String, headers: Map<String, String> = emptyMap()): Response =
             Response.Builder()
                 .request(
                     okhttp3.Request.Builder()
@@ -3107,6 +3107,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 .protocol(Protocol.HTTP_1_1)
                 .code(code)
                 .message("Synthetic test only")
+                .apply { headers.forEach { (name, value) -> header(name, value) } }
                 .body(body.toResponseBody())
                 .build()
 
@@ -3122,6 +3123,29 @@ class ScriptProviderReadingGatewayIsolationTest {
         }
         response(200, """{"items":[]}""").use {
             assertEquals("NOT_403", classifyMangaFire403(it))
+            assertEquals("NOT_403", classifyMangaFire403Edge(it))
+        }
+        response(403, """{"error":"captcha_required"}""").use {
+            assertEquals("JSON", classifyMangaFire403Edge(it))
+        }
+        response(403, "<!doctype html><html>blocked</html>", mapOf(
+            "Content-Type" to "text/html; charset=UTF-8",
+            "Server" to "cloudflare",
+        )).use {
+            assertEquals("UNCLASSIFIED", classifyMangaFire403(it))
+            assertEquals("CF_SERVER_HTML", classifyMangaFire403Edge(it))
+        }
+        response(403, "<html>blocked</html>", mapOf("Content-Type" to "text/html")).use {
+            assertEquals("OTHER_HTML", classifyMangaFire403Edge(it))
+        }
+        response(403, "opaque", mapOf("Server" to "Cloudflare")).use {
+            assertEquals("CF_SERVER_OTHER", classifyMangaFire403Edge(it))
+        }
+        response(403, "opaque", mapOf("cf-mitigated" to "challenge")).use {
+            assertEquals("CF_MITIGATED", classifyMangaFire403Edge(it))
+        }
+        response(403, "opaque", mapOf("Server" to "untrusted-custom")).use {
+            assertEquals("OTHER", classifyMangaFire403Edge(it))
         }
     }
 
