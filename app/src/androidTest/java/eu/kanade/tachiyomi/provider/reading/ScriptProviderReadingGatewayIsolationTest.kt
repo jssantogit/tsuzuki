@@ -2349,6 +2349,41 @@ class ScriptProviderReadingGatewayIsolationTest {
         runPublishedMangaAllLivePages(10L)
     }
 
+    /** CI-only diagnostic contract: real API acceptance is not a page-load flag. */
+    @Test
+    fun mangaAllCiBrowserVerdictContract_rejectsUnboundedOrUntrustedData() {
+        val good = listOf(
+            "MANGAALL_CI_WEBVIEW|phase=STARTED",
+            "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=PAGE_FINISHED",
+            "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=HTTP_REJECTED",
+            "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=PROFILE_UNSUPPORTED",
+            "MANGAALL_CI_WEBVIEW|work=punpun|api=VALID_JSON|candidates=1",
+            "MANGAALL_CI_WEBVIEW|work=koe|api=BLOCKED|candidates=0",
+            "MANGAALL_CI_WEBVIEW|outcome=CI_SIGNED_API_ACCEPTED|signedJson=2" +
+                "|works=2|providerCandidateWorks=2|canonical=NOT_TESTED" +
+                "|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+            "MANGAALL_CI_WEBVIEW|outcome=CI_INCONCLUSIVE|signedJson=0" +
+                "|works=2|providerCandidateWorks=0|canonical=NOT_TESTED" +
+                "|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+        good.forEach { record ->
+            assertTrue("CI verdict format unexpectedly denied", MangaAllInstrumentationVerdict.isPermitted(record))
+        }
+        val bad = listOf(
+            "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=HUMAN_CONFIRMED",
+            "MANGAALL_CI_WEBVIEW|work=unknown|api=VALID_JSON|candidates=1",
+            "MANGAALL_CI_WEBVIEW|work=koe|api=VALID_JSON|candidates=1|cookie=secret",
+            "MANGAALL_CI_WEBVIEW|work=koe|api=VALID_JSON|candidates=1" +
+                "|url=https://mangafire.to/api/titles",
+            "MANGAALL_CI_WEBVIEW|outcome=CI_SIGNED_API_ACCEPTED|signedJson=3" +
+                "|works=2|providerCandidateWorks=2|canonical=NOT_TESTED" +
+                "|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+        bad.forEach { record ->
+            assertFalse("CI verdict accepted unsafe details", MangaAllInstrumentationVerdict.isPermitted(record))
+        }
+    }
+
     /** Offline guard for strictly redacted Android A54 instrumentation output. */
     @Test
     fun mangaAllA54ClosedVerdictContract_acceptsOnlyExplicitSourceFreeFormats() {
