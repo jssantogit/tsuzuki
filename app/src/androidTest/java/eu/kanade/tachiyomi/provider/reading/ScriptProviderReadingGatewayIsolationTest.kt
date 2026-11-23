@@ -2857,6 +2857,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 .build(),
         )
         var readyWorks = 0
+        var mangaFireSourceReadyWorks = 0
         for ((id, title) in works) {
             signedApi.set(null)
             sourceHttp.set("NONE")
@@ -2874,6 +2875,8 @@ class ScriptProviderReadingGatewayIsolationTest {
             var lookupCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
             var lookupPages = 0
             var lookupOutcome = "CURSOR_LIMIT"
+            var mangaFireLookupComplete = false
+            var mangaDotPageFourPending = false
             runCatching {
                 withTimeout(70_000L) {
                     for (page in 0 until 8) {
@@ -2888,6 +2891,15 @@ class ScriptProviderReadingGatewayIsolationTest {
                             )
                         }
                         if (response is ProviderCallResult.Failure) {
+                            // A pending MangaDot page 4 precisely matches its
+                            // deliberately bounded 3-page source search. This
+                            // is diagnostic attribution, not a source PASS.
+                            if (mangaDotPageFourPending) {
+                                MangaAllInstrumentationVerdict.publish(
+                                    "MANGAALL_CI_LOOKUP_BLOCKER|work=$id|source=MANGADOT" +
+                                        "|reason=PAGE_FOUR_PENDING",
+                                )
+                            }
                             val error = response.error
                             val cause = when (error.sourceFailureCode?.name) {
                                 "CHALLENGE_BLOCKED" -> "CHALLENGE_BLOCKED"
@@ -2943,10 +2955,25 @@ class ScriptProviderReadingGatewayIsolationTest {
                         }
                         val next = success.value.nextCursor
                         if (next == null) {
+                            mangaFireLookupComplete = true
                             lookupOutcome = "COMPLETE"
                             break
                         }
-                        if (!seenLookupCursors.add(next.toString())) break
+                        // Inspect only the source names and bounded, non-PII
+                        // pagination shape of our own signed router cursor.
+                        // A V2 deferred failure is NOT complete source proof.
+                        // Never publish the cursor or its source-specific IDs.
+                        val state = runCatching { JSONObject(next.value) }.getOrNull()
+                        val pending = state?.optJSONObject("remaining")
+                        val originalCursor = state?.optInt("v") == 1 && pending != null &&
+                            state.optJSONObject("failure") == null
+                        if (originalCursor && !requireNotNull(pending).has("mangafire")) {
+                            mangaFireLookupComplete = true
+                        }
+                        mangaDotPageFourPending = originalCursor &&
+                            requireNotNull(pending).length() == 1 &&
+                            pending.optString("mangadot") == "4"
+                        if (!seenLookupCursors.add(next.value)) break
                         lookupCursor = next
                     }
                 }
@@ -3010,6 +3037,11 @@ class ScriptProviderReadingGatewayIsolationTest {
                 MangaAllInstrumentationVerdict.publish(
                     "MANGAALL_CI_CHAPTER|work=$id|outcome=INCONCLUSIVE|pages=0|count=0" +
                         "|chapterOne=UNVERIFIED|reason=$reason",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_FIRE_SOURCE|work=$id|lookup=INCOMPLETE" +
+                        "|api=$sourceJson|chapters=INCOMPLETE|chapterOne=UNVERIFIED" +
+                        "|outcome=INCONCLUSIVE",
                 )
                 continue
             }
@@ -3083,6 +3115,19 @@ class ScriptProviderReadingGatewayIsolationTest {
             }
             val ready = outcomeReason == "NONE"
             if (ready) readyWorks++
+            val sourceReady = mangaFireLookupComplete && sourceJson == "VALIDATED" &&
+                found.size == 1 && complete && chapterIds.isNotEmpty() &&
+                chapterOneIds.size == 1 && reason != "INVALID_IDENTITY" &&
+                lookupOutcome != "INVALID_IDENTITY" && lookupOutcome != "IDENTITY_CONFLICT"
+            if (sourceReady) mangaFireSourceReadyWorks++
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_FIRE_SOURCE|work=$id" +
+                    "|lookup=" + (if (mangaFireLookupComplete) "COMPLETE" else "INCOMPLETE") +
+                    "|api=$sourceJson" +
+                    "|chapters=" + (if (complete) "COMPLETE" else "INCOMPLETE") +
+                    "|chapterOne=$chapterOne" +
+                    "|outcome=" + (if (sourceReady) "SOURCE_READY" else "INCONCLUSIVE"),
+            )
             val chapterOutcome = if (ready) "READY" else "INCONCLUSIVE"
             MangaAllInstrumentationVerdict.publish(
                 "MANGAALL_CI_CHAPTER|work=$id|outcome=$chapterOutcome" +
@@ -3090,6 +3135,16 @@ class ScriptProviderReadingGatewayIsolationTest {
                     "|chapterOne=$chapterOne|reason=$outcomeReason",
             )
         }
+        val sourceGate = if (mangaFireSourceReadyWorks == works.size) {
+            "SOURCE_CHAPTERS_ACCEPTED"
+        } else {
+            "INCONCLUSIVE"
+        }
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_CI_FIRE_SOURCE|outcome=$sourceGate" +
+                "|ready=$mangaFireSourceReadyWorks|works=${works.size}" +
+                "|canonical=NOT_TESTED|unified=NOT_PROVEN",
+        )
         val chapterGate = if (readyWorks == works.size) "CHAPTERS_ACCEPTED" else "INCONCLUSIVE"
         MangaAllInstrumentationVerdict.publish(
             "MANGAALL_CI_CHAPTER|outcome=$chapterGate" +
