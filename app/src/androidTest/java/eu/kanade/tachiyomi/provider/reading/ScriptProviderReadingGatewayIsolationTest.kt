@@ -2807,6 +2807,23 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
     }
 
+    /** Verify native navigation classification with synthetic URLs only. */
+    @Test
+    fun mangaAllCiShapeNativeNavigationClassifier_offline() {
+        MangaFireCiShapeSolverGate.reset()
+        assertEquals("PENDING", MangaFireCiShapeSolverGate.lastNavigation("START"))
+        MangaFireCiShapeSolverGate.markNavigation("START", "about:blank")
+        MangaFireCiShapeSolverGate.markNavigation("COMMIT", "https://mangafire.to/@waf/solver")
+        MangaFireCiShapeSolverGate.markNavigation("FINISH", "https://unknown.invalid/path")
+        assertEquals("ABOUT", MangaFireCiShapeSolverGate.lastNavigation("START"))
+        assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastNavigation("COMMIT"))
+        assertEquals("OTHER", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
+        MangaFireCiShapeSolverGate.markNavigation("FINISH", "data:text/html,placeholder")
+        assertEquals("DATA", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
+        MangaFireCiShapeSolverGate.markNavigation("FINISH", null)
+        assertEquals("NO_URL", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
+    }
+
     /** Offline, real Chromium multi-profile and origin-scoped WebMessage test. */
     @Test(timeout = 80_000L)
     fun mangaAllCiShapeSolverBridge_offlineWithoutNetwork() {
