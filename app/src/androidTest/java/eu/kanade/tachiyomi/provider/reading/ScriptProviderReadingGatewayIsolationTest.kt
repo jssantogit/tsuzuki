@@ -2767,6 +2767,25 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
     }
 
+    /** Offline, real Chromium multi-profile and origin-scoped WebMessage test. */
+    @Test(timeout = 80_000L)
+    fun mangaAllCiShapeSolverBridge_offlineWithoutNetwork() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        MangaFireCiShapeSolverGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaFireCiShapeSolverActivity::class.java)
+                .putExtra("ciOptIn", MangaFireCiShapeSolverGate.OFFLINE_ACK)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        try {
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.await(30))
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
     /**
      * CI-only source chapter gate on the same Android Browser Host profile.
      * The original signed code10 performs one combined-source lookup per
