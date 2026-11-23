@@ -43,6 +43,8 @@ internal object MangaFireCiShapeSolverGate {
     private val nativeStage = AtomicReference("NO_EVENT")
     private val javaScriptProbe = AtomicReference("PENDING")
     private val documentOrigin = AtomicReference("PENDING")
+    private val finishJavaScriptProbe = AtomicReference("PENDING")
+    private val finishDocumentOrigin = AtomicReference("PENDING")
     private val navigationStart = AtomicReference("PENDING")
     private val navigationCommit = AtomicReference("PENDING")
     private val navigationFinish = AtomicReference("PENDING")
@@ -75,6 +77,8 @@ internal object MangaFireCiShapeSolverGate {
         nativeStage.set("NO_EVENT")
         javaScriptProbe.set("PENDING")
         documentOrigin.set("PENDING")
+        finishJavaScriptProbe.set("PENDING")
+        finishDocumentOrigin.set("PENDING")
         navigationStart.set("PENDING")
         navigationCommit.set("PENDING")
         navigationFinish.set("PENDING")
@@ -130,6 +134,19 @@ internal object MangaFireCiShapeSolverGate {
     }
 
     fun lastDocumentOrigin(): String = documentOrigin.get()
+
+    fun markFinishProbe(bridge: String, origin: String) {
+        if (bridge in setOf("BRIDGE_READY", "BRIDGE_MISSING", "JS_UNAVAILABLE")) {
+            finishJavaScriptProbe.set(bridge)
+        }
+        if (origin in setOf("EXPECTED", "SAME_SITE", "OPAQUE", "FOREIGN", "JS_UNAVAILABLE")) {
+            finishDocumentOrigin.set(origin)
+        }
+    }
+
+    fun lastFinishJavaScriptProbe(): String = finishJavaScriptProbe.get()
+
+    fun lastFinishDocumentOrigin(): String = finishDocumentOrigin.get()
 
     // Never expose the callback URL. The JavaScript origin and the native
     // navigation target are independent diagnostics of the document lifecycle.
@@ -282,38 +299,13 @@ class MangaFireCiShapeSolverActivity : Activity() {
             override fun onPageCommitVisible(view: WebView?, url: String?) {
                 MangaFireCiShapeSolverGate.markNativeStage("PAGE_COMMITTED")
                 MangaFireCiShapeSolverGate.markNavigation("COMMIT", url)
-                // Diagnostic only: check whether JS can run and whether the
-                // origin-scoped bridge is injected. Never post a synthetic
-                // DOCUMENT_READY or treat this as a CAPTCHA success.
-                view?.evaluateJavascript(
-                    "(function(){ var origin = location.origin; " +
-                        "var kind = origin === 'https://mangafire.to' ? " +
-                        "(location.pathname === '/@waf/solver' ? 'EXPECTED' : 'SAME_SITE') : " +
-                        "(origin === 'null' ? 'OPAQUE' : 'FOREIGN'); " +
-                        "var bridgeKind = typeof bridge === 'object' && " +
-                        "typeof bridge.postMessage === 'function' ? " +
-                        "'BRIDGE_READY' : 'BRIDGE_MISSING'; " +
-                        "return bridgeKind + '|' + kind; })()",
-                ) { value ->
-                    // Only fixed labels are observed, not location, origin,
-                    // body or any page data. This is never a clearance proof.
-                    val closed = value?.removeSurrounding("\"").orEmpty()
-                    MangaFireCiShapeSolverGate.markJavaScriptProbe(
-                        when (closed.substringBefore("|")) {
-                            "BRIDGE_READY" -> "BRIDGE_READY"
-                            "BRIDGE_MISSING" -> "BRIDGE_MISSING"
-                            else -> "JS_UNAVAILABLE"
-                        },
-                    )
-                    MangaFireCiShapeSolverGate.markDocumentOrigin(
-                        closed.substringAfter("|", "JS_UNAVAILABLE"),
-                    )
-                }
+                probeDocument(view, "COMMIT")
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 MangaFireCiShapeSolverGate.markNativeStage("PAGE_FINISHED")
                 MangaFireCiShapeSolverGate.markNavigation("FINISH", url)
+                probeDocument(view, "FINISH")
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -394,6 +386,38 @@ class MangaFireCiShapeSolverActivity : Activity() {
             "UTF-8",
             null,
         )
+    }
+
+    /**
+     * Read-only check at both navigation lifecycle points. A callback may
+     * initially sample about:blank; only the two distinct closed statuses are
+     * retained. Neither signal confirms a remote response or solves a challenge.
+     */
+    private fun probeDocument(view: WebView?, phase: String) {
+        view?.evaluateJavascript(
+            "(function(){ var origin = location.origin; " +
+                "var kind = origin === 'https://mangafire.to' ? " +
+                "(location.pathname === '/@waf/solver' ? 'EXPECTED' : 'SAME_SITE') : " +
+                "(origin === 'null' ? 'OPAQUE' : 'FOREIGN'); " +
+                "var bridgeKind = typeof bridge === 'object' && " +
+                "typeof bridge.postMessage === 'function' ? " +
+                "'BRIDGE_READY' : 'BRIDGE_MISSING'; " +
+                "return bridgeKind + '|' + kind; })()",
+        ) { value ->
+            val closed = value?.removeSurrounding("\"").orEmpty()
+            val bridge = when (closed.substringBefore("|")) {
+                "BRIDGE_READY" -> "BRIDGE_READY"
+                "BRIDGE_MISSING" -> "BRIDGE_MISSING"
+                else -> "JS_UNAVAILABLE"
+            }
+            val origin = closed.substringAfter("|", "JS_UNAVAILABLE")
+            if (phase == "FINISH") {
+                MangaFireCiShapeSolverGate.markFinishProbe(bridge, origin)
+            } else {
+                MangaFireCiShapeSolverGate.markJavaScriptProbe(bridge)
+                MangaFireCiShapeSolverGate.markDocumentOrigin(origin)
+            }
+        }
     }
 
     private fun blockedResponse(): WebResourceResponse =
