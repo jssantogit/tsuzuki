@@ -1,8 +1,8 @@
 {
-  "acknowledge": "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE",
+  "gate": "chapters",
   "works": [
     "Oyasumi Punpun",
     "Koe no Katachi"
   ],
-  "gate": "chapters"
+  "acknowledge": "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE"
 }
