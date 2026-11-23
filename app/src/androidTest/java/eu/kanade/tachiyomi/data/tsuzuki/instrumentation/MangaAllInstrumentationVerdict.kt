@@ -40,6 +40,23 @@ internal object MangaAllInstrumentationVerdict {
                 """\|workId=(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}""" +
                 """\|chapterId=[A-Za-z0-9._:-]{1,160}\|language=en""",
         ),
+        // Test-only CI Android emulator. No sensitive browser state, URLs,
+        // cookies, challenge payloads or external IDs are allowed.
+        Regex("""MANGAALL_CI_WEBVIEW\|phase=STARTED"""),
+        Regex(
+            """MANGAALL_CI_WEBVIEW\|phase=WARMUP""" +
+                """\|outcome=(PAGE_FINISHED|HTTP_REJECTED|TLS_REJECTED|""" +
+                """RENDERER_EXITED|TIMEOUT|PROFILE_UNSUPPORTED)""",
+        ),
+        Regex(
+            """MANGAALL_CI_WEBVIEW\|work=(punpun|koe)""" +
+                """\|api=(VALID_JSON|BLOCKED|NOT_OBSERVED)\|candidates=[0-9]{1,2}""",
+        ),
+        Regex(
+            """MANGAALL_CI_WEBVIEW\|outcome=(CI_SIGNED_API_ACCEPTED|CI_INCONCLUSIVE)""" +
+                """\|signedJson=[0-2]\|works=2\|providerCandidateWorks=[0-2]""" +
+                """\|canonical=NOT_TESTED\|chapters=NOT_TESTED\|readerPixels=NOT_TESTED""",
+        ),
         Regex("""MANGAALL_A54_PROFILE\|phase=(STARTED|ACTIVITY_REQUESTED|OPERATOR_CONFIRMED)"""),
         // Same-profile physical A54 validation. Only the precise closed fields
         // emitted by the manual, debug-only session test are permitted here.
