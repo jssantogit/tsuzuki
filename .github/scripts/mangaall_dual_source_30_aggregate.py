@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import os
+import unicodedata
 from pathlib import Path
 
 ACK = "I_ACCEPT_MANGAALL_TWO_SOURCE_30_LIVE"
@@ -25,6 +26,41 @@ VALID_AUDITS = {
 def title_id(title):
     normalized = " ".join(title.strip().split()).lower()
     return "user-" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+
+
+def normalize_source_title(value):
+    if not isinstance(value, str):
+        return ""
+    return " ".join(unicodedata.normalize("NFKC", value).lower().split())
+
+
+def source_identity_signals(query_title, candidates):
+    # A source-only translated title/alias is not a verified work identity.
+    # Distinguish a same-primary-title creator conflict from an alias or
+    # different providers listing the same work. Never pick a canonical HID.
+    requested = normalize_source_title(query_title)
+    matched = [c for c in candidates if c.get("exactMatch") is True]
+    primary = [c for c in matched
+               if normalize_source_title(c.get("title")) == requested]
+    alias_only = [c for c in matched
+                  if normalize_source_title(c.get("title")) != requested]
+    creator_sets = set()
+    for candidate in primary:
+        authors = candidate.get("authors")
+        if not isinstance(authors, list):
+            continue
+        creators = tuple(sorted({
+            normalize_source_title(author) for author in authors
+            if normalize_source_title(author)
+        }))
+        if creators:
+            creator_sets.add(creators)
+    return {
+        "primaryExactMatches": len(primary),
+        "aliasOnlyMatches": len(alias_only),
+        "primaryTitleCreatorConflict": len(creator_sets) > 1,
+        "canonicalIdentity": "NOT_VERIFIED",
+    }
 
 
 def verify_works(request):
@@ -160,6 +196,8 @@ def aggregate(works, payloads):
             "http403": 0, "http429": 0, "transportFailures": 0,
             "upstreamOver192KiB": 0, "maxUpstreamMangaDotBytes": 0,
             "crossSourceCandidates": 0,
+            "primaryExactMatchCount": 0, "aliasOnlyMatchCount": 0,
+            "primaryTitleAuthorConflicts": 0, "aliasOnlyWorkCount": 0,
         },
         "works": [],
     }
@@ -173,7 +211,14 @@ def aggregate(works, payloads):
         counts["ambiguous"] += int(bool(row.get("unresolvedCandidates")))
         counts["sameSourceRivals"] += int(bool(row.get("sameSourceRivals")))
         counts["authorDisagreements"] += int(bool(row.get("sourceAuthorDisagreement")))
+        identity = source_identity_signals(row["title"], row["candidates"])
+        counts["primaryExactMatchCount"] += identity["primaryExactMatches"]
+        counts["aliasOnlyMatchCount"] += identity["aliasOnlyMatches"]
+        counts["aliasOnlyWorkCount"] += int(identity["aliasOnlyMatches"] > 0)
+        counts["primaryTitleAuthorConflicts"] += int(identity["primaryTitleCreatorConflict"])
         issues = []
+        if identity["primaryTitleCreatorConflict"]:
+            issues.append("PRIMARY_TITLE_AUTHOR_CONFLICT")
         if not row.get("lookupComplete"): issues.append("LOOKUP_INCOMPLETE")
         if row["candidateCount"] == 0: issues.append("NO_SOURCE_CANDIDATE")
         if row.get("candidateSummariesTruncated"): issues.append("CANDIDATES_TRUNCATED")
@@ -212,6 +257,7 @@ def aggregate(works, payloads):
             "candidates": row["candidateCount"],
             "ambiguous": bool(row.get("unresolvedCandidates")),
             "sameSourceRivals": bool(row.get("sameSourceRivals")),
+            "identitySignals": identity,
             "chapterAudits": row["sourceChapterAudits"],
             "issues": sorted(set(issues)),
         })
@@ -267,6 +313,29 @@ def test_self():
     works = ["Offline Manga " + str(i) for i in range(30)]
     data = fixture(works)
     assert aggregate(works, data)["outcome"] == "SOURCE_AUDIT_OBSERVED_NOT_CANONICAL"
+    collision = copy.deepcopy(data)
+    collision_row = collision[0]["results"][0]
+    collision_row["candidateCount"] = 3
+    collision_row["candidates"] = [
+        {"source": "mangadex", "workId": "mangadex:first",
+         "title": works[0], "authors": ["Creator Alpha"], "exactMatch": True},
+        {"source": "mangadex", "workId": "mangadex:second",
+         "title": works[0], "authors": ["Creator Beta"], "exactMatch": True},
+        {"source": "mangadot", "workId": "mangadot:112",
+         "title": "Unrelated Work Sharing Alias", "authors": [],
+         "exactMatch": True},
+    ]
+    conflict_report = aggregate(works, collision)
+    assert conflict_report["counts"]["primaryTitleAuthorConflicts"] == 1
+    assert conflict_report["counts"]["aliasOnlyMatchCount"] == 1
+    assert conflict_report["works"][0]["identitySignals"] == {
+        "primaryExactMatches": 2, "aliasOnlyMatches": 1,
+        "primaryTitleCreatorConflict": True,
+        "canonicalIdentity": "NOT_VERIFIED",
+    }
+    assert conflict_report["outcome"] == "NEEDS_CORRECTION"
+    assert "PRIMARY_TITLE_AUTHOR_CONFLICT" in conflict_report["works"][0]["issues"]
+
     cases = [
         ("FOREIGN_SOURCE", lambda p: p[0].update(sourceSet=["mangadex", "mangafire"])),
         ("FAKE_LARGE_INPUT_PROOF", lambda p: p[0].update(acquisitionAdaptation="SIGNED_HOST_8M")),
