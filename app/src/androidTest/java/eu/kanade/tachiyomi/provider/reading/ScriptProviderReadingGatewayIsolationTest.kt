@@ -2359,6 +2359,9 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=HTTP_REJECTED",
             "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=PROFILE_UNSUPPORTED",
             "MANGAALL_CI_WEBVIEW|work=punpun|api=VALID_JSON|candidates=1",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=0|outcome=NOT_USED",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=koe|attempts=1|outcome=UPSTREAM_CHALLENGE",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=akame|attempts=1|outcome=SUCCEEDED",
             "MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=HTTP_REJECTED",
             "MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=SKIPPED",
             "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP|outcome=COMPLETE|pages=3|candidates=1",
@@ -2396,6 +2399,11 @@ class ScriptProviderReadingGatewayIsolationTest {
         val bad = listOf(
             "MANGAALL_CI_FIRE_SOURCE|work=punpun|lookup=COMPLETE" +
                 "|api=VALIDATED|chapters=COMPLETE|chapterOne=YES|outcome=SOURCE_READY|cookie=secret",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=1" +
+                "|outcome=UPSTREAM_CHALLENGE|url=https://mangafire.to",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=10|outcome=SUCCEEDED",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=unknown|attempts=0|outcome=NOT_USED",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=koe|attempts=1|outcome=COOKIE_ACCEPTED",
             "MANGAALL_CI_FIRE_SOURCE|outcome=SOURCE_CHAPTERS_ACCEPTED" +
                 "|ready=3|works=3|canonical=NOT_TESTED|unified=READY",
             "MANGAALL_CI_LOOKUP_BLOCKER|work=koe|source=MANGADOT" +
