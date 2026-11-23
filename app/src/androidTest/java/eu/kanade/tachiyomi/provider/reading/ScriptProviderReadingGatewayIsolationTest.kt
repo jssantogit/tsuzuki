@@ -2986,6 +2986,13 @@ class ScriptProviderReadingGatewayIsolationTest {
                     "MANGAALL_CI_SHAPE_DOCUMENT|origin=${MangaFireCiShapeSolverGate.lastDocumentOrigin()}" +
                         "|mode=DEBUG_ONLY",
                 )
+                for (phase in listOf("START", "COMMIT", "FINISH")) {
+                    MangaAllInstrumentationVerdict.publish(
+                        "MANGAALL_CI_SHAPE_NAV|phase=$phase" +
+                            "|kind=${MangaFireCiShapeSolverGate.lastNavigation(phase)}" +
+                            "|mode=DEBUG_ONLY",
+                    )
+                }
                 if (solver != "SOLVED") {
                     // Do not send another three-source request burst when
                     // the dedicated site challenge has not been cleared.
