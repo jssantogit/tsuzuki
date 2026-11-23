@@ -19,6 +19,14 @@ on:
       - 'app/src/debug/java/eu/kanade/tachiyomi/provider/runtime/MangaFireCiShapeSolverActivity.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllInstrumentationVerdict.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/AndroidProviderBrowserHostService.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/MangaAllMangaFireBrowserApiEvidence.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/MangaAllMangaFireXhrHeaders.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/MangaAllBrowserHttpContinuation.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderHostInvocation.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllBrowserHttpContinuationTest.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllMangaFireBrowserApiEvidenceTest.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllMangaFireXhrHeadersTest.kt'
   workflow_dispatch:
 
 permissions:
@@ -122,6 +130,13 @@ jobs:
           cache-read-only: true
       - name: Assemble debug APK and Android test for actual offline instrumentation
         run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Verify scoped MangaFire UA, browser continuation and API-evidence JVM contracts
+        run: |
+          ./gradlew :app:testDebugUnitTest \
+            --tests eu.kanade.tachiyomi.provider.runtime.MangaAllMangaFireUserAgentTest \
+            --tests eu.kanade.tachiyomi.provider.runtime.MangaAllBrowserHttpContinuationTest \
+            --tests eu.kanade.tachiyomi.provider.runtime.MangaAllMangaFireBrowserApiEvidenceTest \
+            --tests eu.kanade.tachiyomi.provider.runtime.MangaAllMangaFireXhrHeadersTest
       - name: Enable KVM for offline-only ephemeral Android emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

@@ -139,4 +139,62 @@ budget.extend([
     "MANGAALL_CI_LOOKUP_BLOCKER|work=koe|source=MANGADOT|reason=PAGE_FOUR_PENDING",
 ])
 assert evaluate(budget)[1] == "MANGADOT_PAGE_FOUR_PENDING"
-print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=35|live=NOT_STARTED|unified=NOT_PROVEN")
+# A 403 edge family is a closed hint, never a WAF pass or a sourced title.
+# The actual live parser REQUIRES this paired record; older pure unit
+# fixtures keep require_edge=False to retain their intended failure reasons.
+assert evaluate(good, require_edge=True)[0] is True
+assert evaluate(blocked, require_edge=True)[1] == "FIRE_403_EDGE_EVIDENCE_MISSING"
+paired_edge = blocked + [
+    "MANGAALL_CI_FIRE_403|work=punpun|kind=UNCLASSIFIED",
+    "MANGAALL_CI_FIRE_403_EDGE|work=punpun|family=CF_SERVER_HTML",
+]
+assert evaluate(paired_edge, require_edge=True)[1] == "MANGAFIRE_BROWSER_NOT_CALLED"
+assert evaluate(paired_edge + paired_edge[-1:])[1] == "DUPLICATE_FIRE_403_EDGE"
+assert evaluate(good + paired_edge[-1:])[1] == "FIRE_403_EDGE_INCONSISTENT"
+contradictory = blocked + [
+    "MANGAALL_CI_FIRE_403|work=punpun|kind=SHAPE_REQUIRED",
+    "MANGAALL_CI_FIRE_403_EDGE|work=punpun|family=OTHER_HTML",
+]
+assert evaluate(contradictory, require_edge=True)[1] == "FIRE_403_KIND_EDGE_CONFLICT"
+json_shape = blocked + [
+    "MANGAALL_CI_FIRE_403|work=punpun|kind=SHAPE_REQUIRED",
+    "MANGAALL_CI_FIRE_403_EDGE|work=punpun|family=JSON",
+]
+assert evaluate(json_shape, require_edge=True)[1] == "MANGAFIRE_SHAPE_REQUIRED_HTTP403"
+non_shape = blocked + [
+    "MANGAALL_CI_FIRE_403|work=punpun|kind=OTHER_JSON",
+    "MANGAALL_CI_FIRE_403_EDGE|work=punpun|family=JSON",
+]
+assert evaluate(non_shape, require_edge=True)[1] == "MANGAFIRE_BROWSER_NOT_CALLED"
+# Reproduce the fully observed *three-work* direct HTTP403 provenance
+# from CI #45275225376. A browser challenge on a different navigation
+# does not alter the source's own closed CF_SERVER_HTML classification.
+full_edge_block = [
+    line.replace("http=200|transport=HTTP|json=VALIDATED",
+                 "http=403|transport=NONE|json=UNVERIFIED")
+    if "|phase=API" in line else line
+    for line in good
+]
+full_edge_block[0] = (
+    "MANGAALL_CI_FIRE_SOURCE|outcome=INCONCLUSIVE|ready=0|works=3"
+    "|canonical=NOT_TESTED|unified=NOT_PROVEN"
+)
+for work in WORKS:
+    full_edge_block.extend([
+        f"MANGAALL_CI_FIRE_403|work={work}|kind=UNCLASSIFIED",
+        f"MANGAALL_CI_FIRE_403_EDGE|work={work}|family=CF_SERVER_HTML",
+    ])
+assert evaluate(full_edge_block, require_edge=True) == (
+    False, "MANGAFIRE_CF_SERVER_HTML_HTTP403"
+)
+# Never classify a partial response matrix as a three-work edge rejection.
+one_missing = [x for x in full_edge_block if
+               x != "MANGAALL_CI_FIRE_403_EDGE|work=koe|family=CF_SERVER_HTML"]
+assert evaluate(one_missing, require_edge=True)[1] == "FIRE_403_EDGE_EVIDENCE_MISSING"
+mixed = [x.replace(
+    "MANGAALL_CI_FIRE_403_EDGE|work=koe|family=CF_SERVER_HTML",
+    "MANGAALL_CI_FIRE_403_EDGE|work=koe|family=JSON"
+) for x in full_edge_block]
+assert evaluate(mixed, require_edge=True)[0] is False
+assert evaluate(mixed, require_edge=True)[1] != "MANGAFIRE_CF_SERVER_HTML_HTTP403"
+print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=48|live=NOT_STARTED|unified=NOT_PROVEN")

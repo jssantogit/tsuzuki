@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.provider.runtime
 
 import android.content.Context
+import android.webkit.WebSettings
 import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import okhttp3.OkHttpClient
@@ -140,6 +141,12 @@ class ProviderHostInvocationFactory(
 
     private val context = context.applicationContext
 
+    // Scoped, lazy UA parity for the signed MangaALL MangaFire API only.
+    // Never shares cookies or browser profile data with the HTTP Host.
+    private val mangaFireBrowserUserAgent by lazy {
+        WebSettings.getDefaultUserAgent(context)
+    }
+
     fun create(
         policy: ProviderHostInvocationPolicy,
         invocationTimeoutMs: Long = ProviderRuntimeLimitsDto().wallClockTimeoutMs,
@@ -149,6 +156,25 @@ class ProviderHostInvocationFactory(
             invocationId = policy.invocationId,
         )
         val resources = ProviderResourceStore()
+
+        // Only the exact signed provider and origin are eligible for UA alignment.
+        val httpBaseClient = if (MangaAllMangaFireUserAgent.enabled(
+                policy.providerId,
+                policy.networkOrigins,
+                policy.browserOrigins,
+            )
+        ) {
+            baseHttpClient.newBuilder()
+                .addInterceptor { chain ->
+                    chain.proceed(
+                        MangaAllMangaFireXhrHeaders.align(
+                            MangaAllMangaFireUserAgent.align(chain.request(), mangaFireBrowserUserAgent),
+                        ),
+                    )
+                }.build()
+        } else {
+            baseHttpClient
+        }
 
         val http = policy.networkOrigins
             .takeIf { it.isNotEmpty() }
@@ -161,7 +187,7 @@ class ProviderHostInvocationFactory(
                         allowLocalNetwork = policy.allowLocalNetwork,
                     ),
                     cookieJar = httpSessions.cookieJar(policy.providerId),
-                    baseClient = baseHttpClient,
+                    baseClient = httpBaseClient,
                     invocationTimeoutMs = invocationTimeoutMs,
                     diagnosticSink = { diagnostic ->
                         logSink(policy.providerId, diagnostic.toRuntimeLogMessage())
@@ -182,6 +208,11 @@ class ProviderHostInvocationFactory(
                         allowLocalNetwork = policy.allowLocalNetwork,
                     ),
                     providerProfileName = ProviderBrowserProfiles.nameFor(policy.providerId),
+                    allowMangaFireApiPassiveContinuation = MangaAllMangaFireUserAgent.enabled(
+                        policy.providerId,
+                        policy.networkOrigins,
+                        policy.browserOrigins,
+                    ),
                 )
                 object : ProviderBrowserHostService, AutoCloseable {
                     override suspend fun readText(url: String, cssSelector: String): String {

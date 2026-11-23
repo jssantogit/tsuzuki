@@ -2403,6 +2403,12 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_FIRE_403|work=punpun|kind=SHAPE_REQUIRED",
             "MANGAALL_CI_FIRE_403|work=koe|kind=OTHER_JSON",
             "MANGAALL_CI_FIRE_403|work=akame|kind=UNCLASSIFIED",
+            "MANGAALL_CI_FIRE_403_EDGE|work=punpun|family=CF_MITIGATED",
+            "MANGAALL_CI_FIRE_403_EDGE|work=koe|family=JSON",
+            "MANGAALL_CI_FIRE_403_EDGE|work=akame|family=CF_SERVER_HTML",
+            "MANGAALL_CI_FIRE_403_EDGE|work=koe|family=OTHER_HTML",
+            "MANGAALL_CI_FIRE_403_EDGE|work=koe|family=CF_SERVER_OTHER",
+            "MANGAALL_CI_FIRE_403_EDGE|work=koe|family=OTHER",
             "MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=SKIPPED",
             "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP|outcome=COMPLETE|pages=3|candidates=1",
             "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP_FAILURE" +
@@ -2454,6 +2460,11 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_FIRE_403|work=punpun|kind=SHAPE_REQUIRED|body=secret",
             "MANGAALL_CI_FIRE_403|work=unknown|kind=SHAPE_REQUIRED",
             "MANGAALL_CI_FIRE_403|work=koe|kind=COOKIES_EXPORTED",
+            "MANGAALL_CI_FIRE_403_EDGE|work=unknown|family=CF_MITIGATED",
+            "MANGAALL_CI_FIRE_403_EDGE|work=punpun|family=PRIVATE_HEADER",
+            "MANGAALL_CI_FIRE_403_EDGE|work=punpun|family=CF_SERVER_HTML|url=https://mangafire.to",
+            "MANGAALL_CI_FIRE_403_EDGE|work=koe|family=JSON|cookie=secret",
+            "MANGAALL_CI_FIRE_403_EDGE|work=akame|family=CF_MITIGATED|body=secret",
             "MANGAALL_CI_SHAPE_SOLVER|outcome=UNTRUSTED_ORIGIN|mode=RELEASE",
             "MANGAALL_CI_SHAPE_FINISH_JS_PROBE|result=TOKEN|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_FINISH_DOCUMENT|origin=FOREIGN|mode=PRODUCTION",
@@ -3069,9 +3080,35 @@ class ScriptProviderReadingGatewayIsolationTest {
         }.getOrDefault("UNCLASSIFIED")
     }
 
+    /**
+     * Distinguish HTML edge rejection from the source's JSON challenge using
+     * headers and at most 1024 already-received response-body bytes.
+     * Only closed types leave the Android test. No Cloudflare identifiers,
+     * response headers, URL, cookie or HTML/text are logged or persisted.
+     * This does NOT grant challenge clearance or imply an acceptable API.
+     */
+    private fun classifyMangaFire403Edge(response: Response): String {
+        if (response.code != 403) return "NOT_403"
+        if (response.header("cf-mitigated")?.equals("challenge", ignoreCase = true) == true) {
+            return "CF_MITIGATED"
+        }
+        val sample = runCatching { response.peekBody(1024).string() }.getOrDefault("")
+        if (runCatching { JSONObject(sample) }.isSuccess) return "JSON"
+        val html = response.header("Content-Type")?.startsWith("text/html", ignoreCase = true) == true ||
+            sample.trimStart().startsWith("<!doctype html", ignoreCase = true) ||
+            sample.trimStart().startsWith("<html", ignoreCase = true)
+        val cfServer = response.header("Server")?.contains("cloudflare", ignoreCase = true) == true
+        return when {
+            cfServer && html -> "CF_SERVER_HTML"
+            html -> "OTHER_HTML"
+            cfServer -> "CF_SERVER_OTHER"
+            else -> "OTHER"
+        }
+    }
+
     @Test
     fun mangaAllCiMangaFire403Classifier_offlineResponseOnly() {
-        fun response(code: Int, body: String): Response =
+        fun response(code: Int, body: String, headers: Map<String, String> = emptyMap()): Response =
             Response.Builder()
                 .request(
                     okhttp3.Request.Builder()
@@ -3081,6 +3118,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 .protocol(Protocol.HTTP_1_1)
                 .code(code)
                 .message("Synthetic test only")
+                .apply { headers.forEach { (name, value) -> header(name, value) } }
                 .body(body.toResponseBody())
                 .build()
 
@@ -3096,6 +3134,33 @@ class ScriptProviderReadingGatewayIsolationTest {
         }
         response(200, """{"items":[]}""").use {
             assertEquals("NOT_403", classifyMangaFire403(it))
+            assertEquals("NOT_403", classifyMangaFire403Edge(it))
+        }
+        response(403, """{"error":"captcha_required"}""").use {
+            assertEquals("JSON", classifyMangaFire403Edge(it))
+        }
+        response(
+            403,
+            "<!doctype html><html>blocked</html>",
+            mapOf(
+                "Content-Type" to "text/html; charset=UTF-8",
+                "Server" to "cloudflare",
+            ),
+        ).use {
+            assertEquals("UNCLASSIFIED", classifyMangaFire403(it))
+            assertEquals("CF_SERVER_HTML", classifyMangaFire403Edge(it))
+        }
+        response(403, "<html>blocked</html>", mapOf("Content-Type" to "text/html")).use {
+            assertEquals("OTHER_HTML", classifyMangaFire403Edge(it))
+        }
+        response(403, "opaque", mapOf("Server" to "Cloudflare")).use {
+            assertEquals("CF_SERVER_OTHER", classifyMangaFire403Edge(it))
+        }
+        response(403, "opaque", mapOf("cf-mitigated" to "challenge")).use {
+            assertEquals("CF_MITIGATED", classifyMangaFire403Edge(it))
+        }
+        response(403, "opaque", mapOf("Server" to "untrusted-custom")).use {
+            assertEquals("OTHER", classifyMangaFire403Edge(it))
         }
     }
 
@@ -3221,6 +3286,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         val signedApi = AtomicReference<String?>(null)
         val sourceHttp = AtomicReference("NONE")
         val challenge403 = AtomicReference("NOT_OBSERVED")
+        val edge403 = AtomicReference("NOT_OBSERVED")
         // This is the actual signed provider Browser Host fallback, not a
         // second independent request to the same API URL from the test.
         val browserSuccess = AtomicInteger(0)
@@ -3269,6 +3335,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                         )
                         if (response.code == 403) {
                             challenge403.set(classifyMangaFire403(response))
+                            edge403.set(classifyMangaFire403Edge(response))
                         }
                     }
                     response
@@ -3282,6 +3349,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             signedApi.set(null)
             sourceHttp.set("NONE")
             challenge403.set("NOT_OBSERVED")
+            edge403.set("NOT_OBSERVED")
             browserSuccess.set(0)
             browserAttempts.set(0)
             browserFailure.set("NONE")
@@ -3446,6 +3514,9 @@ class ScriptProviderReadingGatewayIsolationTest {
                 // Never publish the JSON, challenge HTML or request URL.
                 MangaAllInstrumentationVerdict.publish(
                     "MANGAALL_CI_FIRE_403|work=$id|kind=${challenge403.get()}",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_FIRE_403_EDGE|work=$id|family=${edge403.get()}",
                 )
             }
             // Typed, response-body-free evidence from the very same Browser Host

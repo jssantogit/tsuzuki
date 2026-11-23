@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.http.SslError
 import android.os.Handler
 import android.os.Looper
@@ -34,6 +35,7 @@ class AndroidProviderBrowserHostService(
     private val providerProfileName: String,
     private val timeoutSeconds: Long = 15L,
     private val maxTextChars: Int = 64 * 1024,
+    private val allowMangaFireApiPassiveContinuation: Boolean = false,
 ) : ProviderBrowserHostService, AutoCloseable {
 
     private val context = context.applicationContext
@@ -67,6 +69,7 @@ class AndroidProviderBrowserHostService(
         val finished = AtomicBoolean(false)
         val latch = CountDownLatch(1)
         val webView = AtomicReference<WebView?>(null)
+        val continuation = MangaAllBrowserHttpContinuation(allowMangaFireApiPassiveContinuation)
 
         fun complete(outcome: Result<String>) {
             if (!finished.compareAndSet(false, true)) return
@@ -111,6 +114,10 @@ class AndroidProviderBrowserHostService(
                 configure(view)
 
                 view.webViewClient = object : WebViewClient() {
+                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                        if (!finished.get()) continuation.mainFrameStarted()
+                    }
+
                     override fun shouldOverrideUrlLoading(
                         view: WebView?,
                         request: WebResourceRequest?,
@@ -151,6 +158,18 @@ class AndroidProviderBrowserHostService(
                             errorResponse.statusCode,
                             errorResponse.responseHeaders.orEmpty(),
                         ) ?: return
+                        // A single passive continuation is allowed only for this
+                        // signed MangaALL exact HTTPS MangaFire API main frame.
+                        // We neither solve challenges nor reuse browser cookies in HTTP.
+                        val requestUrl = request.url
+                        val exactMangaFireApi =
+                            requestUrl.scheme == "https" &&
+                                requestUrl.host == "mangafire.to" &&
+                                (requestUrl.port == -1 || requestUrl.port == 443) &&
+                                requestUrl.encodedPath?.startsWith("/api/") == true
+                        if (exactMangaFireApi && continuation.deferFirstRejection(failure)) {
+                            return
+                        }
                         val reason = if (failure == ProviderBrowserFailure.UPSTREAM_CHALLENGE) {
                             "Provider browser upstream challenge"
                         } else {
@@ -171,6 +190,10 @@ class AndroidProviderBrowserHostService(
                             return
                         }
 
+                        // Never pass the original 403 HTML to the signed provider.
+                        // A different main-frame navigation must finish successfully.
+                        if (!continuation.mayReadCompletedPage()) return
+
                         val selector = JSONObject.quote(cssSelector)
                         view.evaluateJavascript(
                             """
@@ -181,7 +204,19 @@ class AndroidProviderBrowserHostService(
                             """.trimIndent(),
                         ) { raw ->
                             runCatching { decodeJavascriptText(raw) }
-                                .onSuccess { complete(Result.success(it)) }
+                                .onSuccess { text ->
+                                    // After a 403, navigation alone is not
+                                    // evidence: challenge HTML may have loaded.
+                                    // The unchanged signed adapter still checks
+                                    // the complete API schema and source data.
+                                    val accepted = continuation.firstDeferredFailure() == null ||
+                                        MangaAllMangaFireBrowserApiEvidence.isOriginalApiResponse(
+                                            initialUrl.toString(),
+                                            url,
+                                            text,
+                                        )
+                                    if (accepted) complete(Result.success(text))
+                                }
                                 .onFailure { complete(Result.failure(it)) }
                         }
                     }
@@ -233,11 +268,12 @@ class AndroidProviderBrowserHostService(
         }
 
         if (!latch.await(timeoutSeconds, TimeUnit.SECONDS)) {
-            complete(
-                Result.failure(
-                    ProviderHostServiceException("Provider browser operation timed out"),
-                ),
-            )
+            val reason = when (continuation.firstDeferredFailure()) {
+                ProviderBrowserFailure.UPSTREAM_CHALLENGE -> "Provider browser upstream challenge"
+                ProviderBrowserFailure.HTTP_REJECTED -> "Provider browser HTTP response rejected"
+                else -> "Provider browser operation timed out"
+            }
+            complete(Result.failure(ProviderHostServiceException(reason)))
         }
 
         return requireNotNull(result.get()) {
