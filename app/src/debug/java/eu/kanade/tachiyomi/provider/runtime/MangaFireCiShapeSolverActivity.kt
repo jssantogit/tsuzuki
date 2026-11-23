@@ -41,6 +41,7 @@ internal object MangaFireCiShapeSolverGate {
     private val milestone = AtomicReference("NO_EVENT")
     private val nativeStage = AtomicReference("NO_EVENT")
     private val javaScriptProbe = AtomicReference("PENDING")
+    private val documentOrigin = AtomicReference("PENDING")
     private val documentReady = AtomicBoolean(false)
     private val permittedNativeStages = setOf(
         "ACTIVITY_CREATED",
@@ -69,6 +70,7 @@ internal object MangaFireCiShapeSolverGate {
         milestone.set("NO_EVENT")
         nativeStage.set("NO_EVENT")
         javaScriptProbe.set("PENDING")
+        documentOrigin.set("PENDING")
         documentReady.set(false)
         latch.set(CountDownLatch(1))
     }
@@ -113,6 +115,14 @@ internal object MangaFireCiShapeSolverGate {
     }
 
     fun lastJavaScriptProbe(): String = javaScriptProbe.get()
+
+    fun markDocumentOrigin(result: String) {
+        if (result in setOf("EXPECTED", "SAME_SITE", "OPAQUE", "FOREIGN", "JS_UNAVAILABLE")) {
+            documentOrigin.set(result)
+        }
+    }
+
+    fun lastDocumentOrigin(): String = documentOrigin.get()
 
     fun hasDocumentReady(): Boolean = documentReady.get()
 
@@ -234,16 +244,27 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 // origin-scoped bridge is injected. Never post a synthetic
                 // DOCUMENT_READY or treat this as a CAPTCHA success.
                 view?.evaluateJavascript(
-                    "(function(){ return typeof bridge === 'object' && " +
+                    "(function(){ var origin = location.origin; " +
+                        "var kind = origin === 'https://mangafire.to' ? " +
+                        "(location.pathname === '/@waf/solver' ? 'EXPECTED' : 'SAME_SITE') : " +
+                        "(origin === 'null' ? 'OPAQUE' : 'FOREIGN'); " +
+                        "var bridgeKind = typeof bridge === 'object' && " +
                         "typeof bridge.postMessage === 'function' ? " +
-                        "'BRIDGE_READY' : 'BRIDGE_MISSING'; })()",
+                        "'BRIDGE_READY' : 'BRIDGE_MISSING'; " +
+                        "return bridgeKind + '|' + kind; })()",
                 ) { value ->
+                    // Only fixed labels are observed, not location, origin,
+                    // body or any page data. This is never a clearance proof.
+                    val closed = value?.removeSurrounding("\"").orEmpty()
                     MangaFireCiShapeSolverGate.markJavaScriptProbe(
-                        when (value) {
-                            "\"BRIDGE_READY\"" -> "BRIDGE_READY"
-                            "\"BRIDGE_MISSING\"" -> "BRIDGE_MISSING"
+                        when (closed.substringBefore("|")) {
+                            "BRIDGE_READY" -> "BRIDGE_READY"
+                            "BRIDGE_MISSING" -> "BRIDGE_MISSING"
                             else -> "JS_UNAVAILABLE"
                         },
+                    )
+                    MangaFireCiShapeSolverGate.markDocumentOrigin(
+                        closed.substringAfter("|", "JS_UNAVAILABLE"),
                     )
                 }
             }

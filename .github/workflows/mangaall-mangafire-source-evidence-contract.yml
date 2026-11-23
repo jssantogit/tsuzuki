@@ -70,6 +70,7 @@ jobs:
           assert 'MangaFireCiShapeSolverGate.lastStage()' in scope
           assert 'MANGAALL_CI_SHAPE_STAGE|last=' in scope
           assert 'MANGAALL_CI_SHAPE_NATIVE|last=' in scope
+          assert 'MANGAALL_CI_SHAPE_DOCUMENT|origin=' in scope
           assert 'mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork' in test
           assert 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork' in test
           live=Path('.github/workflows/mangaall-ci-browser-host-live.yml').read_text()
@@ -92,6 +93,8 @@ jobs:
           assert 'INTERCEPT_OFFLINE_ACK' in activity
           assert 'bridgeOnly || exactAssetOffline || interceptOffline) return blockedResponse()' in activity
           assert 'MangaFireCiShapeSolverGate.markNativeStage("LOAD_REQUESTED")' in activity
+          assert 'MangaFireCiShapeSolverGate.markDocumentOrigin(' in activity
+          assert 'location.origin' in activity
           runner=Path('.github/scripts/run_mangaall_fire_source_allowlist_offline.sh').read_text()
           assert 'mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork' in runner
           assert 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork' in runner

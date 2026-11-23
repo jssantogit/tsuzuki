@@ -75,6 +75,11 @@ internal object MangaAllInstrumentationVerdict {
             """MANGAALL_CI_SHAPE_JS_PROBE\|result=(PENDING|BRIDGE_READY|""" +
                 """BRIDGE_MISSING|JS_UNAVAILABLE)\|mode=DEBUG_ONLY""",
         ),
+        // Fixed document-origin class only: no URL or hostname exported.
+        Regex(
+            """MANGAALL_CI_SHAPE_DOCUMENT\|origin=(PENDING|EXPECTED|SAME_SITE|""" +
+                """OPAQUE|FOREIGN|JS_UNAVAILABLE)\|mode=DEBUG_ONLY""",
+        ),
         // Existing production Browser Host diagnostic enums, not HTTP bodies,
         // HTML, challenge tokens, cookies, response headers or full URLs.
         Regex(

@@ -2374,6 +2374,12 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_SHAPE_JS_PROBE|result=BRIDGE_READY|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_JS_PROBE|result=BRIDGE_MISSING|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_JS_PROBE|result=JS_UNAVAILABLE|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=PENDING|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=EXPECTED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=SAME_SITE|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=OPAQUE|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=FOREIGN|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=JS_UNAVAILABLE|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_STAGE|last=OPENCV_IMPORT_FAILED|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_STAGE|last=GENERATE_HTTP_ERROR|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_STAGE|last=VERIFY_OK|mode=DEBUG_ONLY",
@@ -2426,6 +2432,9 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_SHAPE_JS_PROBE|result=SECRET|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_JS_PROBE|result=BRIDGE_READY|mode=RELEASE",
             "MANGAALL_CI_SHAPE_JS_PROBE|result=BRIDGE_READY|mode=DEBUG_ONLY|cookie=secret",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=https://mangafire.to|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=EXPECTED|mode=RELEASE",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=FOREIGN|mode=DEBUG_ONLY|cookie=secret",
             "MANGAALL_CI_SHAPE_NATIVE|last=ASSET_READY|mode=PRODUCTION",
             "MANGAALL_CI_SHAPE_NATIVE|last=PAGE_FINISHED|mode=DEBUG_ONLY|cookie=secret",
             "MANGAALL_CI_SHAPE_STAGE|last=GENERATE_OK|mode=PRODUCTION",
@@ -2837,6 +2846,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 Thread.sleep(50)
             }
             assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastJavaScriptProbe())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastDocumentOrigin())
             assertTrue(
                 "Real solver WebView never reached loadDataWithBaseURL",
                 MangaFireCiShapeSolverGate.lastNativeStage() in setOf(
@@ -2880,6 +2890,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 Thread.sleep(50)
             }
             assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastJavaScriptProbe())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastDocumentOrigin())
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
         }
@@ -2969,6 +2980,10 @@ class ScriptProviderReadingGatewayIsolationTest {
                 )
                 MangaAllInstrumentationVerdict.publish(
                     "MANGAALL_CI_SHAPE_JS_PROBE|result=${MangaFireCiShapeSolverGate.lastJavaScriptProbe()}" +
+                        "|mode=DEBUG_ONLY",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_DOCUMENT|origin=${MangaFireCiShapeSolverGate.lastDocumentOrigin()}" +
                         "|mode=DEBUG_ONLY",
                 )
                 if (solver != "SOLVED") {
