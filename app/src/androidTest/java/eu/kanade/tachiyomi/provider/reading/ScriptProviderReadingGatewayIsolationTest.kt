@@ -10,9 +10,9 @@ import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.data.tsuzuki.instrumentation.MangaAllInstrumentationVerdict
 import eu.kanade.tachiyomi.provider.runtime.AndroidProviderBrowserHostService
 import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestActivity
+import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestGate
 import eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupActivity
 import eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupGate
-import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestGate
 import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfiles
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
@@ -2687,22 +2687,25 @@ class ScriptProviderReadingGatewayIsolationTest {
                     }.getOrDefault(false)
                 } ?: false
                 if (validJson) validApiResponses++
+                val apiOutcome = when {
+                    validJson -> "VALID_JSON"
+                    signedApi != null -> "BLOCKED"
+                    else -> "NOT_OBSERVED"
+                }
                 MangaAllInstrumentationVerdict.publish(
-                    "MANGAALL_CI_WEBVIEW|work=$id|api=" +
-                        (if (validJson) "VALID_JSON" else if (signedApi != null) "BLOCKED" else "NOT_OBSERVED") +
-                        "|candidates=$mangaFireCount",
+                    "MANGAALL_CI_WEBVIEW|work=$id|api=$apiOutcome|candidates=$mangaFireCount",
                 )
             }
         } finally {
             capturedSignedApi.set(null)
         }
+        val outcome = if (validApiResponses == 2 && providerCandidates == 2) {
+            "CI_SIGNED_API_ACCEPTED"
+        } else {
+            "CI_INCONCLUSIVE"
+        }
         MangaAllInstrumentationVerdict.publish(
-            "MANGAALL_CI_WEBVIEW|outcome=" +
-                (if (validApiResponses == 2 && providerCandidates == 2) {
-                    "CI_SIGNED_API_ACCEPTED"
-                } else {
-                    "CI_INCONCLUSIVE"
-                }) +
+            "MANGAALL_CI_WEBVIEW|outcome=$outcome" +
                 "|signedJson=$validApiResponses|works=2|providerCandidateWorks=$providerCandidates" +
                 "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
         )
