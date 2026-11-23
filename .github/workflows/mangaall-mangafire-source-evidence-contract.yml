@@ -91,13 +91,18 @@ jobs:
           assert 'ASSET_OFFLINE_ACK' in activity
           assert 'blockNetworkLoads = bridgeOnly || exactAssetOffline' in activity
           assert 'INTERCEPT_OFFLINE_ACK' in activity
-          assert 'bridgeOnly || exactAssetOffline || interceptOffline) return blockedResponse()' in activity
+          assert 'bridgeOnly || exactAssetOffline || interceptOffline || opaqueOffline) return blockedResponse()' in activity
+          assert 'OPAQUE_OFFLINE_ACK' in activity
+          assert 'blockNetworkLoads = bridgeOnly || exactAssetOffline || opaqueOffline' in activity
+          assert 'view.loadData(html, "text/html", "UTF-8")' in activity
+          assert 'MangaFireCiShapeSolverGate.complete("UNTRUSTED_ORIGIN")' in activity
           assert 'MangaFireCiShapeSolverGate.markNativeStage("LOAD_REQUESTED")' in activity
           assert 'MangaFireCiShapeSolverGate.markDocumentOrigin(' in activity
           assert 'location.origin' in activity
           runner=Path('.github/scripts/run_mangaall_fire_source_allowlist_offline.sh').read_text()
           assert 'mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork' in runner
           assert 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork' in runner
+          assert 'mangaAllCiShapeSolverExactAsset_opaqueOriginFailsClosedOffline' in runner
           assert 'stage:GENERATE_STARTED' in solver
           assert 'stage:VERIFY_STARTED' in solver
           assert 'stage:OPENCV_IMPORT_FAILED' in solver
