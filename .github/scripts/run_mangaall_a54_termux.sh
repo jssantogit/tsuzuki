@@ -140,12 +140,33 @@ timeout --foreground 290s adb -s "$serial" shell am instrument -w -r \
   -e class 'eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllCode10HumanVerifiedBrowserProfile_checksRealSignedApi' \
   -e mangaAllA54SessionOptIn "$ack" \
   app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner > "$raw" 2>&1 || exitcode=$?
-# Only closed, source-redacted diagnostic fields may leave the temporary output.
-grep -oE 'MANGAALL_A54_PROFILE\|work=(punpun|koe)\|outcome=(SIGNED_API_JSON_VALID|INCONCLUSIVE)\|mangafireCandidates=[0-9]{1,2}\|browserApi=(VALID_JSON|BLOCKED_OR_UNVERIFIED)|MANGAALL_A54_PROFILE\|work=(punpun|koe)\|outcome=INCONCLUSIVE\|reason=SIGNED_API_REQUEST_NOT_OBSERVED\|mangafireCandidates=[0-9]{1,2}|MANGAALL_A54_PROFILE\|outcome=(BROWSER_SIGNED_API_ACCEPTED|INCONCLUSIVE)\|signedJson=[0-2]\|works=2\|providerCandidateWorks=[0-2]\|canonical=NOT_TESTED\|chapters=NOT_TESTED\|readerPixels=NOT_TESTED|MANGAALL_A54_PROFILE\|outcome=INCONCLUSIVE\|reason=USER_VERIFICATION_NOT_COMPLETED' \
+# Only closed, source-redacted diagnostics and phase checkpoints may leave the temporary output.
+grep -oE 'MANGAALL_A54_PROFILE\|phase=(STARTED|ACTIVITY_REQUESTED|OPERATOR_CONFIRMED)|MANGAALL_A54_PROFILE\|work=(punpun|koe)\|outcome=(SIGNED_API_JSON_VALID|INCONCLUSIVE)\|mangafireCandidates=[0-9]{1,2}\|browserApi=(VALID_JSON|BLOCKED_OR_UNVERIFIED)|MANGAALL_A54_PROFILE\|work=(punpun|koe)\|outcome=INCONCLUSIVE\|reason=SIGNED_API_REQUEST_NOT_OBSERVED\|mangafireCandidates=[0-9]{1,2}|MANGAALL_A54_PROFILE\|outcome=(BROWSER_SIGNED_API_ACCEPTED|INCONCLUSIVE)\|signedJson=[0-2]\|works=2\|providerCandidateWorks=[0-2]\|canonical=NOT_TESTED\|chapters=NOT_TESTED\|readerPixels=NOT_TESTED|MANGAALL_A54_PROFILE\|outcome=INCONCLUSIVE\|reason=USER_VERIFICATION_NOT_COMPLETED' \
   "$raw" | sort -u > "$out/verdict.txt" || true
-if [[ "$exitcode" -ne 0 ]] || ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw" ||
-  ! grep -Fq 'OK (1 test)' "$raw" || [[ ! -s "$out/verdict.txt" ]]; then
-  echo 'MANGAALL_A54_PROFILE|outcome=FAIL|reason=INSTRUMENTATION_OR_REPORT_MISSING' >&2
+# Never copy stack traces, upstream data or raw instrumentation to disk.
+# A closed failure reason plus the last redacted phase are sufficient to triage.
+reason=''
+if [[ "$exitcode" -eq 124 ]]; then
+  reason='INSTRUMENTATION_TIMEOUT'
+elif [[ "$exitcode" -ne 0 ]]; then
+  reason='ADB_OR_INSTRUMENTATION_EXIT'
+elif grep -Eq '^INSTRUMENTATION_STATUS_CODE: -[12]$' "$raw"; then
+  if grep -Eq 'ClassNotFoundException|No tests found|Test not found|Unable to find instrumentation' "$raw"; then
+    reason='INSTRUMENTATION_TEST_NOT_FOUND'
+  else
+    reason='INSTRUMENTATION_TEST_FAILED'
+  fi
+elif grep -Eqi 'INSTRUMENTATION_RESULT: shortMsg=.*(crash|process)' "$raw"; then
+  reason='INSTRUMENTATION_PROCESS_CRASH'
+elif ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw"; then
+  reason='INSTRUMENTATION_COMPLETION_MISSING'
+elif ! grep -Fq 'MANGAALL_A54_PROFILE|outcome=' "$out/verdict.txt"; then
+  reason='TEST_RESULT_NOT_EMITTED'
+fi
+
+if [[ -n "$reason" ]]; then
+  printf 'MANGAALL_A54_PROFILE|outcome=FAIL|reason=%s\n' "$reason" >> "$out/verdict.txt"
+  cat "$out/verdict.txt"
   exit 1
 fi
 cat "$out/verdict.txt"
