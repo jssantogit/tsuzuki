@@ -32,4 +32,7 @@ run_offline_test() {
 }
 run_offline_test 'mangaAllCiBrowserVerdictContract_rejectsUnboundedOrUntrustedData'
 run_offline_test 'mangaAllCiShapeSolverBridge_offlineWithoutNetwork'
-echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=PASS|source_records=STRICT|bridge=REAL_CHROMIUM|network=NOT_STARTED'
+# The real 921-line solver asset must load and emit its first JS stage in
+# the same Chromium profile while *all* HTTP requests are blocked.
+run_offline_test 'mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork'
+echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=PASS|source_records=STRICT|bridge=REAL_CHROMIUM|exact_asset=FIRST_JS_STAGE|network=NOT_STARTED'
