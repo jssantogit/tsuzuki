@@ -16,14 +16,20 @@ if [[ ${#app[@]} -ne 1 || ${#tests[@]} -ne 1 ||
 fi
 adb install -r "${app[0]}" >/dev/null
 adb install -r "${tests[0]}" >/dev/null
-result="$(timeout --foreground 120s adb shell am instrument -w -r \
-  -e class eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllCiBrowserVerdictContract_rejectsUnboundedOrUntrustedData \
-  app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner 2>&1)" || {
-  echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=INSTRUMENTATION_EXIT' >&2
-  exit 1
+run_offline_test() {
+  local method="$1"
+  local result
+  result="$(timeout --foreground 120s adb shell am instrument -w -r \
+    -e class "eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#${method}" \
+    app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner 2>&1)" || {
+    echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=INSTRUMENTATION_EXIT' >&2
+    exit 1
+  }
+  if ! grep -Fq 'INSTRUMENTATION_CODE: -1' <<<"$result"; then
+    echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=TEST_DID_NOT_PASS' >&2
+    exit 1
+  fi
 }
-if ! grep -Fq 'INSTRUMENTATION_CODE: -1' <<<"$result"; then
-  echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=TEST_DID_NOT_PASS' >&2
-  exit 1
-fi
-echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=PASS|source_records=STRICT|network=NOT_STARTED'
+run_offline_test 'mangaAllCiBrowserVerdictContract_rejectsUnboundedOrUntrustedData'
+run_offline_test 'mangaAllCiShapeSolverBridge_offlineWithoutNetwork'
+echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=PASS|source_records=STRICT|bridge=REAL_CHROMIUM|network=NOT_STARTED'
