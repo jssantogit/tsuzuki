@@ -170,7 +170,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
             ) {
                 if (response != null && response.statusCode >= 400 &&
                     request?.url?.host == "mangafire.to" &&
-                    request.url.encodedPath.startsWith("/@waf/")
+                    request?.url?.encodedPath?.startsWith("/@waf/") == true
                 ) {
                     MangaFireCiShapeSolverGate.complete("HTTP_REJECTED")
                 }
