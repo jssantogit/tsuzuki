@@ -17,6 +17,7 @@ on:
           - api
           - chapters
           - three
+          - fire
   push:
     branches: ['probe/mangaall-a54-browser-profile-validation-*']
     paths:
@@ -48,6 +49,7 @@ jobs:
           set -euo pipefail
           bash -n .github/scripts/run_mangaall_ci_webview_android.sh
           python3 .github/scripts/test_mangaall_ci_three_gate.py
+          python3 .github/scripts/test_mangaall_ci_fire_source_gate.py
           python3 - <<'PY'
           import json
           import os
@@ -62,19 +64,19 @@ jobs:
               assert type(manifest) is dict and set(manifest) == {'acknowledge', 'works', 'gate'}
               assert manifest['acknowledge'] == approved
               gate = manifest['gate']
-              assert manifest['works'] == (three_works if gate == 'three' else works)
+              assert manifest['works'] == (three_works if gate in ('three', 'fire') else works)
           else:
               assert os.environ['EVENT'] == 'workflow_dispatch'
               assert os.environ['MANUAL_ACK'] == approved
               gate = os.environ['MANUAL_GATE']
-          assert gate in ('api', 'chapters', 'three')
+          assert gate in ('api', 'chapters', 'three', 'fire')
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
               out.write('gate=' + gate + '\n')
           release = Path('app/src/main/AndroidManifest.xml').read_text()
           debug = Path('app/src/debug/AndroidManifest.xml').read_text()
           assert 'MangaFireCiBrowserWarmupActivity' in debug
           assert 'MangaFireCiBrowserWarmupActivity' not in release
-          print('MANGAALL_CI_WEBVIEW|scope=' + ('3' if gate == 'three' else '2') + '_WORKS|code10=ORIGINAL_SIGNED|profile=ISOLATED|gate=' + gate + '|external=NOT_STARTED')
+          print('MANGAALL_CI_WEBVIEW|scope=' + ('3' if gate in ('three', 'fire') else '2') + '_WORKS|code10=ORIGINAL_SIGNED|profile=ISOLATED|gate=' + gate + '|external=NOT_STARTED')
           PY
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
