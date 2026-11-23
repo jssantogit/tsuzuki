@@ -2831,6 +2831,8 @@ class ScriptProviderReadingGatewayIsolationTest {
         // This is the actual signed provider Browser Host fallback, not a
         // second independent request to the same API URL from the test.
         val browserSuccess = AtomicInteger(0)
+        val browserAttempts = AtomicInteger(0)
+        val browserFailure = AtomicReference("NONE")
         val gateway = gateway(
             main = "",
             providerId = providerId,
@@ -2839,11 +2841,20 @@ class ScriptProviderReadingGatewayIsolationTest {
             localNetwork = false,
             packageBytesOverride = archive,
             browserDiagnosticSink = { observedProvider, detail ->
-                if (observedProvider == manifest.id &&
-                    detail.sourceHost == "mangafire.to" &&
-                    detail.phase.name == "SUCCEEDED"
-                ) {
-                    browserSuccess.incrementAndGet()
+                if (observedProvider == manifest.id && detail.sourceHost == "mangafire.to") {
+                    when (detail.phase.name) {
+                        "STARTED" -> browserAttempts.incrementAndGet()
+                        "SUCCEEDED" -> browserSuccess.incrementAndGet()
+                        "FAILED" -> browserFailure.set(
+                            when (detail.failure?.name) {
+                                "UPSTREAM_CHALLENGE", "HTTP_REJECTED", "TIMEOUT",
+                                "NAVIGATION", "TLS", "RENDERER_GONE",
+                                "WEBVIEW_UNSUPPORTED", "SELECTOR_MISSING", "CANCELLED",
+                                -> requireNotNull(detail.failure).name
+                                else -> "UNKNOWN"
+                            },
+                        )
+                    }
                 }
             },
             baseHttpClient = OkHttpClient.Builder()
@@ -2875,6 +2886,8 @@ class ScriptProviderReadingGatewayIsolationTest {
             signedApi.set(null)
             sourceHttp.set("NONE")
             browserSuccess.set(0)
+            browserAttempts.set(0)
+            browserFailure.set("NONE")
             // Code10 is a single three-source router with deferred source
             // continuations. Page one alone does not establish an exhaustive
             // MangaFire selection. Drain at most eight bounded Host pages.
@@ -3030,6 +3043,19 @@ class ScriptProviderReadingGatewayIsolationTest {
             MangaAllInstrumentationVerdict.publish(
                 "MANGAALL_CI_CHAPTER|work=$id|phase=API|signedUrl=$urlSeen" +
                     "|http=${sourceHttp.get()}|transport=$transport|json=$sourceJson",
+            )
+            // Typed, response-body-free evidence from the very same Browser Host
+            // invocation used by the signed code10 adapter. A 403 followed by
+            // an unavailable WebView is not equivalent to a JSON-bearing 200.
+            val browserOutcome = when {
+                browserSuccess.get() > 0 -> "SUCCEEDED"
+                browserFailure.get() != "NONE" -> browserFailure.get()
+                browserAttempts.get() > 0 -> "NO_RESULT"
+                else -> "NOT_USED"
+            }
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_BROWSER_FALLBACK|work=$id" +
+                    "|attempts=${browserAttempts.get().coerceAtMost(9)}|outcome=$browserOutcome",
             )
             // Inspect a MangaFire candidate even if another source has a
             // deferred lookup failure. This is diagnostic evidence ONLY: a
