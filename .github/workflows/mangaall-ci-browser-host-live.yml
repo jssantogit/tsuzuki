@@ -18,6 +18,11 @@ on:
           - chapters
           - three
           - fire
+          - shape
+      solver_acknowledge:
+        description: 'Shape mode ONLY: type I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE'
+        required: false
+        type: string
   push:
     branches: ['probe/mangaall-a54-browser-profile-validation-*']
     paths:
@@ -45,6 +50,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           MANUAL_ACK: ${{ inputs.acknowledge }}
           MANUAL_GATE: ${{ inputs.gate_mode }}
+          MANUAL_SHAPE_ACK: ${{ inputs.solver_acknowledge }}
         run: |
           set -euo pipefail
           bash -n .github/scripts/run_mangaall_ci_webview_android.sh
@@ -64,19 +70,32 @@ jobs:
               assert type(manifest) is dict and set(manifest) == {'acknowledge', 'works', 'gate'}
               assert manifest['acknowledge'] == approved
               gate = manifest['gate']
+              assert gate in ('api', 'chapters', 'three', 'fire')
               assert manifest['works'] == (three_works if gate in ('three', 'fire') else works)
           else:
               assert os.environ['EVENT'] == 'workflow_dispatch'
               assert os.environ['MANUAL_ACK'] == approved
               gate = os.environ['MANUAL_GATE']
-          assert gate in ('api', 'chapters', 'three', 'fire')
+              if gate == 'shape':
+                  assert os.environ['MANUAL_SHAPE_ACK'] == 'I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE'
+          assert gate in ('api', 'chapters', 'three', 'fire', 'shape')
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
               out.write('gate=' + gate + '\n')
           release = Path('app/src/main/AndroidManifest.xml').read_text()
           debug = Path('app/src/debug/AndroidManifest.xml').read_text()
           assert 'MangaFireCiBrowserWarmupActivity' in debug
           assert 'MangaFireCiBrowserWarmupActivity' not in release
-          print('MANGAALL_CI_WEBVIEW|scope=' + ('3' if gate in ('three', 'fire') else '2') + '_WORKS|code10=ORIGINAL_SIGNED|profile=ISOLATED|gate=' + gate + '|external=NOT_STARTED')
+          if gate == 'shape':
+              assert 'MangaFireCiShapeSolverActivity' in debug
+              assert 'MangaFireCiShapeSolverActivity' not in release
+              asset = Path('app/src/debug/assets/mangafire-ci-solver.html')
+              solver = asset.read_text()
+              assert 'bridge.postMessage' in solver
+              assert 'for (let i = 0; i < 2; i++)' in solver
+              assert 'Array.from({length: 2}, solve)' in solver
+              assert 'Array.from({length: 10}, solve)' not in solver
+              assert 'docs.opencv.org/5.0/opencv.js' in solver
+          print('MANGAALL_CI_WEBVIEW|scope=' + ('3' if gate in ('three', 'fire', 'shape') else '2') + '_WORKS|code10=ORIGINAL_SIGNED|profile=ISOLATED|gate=' + gate + '|external=NOT_STARTED')
           PY
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -131,6 +150,7 @@ jobs:
         env:
           MANGAALL_CI_WEBVIEW_ACK: I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE
           MANGAALL_CI_GATE_MODE: ${{ steps.approve.outputs.gate }}
+          MANGAALL_CI_SHAPE_ACK: ${{ inputs.solver_acknowledge }}
         with:
           api-level: 35
           target: google_apis
