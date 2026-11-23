@@ -210,7 +210,11 @@ class AndroidProviderBrowserHostService(
                                     // The unchanged signed adapter still checks
                                     // the complete API schema and source data.
                                     val accepted = continuation.firstDeferredFailure() == null ||
-                                        MangaAllMangaFireBrowserApiEvidence.isApiJson(text)
+                                        MangaAllMangaFireBrowserApiEvidence.isOriginalApiResponse(
+                                            initialUrl.toString(),
+                                            url,
+                                            text,
+                                        )
                                     if (accepted) complete(Result.success(text))
                                 }
                                 .onFailure { complete(Result.failure(it)) }
