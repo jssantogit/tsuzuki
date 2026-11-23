@@ -98,7 +98,7 @@ jobs:
           retention-days: 3
 
   aggregate30:
-    needs: [real-dual-source]
+    needs: [authorize, real-dual-source]
     if: always() && needs.authorize.result != 'failure'
     name: Correlate exact 30 original works and diagnose ambiguity, pages and cursors
     runs-on: ubuntu-24.04
