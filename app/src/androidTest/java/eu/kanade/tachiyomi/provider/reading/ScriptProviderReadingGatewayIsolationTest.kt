@@ -2774,6 +2774,8 @@ class ScriptProviderReadingGatewayIsolationTest {
         assertEquals("app.tsuzuki.mangaall", manifest.id)
         assertEquals(10L, manifest.version.code)
         val providerId = ProviderId(manifest.id)
+        val signedApi = AtomicReference<String?>(null)
+        val sourceHttp = AtomicReference("NONE")
         val gateway = gateway(
             main = "",
             providerId = providerId,
@@ -2781,10 +2783,33 @@ class ScriptProviderReadingGatewayIsolationTest {
             browserOrigins = manifest.permissions.browser?.origins.orEmpty(),
             localNetwork = false,
             packageBytesOverride = archive,
-            baseHttpClient = OkHttpClient.Builder().callTimeout(25, TimeUnit.SECONDS).build(),
+            baseHttpClient = OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    val url = chain.request().url
+                    val isSignedMangaFireSearch = url.scheme == "https" &&
+                        url.host == "mangafire.to" &&
+                        url.encodedPath == "/api/titles" &&
+                        !url.queryParameter("keyword").isNullOrBlank()
+                    if (isSignedMangaFireSearch) signedApi.set(url.toString())
+                    val response = chain.proceed(chain.request())
+                    if (isSignedMangaFireSearch) {
+                        sourceHttp.set(
+                            when (response.code) {
+                                200 -> "200"
+                                403 -> "403"
+                                else -> "OTHER"
+                            },
+                        )
+                    }
+                    response
+                }
+                .callTimeout(25, TimeUnit.SECONDS)
+                .build(),
         )
         var readyWorks = 0
         for ((id, title) in listOf("punpun" to "Oyasumi Punpun", "koe" to "Koe no Katachi")) {
+            signedApi.set(null)
+            sourceHttp.set("NONE")
             // Code10 is a single three-source router with deferred source
             // continuations. Page one alone does not establish an exhaustive
             // MangaFire selection. Drain at most eight bounded Host pages.
@@ -2807,7 +2832,25 @@ class ScriptProviderReadingGatewayIsolationTest {
                             )
                         }
                         if (response is ProviderCallResult.Failure) {
-                            lookupOutcome = when (response.error.code.name) {
+                            val error = response.error
+                            val cause = when (error.sourceFailureCode?.name) {
+                                "CHALLENGE_BLOCKED" -> "CHALLENGE_BLOCKED"
+                                "HTTP_ERROR" -> "HTTP_ERROR"
+                                "INVALID_RESPONSE" -> "INVALID_RESPONSE"
+                                "UNCLASSIFIED_ERROR" -> "UNCLASSIFIED_ERROR"
+                                else -> "NONE"
+                            }
+                            val status = when (error.httpStatus) {
+                                200 -> "200"
+                                403 -> "403"
+                                null -> "NONE"
+                                else -> "OTHER"
+                            }
+                            MangaAllInstrumentationVerdict.publish(
+                                "MANGAALL_CI_CHAPTER|work=$id|phase=LOOKUP_FAILURE" +
+                                    "|cause=$cause|http=$status",
+                            )
+                            lookupOutcome = when (error.code.name) {
                                 "SOURCE_READ_ERROR" -> "READ_ERROR"
                                 "SOURCE_TOO_LARGE" -> "TOO_LARGE"
                                 "TIMEOUT" -> "TIMEOUT"
@@ -2849,6 +2892,34 @@ class ScriptProviderReadingGatewayIsolationTest {
             MangaAllInstrumentationVerdict.publish(
                 "MANGAALL_CI_CHAPTER|work=$id|phase=LOOKUP|outcome=$lookupOutcome" +
                     "|pages=$lookupPages|candidates=${found.size.coerceAtMost(99)}",
+            )
+            val signedUrl = signedApi.getAndSet(null)
+            val directBody = if (signedUrl == null) {
+                null
+            } else {
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        AndroidProviderBrowserHostService(
+                            context = context,
+                            policy = ProviderNetworkPolicy(setOf("https://mangafire.to")),
+                            providerProfileName = ProviderBrowserProfiles.nameFor(manifest.id),
+                            timeoutSeconds = 25L,
+                        ).use { it.readText(signedUrl, "body") }
+                    }.getOrNull()
+                }
+            }
+            val validDirectApi = directBody?.let {
+                runCatching {
+                    val response = JSONObject(it)
+                    response.has("items") && response.optJSONArray("items") != null &&
+                        !response.has("error")
+                }.getOrDefault(false)
+            } ?: false
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_CHAPTER|work=$id|phase=API" +
+                    "|signedUrl=" + (if (signedUrl != null) "OBSERVED" else "NOT_OBSERVED") +
+                    "|http=${sourceHttp.get()}" +
+                    "|browser=" + (if (validDirectApi) "VALID_JSON" else "INCONCLUSIVE"),
             )
             val workId = if (lookupOutcome == "COMPLETE") found.keys.singleOrNull() else null
             if (workId == null) {
