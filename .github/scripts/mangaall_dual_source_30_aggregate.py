@@ -56,7 +56,8 @@ def check_shard(payload, index, works):
     require(payload.get("originalCode10SignedPackageChanged") is False and
             payload.get("adapterRouterModification") == "SOURCE_IDS_ONLY_IN_MEMORY" and
             payload.get("chapterAdaptation") == "MANGADOT_IN_MEMORY_48K_200_NO_RELEASE" and
-            payload.get("lookupAdaptation") == "MANGADOT_EIGHT_SOURCE_PAGES_IN_MEMORY" and
+            payload.get("lookupAdaptation") == "MANGADOT_THIRTYTWO_SOURCE_PAGES_IN_MEMORY" and
+            payload.get("probeBudget") == "UNSIGNED_LOOKUP32_NOT_HOST" and
             payload.get("acquisitionAdaptation") == "UNSIGNED_DOT8M_DEX50_CHAPTERS_CI_ONLY" and
             payload.get("sourceSet") == ["mangadex", "mangadot"],
             "SOURCE_IDENTITY_MISMATCH")
@@ -99,7 +100,7 @@ def check_shard(payload, index, works):
                 "SOURCE_HTTP_COUNTERS_INVALID")
         require(type(row.get("candidateCount")) is int and
                 0 <= row["candidateCount"] <= 1_000_000 and
-                type(row.get("lookupPages")) is int and 0 <= row["lookupPages"] <= 24,
+                type(row.get("lookupPages")) is int and 0 <= row["lookupPages"] <= 96,
                 "LOOKUP_BUDGET_INVALID")
         candidates = row.get("candidates")
         require(isinstance(candidates, list) and len(candidates) <= 24,
@@ -248,7 +249,8 @@ def fixture(works):
             "sourceRepositoryCommit": ORIGIN_SHA, "originalCode10SignedPackageChanged": False,
             "adapterRouterModification": "SOURCE_IDS_ONLY_IN_MEMORY",
             "chapterAdaptation": "MANGADOT_IN_MEMORY_48K_200_NO_RELEASE",
-            "lookupAdaptation": "MANGADOT_EIGHT_SOURCE_PAGES_IN_MEMORY",
+            "lookupAdaptation": "MANGADOT_THIRTYTWO_SOURCE_PAGES_IN_MEMORY",
+            "probeBudget": "UNSIGNED_LOOKUP32_NOT_HOST",
             "acquisitionAdaptation": "UNSIGNED_DOT8M_DEX50_CHAPTERS_CI_ONLY",
             "sourceSet": ["mangadex", "mangadot"], "shard": shard,
             "shardCount": 3, "totalWorkCount": 30, "sourceRequestBudget": 320,
@@ -268,6 +270,7 @@ def test_self():
     cases = [
         ("FOREIGN_SOURCE", lambda p: p[0].update(sourceSet=["mangadex", "mangafire"])),
         ("FAKE_LARGE_INPUT_PROOF", lambda p: p[0].update(acquisitionAdaptation="SIGNED_HOST_8M")),
+        ("FALSE_HOST_LOOKUP_BUDGET", lambda p: p[0].update(probeBudget="HOST_LOOKUP32_VERIFIED")),
 
         ("FALSE_CANONICAL", lambda p: p[0]["results"][0].update(canonicalBinding="READY")),
         ("FORGED_CURSOR", lambda p: p[0]["results"][0]["sourceChapterAudits"][0].update(terminal=False)),
