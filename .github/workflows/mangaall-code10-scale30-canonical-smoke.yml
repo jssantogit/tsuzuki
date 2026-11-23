@@ -17,6 +17,11 @@ on:
         description: 'Type I_ACCEPT_SIGNED_CODE10_SCALE30_LIVE to authorize bounded external metadata requests'
         required: true
         type: string
+      auto_shape_test:
+        description: 'Experimental test-only Keiyoushi shape CAPTCHA solver (MangaFire JSON captcha_required only)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -160,6 +165,25 @@ jobs:
           # This is the immutable, signed-code10 source checkout tooling only.
           node tooling/test_mangaall_live_journey.mjs
           node tooling/mangaall_live_matrix.mjs --plan
+      - name: Verify test-only MangaFire shape recovery contracts OFFLINE
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.auto_shape_test }}
+        run: node .github/scripts/test_mangaall_shape_test_core.mjs
+      - name: Load pinned Keiyoushi solver asset ONLY for opted-in 30-work test
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.auto_shape_test }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          file="$GITHUB_WORKSPACE/.github/scripts/keiyoushi-mangafire-solver.runtime.html"
+          curl -fsSL --retry 2 --max-time 30 \
+            'https://raw.githubusercontent.com/keiyoushi/extensions-source/5d54f0d02e2a7dbdda08e823de444f7527cc883c/src/all/mangafire/assets/solver.html' \
+            -o "$file"
+          test "$(git hash-object "$file")" = 'f975cc6b3951f1793e932a11f0422f2573ef3f26'
+      - name: Prepare disposable Chromium ONLY for opted-in 30-work test
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.auto_shape_test }}
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts --prefix "$GITHUB_WORKSPACE" playwright@1.56.1
+          "$GITHUB_WORKSPACE/node_modules/.bin/playwright" install --with-deps chromium
       - name: Fetch authentic signed code10 V1 lookup/chapter envelopes (one three-source lookup per title)
         working-directory: mangaall-signed-source
         env:
@@ -169,10 +193,18 @@ jobs:
           MANGAALL_WORKS: ${{ needs.plan.outputs.works }}
           MANGAALL_SHARD_INDEX: ${{ matrix.shard }}
           MANGAALL_SHARD_COUNT: '3'
+          MANGAALL_TEST_ONLY_AUTO_SHAPE: ${{ github.event_name == 'workflow_dispatch' && inputs.auto_shape_test && 'I_ACCEPT_TEST_ONLY_AUTO_SHAPE' || '' }}
+          MANGAALL_TEST_ONLY_SOLVER_HTML: ${{ github.workspace }}/.github/scripts/keiyoushi-mangafire-solver.runtime.html
         run: |
-          node tooling/mangaall_live_matrix.mjs --live \
-            --output mangaall-live-matrix-${{ matrix.shard }}.json \
-            --real-envelopes mangaall-real-envelopes-${{ matrix.shard }}.json
+          if [ "$MANGAALL_TEST_ONLY_AUTO_SHAPE" = 'I_ACCEPT_TEST_ONLY_AUTO_SHAPE' ]; then
+            node "$GITHUB_WORKSPACE/.github/scripts/mangaall_shape_test_launcher.mjs" --live \
+              --output mangaall-live-matrix-${{ matrix.shard }}.json \
+              --real-envelopes mangaall-real-envelopes-${{ matrix.shard }}.json
+          else
+            node tooling/mangaall_live_matrix.mjs --live \
+              --output mangaall-live-matrix-${{ matrix.shard }}.json \
+              --real-envelopes mangaall-real-envelopes-${{ matrix.shard }}.json
+          fi
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version-file: .github/.java-version
