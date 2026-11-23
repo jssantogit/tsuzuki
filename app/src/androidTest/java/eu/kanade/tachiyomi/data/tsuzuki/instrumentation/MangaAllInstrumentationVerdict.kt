@@ -47,6 +47,14 @@ internal object MangaAllInstrumentationVerdict {
                 """\|source=(mangadex|mangadot|mangafire)""" +
                 """\|candidates=[0-9]{1,2}\|lookup=(COMPLETE|PARTIAL)""",
         ),
+        // Existing production Browser Host diagnostic enums, not HTTP bodies,
+        // HTML, challenge tokens, cookies, response headers or full URLs.
+        Regex(
+            """MANGAALL_CI_BROWSER_FALLBACK\|work=(punpun|koe|akame)""" +
+                """\|attempts=[0-9]\|outcome=(NOT_USED|SUCCEEDED|UPSTREAM_CHALLENGE|""" +
+                """HTTP_REJECTED|TIMEOUT|NAVIGATION|TLS|RENDERER_GONE|WEBVIEW_UNSUPPORTED|""" +
+                """SELECTOR_MISSING|CANCELLED|UNKNOWN|NO_RESULT)""",
+        ),
         // MangaFire-source chapter evidence is deliberately independent of
         // global completion: another source's bounded search cannot certify
         // or invalidate a MangaFire chapter, and cannot promote unified READY.
