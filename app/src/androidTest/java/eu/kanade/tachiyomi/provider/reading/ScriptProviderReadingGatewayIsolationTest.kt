@@ -2788,6 +2788,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
         try {
             assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.await(30))
+            assertEquals("DOCUMENT_READY", MangaFireCiShapeSolverGate.lastStage())
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
         }
