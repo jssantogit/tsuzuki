@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { classifyMangaFireChallenge, makeTestOnlyMangaFireFetch } from './mangaall_shape_test_core.mjs';
-import { capKeiyoushiSolver } from './mangaall_shape_playwright_test.mjs';
+import { capKeiyoushiSolver, requestViaChromiumPage } from './mangaall_shape_playwright_test.mjs';
 const url = 'https://mangafire.to/api/titles?keyword=Oyasumi';
 const response = (status, value, headers = {}) => new Response(JSON.stringify(value), {
   status, headers: { 'content-type': 'application/json', ...headers },
@@ -94,4 +94,46 @@ const capped = capKeiyoushiSolver(minimal);
 assert.match(capped, /i < 2/);
 assert.match(capped, /length: 2/);
 assert.throws(() => capKeiyoushiSolver('<html>changed upstream</html>'), /bridge contract/);
+
+// Browser-page transport is not the Playwright request client. Offline test
+// evaluates the same browser callback with a mock fetch and rejects fallbacks.
+{
+  const originalFetch = globalThis.fetch;
+  const page = { evaluate: async (callback, args) => callback(args) };
+  try {
+    const observed = [];
+    globalThis.fetch = async (address, options) => {
+      observed.push({ address, options });
+      return response(200, { items: [{ id: 'fixture' }] });
+    };
+    const parsed = await requestViaChromiumPage(page, url);
+    assert.equal(parsed.status, 200);
+    assert.deepEqual(await parsed.json(), { items: [{ id: 'fixture' }] });
+    assert.equal(observed.length, 1);
+    assert.equal(observed[0].address, url);
+    assert.equal(observed[0].options.credentials, 'same-origin');
+    assert.equal(observed[0].options.method, 'GET');
+    assert.equal(observed[0].options.redirect, 'error');
+
+    globalThis.fetch = async () => new Response('<html>challenge</html>', {
+      status: 403, headers: { 'content-type': 'text/html', 'cf-mitigated': 'challenge' },
+    });
+    const blocked = await requestViaChromiumPage(page, url);
+    assert.equal(blocked.status, 403);
+    assert.equal(await classifyMangaFireChallenge(blocked), 'CLOUDFLARE_CHALLENGE');
+
+    globalThis.fetch = async () => new Response('x'.repeat(192 * 1024 + 1));
+    await assert.rejects(() => requestViaChromiumPage(page, url), /exceeds cap/);
+    await assert.rejects(() => requestViaChromiumPage(page,
+      'https://mangafire.to/@waf/solver'), /outside MangaFire API/);
+    await assert.rejects(() => requestViaChromiumPage(page,
+      'https://mangafire.to.evil.invalid/api/titles'), /outside MangaFire API/);
+    await assert.rejects(() => requestViaChromiumPage(page,
+      url, { method: 'POST' }), /outside MangaFire API/);
+    await assert.rejects(() => requestViaChromiumPage(page,
+      url + '#fragment'), /outside MangaFire API/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
 console.log('MangaALL test-only MangaFire shape solver offline contract: PASS');
