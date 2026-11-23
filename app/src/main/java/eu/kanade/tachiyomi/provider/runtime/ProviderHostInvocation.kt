@@ -296,7 +296,6 @@ class ProviderHostInvocationFactory(
             ),
         )
     }
-
 }
 
 private fun String.boundedSnapshotArg(maxChars: Int, label: String): String {
