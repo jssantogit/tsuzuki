@@ -45,6 +45,10 @@ BUDGET = re.compile(
     r"MANGAALL_CI_LOOKUP_BLOCKER\|work=(punpun|koe|akame)"
     r"\|source=MANGADOT\|reason=PAGE_FOUR_PENDING"
 )
+CHALLENGE403 = re.compile(
+    r"MANGAALL_CI_FIRE_403\|work=(punpun|koe|akame)"
+    r"\|kind=(SHAPE_REQUIRED|OTHER_JSON|UNCLASSIFIED|NOT_OBSERVED)"
+)
 CHAPTERS = re.compile(
     r"MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)"
     r"\|outcome=(READY|INCONCLUSIVE)\|pages=([0-4])"
@@ -69,6 +73,7 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
     failed: dict[str, tuple[str, str]] = {}
     browser: dict[str, tuple[int, str]] = {}
     budget: set[str] = set()
+    challenge403: dict[str, str] = {}
     records = [s.strip() for s in lines if s.strip()]
     for item in records:
         if match := SCOPE.fullmatch(item):
@@ -102,6 +107,11 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
             if work in budget:
                 return False, "DUPLICATE_SOURCE_BUDGET_DIAGNOSTIC"
             budget.add(work)
+        elif match := CHALLENGE403.fullmatch(item):
+            work, kind = match.groups()
+            if work in challenge403:
+                return False, "DUPLICATE_FIRE_403_CLASSIFICATION"
+            challenge403[work] = kind
         elif match := CHAPTERS.fullmatch(item):
             work, *data = match.groups()
             if work in chapter:
@@ -112,6 +122,14 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
             if work in lookup:
                 return False, "DUPLICATE_LOOKUP"
             lookup[work] = tuple(data)
+    # A challenge diagnosis must come only from a real HTTP403 already
+    # observed for that work, not a browser callback or an unrelated status.
+    # It cannot make a source/chapters gate pass.
+    if any(
+        api.get(work, (None, None))[1] != "403" or kind == "NOT_OBSERVED"
+        for work, kind in challenge403.items()
+    ):
+        return False, "FIRE_403_CLASSIFICATION_INCONSISTENT"
     if len(sources) != 9 or any((work, source) not in sources
                                 for work in WORKS for source in SOURCES):
         return False, "THREE_SOURCE_MATRIX_MISSING"
@@ -124,6 +142,10 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
             if api.get(work) == ("OBSERVED", "403", "NONE", "UNVERIFIED") and
             failed.get(work) == ("CHALLENGE_BLOCKED", "403")
         ]
+        # Match Keiyoushi's narrow upstream predicate: not every 403
+        # denotes a shape CAPTCHA. No retry, bypass or source PASS follows.
+        if any(challenge403.get(work) == "SHAPE_REQUIRED" for work in blocked):
+            return False, "MANGAFIRE_SHAPE_REQUIRED_HTTP403"
         for work in blocked:
             attempts, outcome = browser.get(work, (0, "NOT_USED"))
             if attempts > 0 and outcome == "UPSTREAM_CHALLENGE":
