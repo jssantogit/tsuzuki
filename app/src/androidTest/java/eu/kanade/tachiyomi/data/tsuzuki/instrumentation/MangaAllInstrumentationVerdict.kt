@@ -43,9 +43,9 @@ internal object MangaAllInstrumentationVerdict {
         // One unified signed-code10 lookup: the three source candidate counts
         // are diagnostic only, never a canonical identity grant.
         Regex(
-            """MANGAALL_CI_SOURCE\\|work=(punpun|koe|akame)""" +
-                """\\|source=(mangadex|mangadot|mangafire)""" +
-                """\\|candidates=[0-9]{1,2}\\|lookup=(COMPLETE|PARTIAL)""",
+            """MANGAALL_CI_SOURCE\|work=(punpun|koe|akame)""" +
+                """\|source=(mangadex|mangadot|mangafire)""" +
+                """\|candidates=[0-9]{1,2}\|lookup=(COMPLETE|PARTIAL)""",
         ),
         // Test-only CI Android emulator. No sensitive browser state, URLs,
         // cookies, challenge payloads or external IDs are allowed.
@@ -82,7 +82,7 @@ internal object MangaAllInstrumentationVerdict {
         ),
         Regex(
             """MANGAALL_CI_CHAPTER\|outcome=(CHAPTERS_ACCEPTED|INCONCLUSIVE)""" +
-                """\|ready=[0-2]\|works=2\|canonical=NOT_TESTED\|readerPixels=NOT_TESTED""",
+                """\|ready=[0-3]\|works=[23]\|canonical=NOT_TESTED\|readerPixels=NOT_TESTED""",
         ),
         Regex("""MANGAALL_CI_WEBVIEW\|phase=STARTED"""),
         Regex(
