@@ -40,6 +40,28 @@ internal object MangaAllInstrumentationVerdict {
                 """\|workId=(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}""" +
                 """\|chapterId=[A-Za-z0-9._:-]{1,160}\|language=en""",
         ),
+        // Same-profile physical A54 validation. Only the precise closed fields
+        // emitted by the manual, debug-only session test are permitted here.
+        // Never export challenge content, cookies, URLs or upstream messages.
+        Regex(
+            """MANGAALL_A54_PROFILE\\|outcome=INCONCLUSIVE""" +
+                """\\|reason=USER_VERIFICATION_NOT_COMPLETED""",
+        ),
+        Regex(
+            """MANGAALL_A54_PROFILE\\|work=(punpun|koe)\\|outcome=INCONCLUSIVE""" +
+                """\\|reason=SIGNED_API_REQUEST_NOT_OBSERVED\\|mangafireCandidates=[0-9]{1,2}""",
+        ),
+        Regex(
+            """MANGAALL_A54_PROFILE\\|work=(punpun|koe)""" +
+                """\\|outcome=(SIGNED_API_JSON_VALID|INCONCLUSIVE)""" +
+                """\\|mangafireCandidates=[0-9]{1,2}""" +
+                """\\|browserApi=(VALID_JSON|BLOCKED_OR_UNVERIFIED)""",
+        ),
+        Regex(
+            """MANGAALL_A54_PROFILE\\|outcome=(BROWSER_SIGNED_API_ACCEPTED|INCONCLUSIVE)""" +
+                """\\|signedJson=[0-2]\\|works=2\\|providerCandidateWorks=[0-2]""" +
+                """\\|canonical=NOT_TESTED\\|chapters=NOT_TESTED\\|readerPixels=NOT_TESTED""",
+        ),
         Regex("""MANGAALL_LIVE_PAGE_GATE\|outcome=INCONCLUSIVE\|reason=[A-Z_]{3,64}"""),
         // Accept only closed Host page diagnostic enums for the signed code9 live gate.
         // Generic code8 inconclusive records above remain unchanged.
@@ -78,8 +100,11 @@ internal object MangaAllInstrumentationVerdict {
         ),
     )
 
+    internal fun isPermitted(record: String): Boolean =
+        record.length <= 500 && permitted.any { it.matches(record) }
+
     fun publish(record: String) {
-        require(record.length <= 500 && permitted.any { it.matches(record) }) {
+        require(isPermitted(record)) {
             "Only closed, bounded MangaAll test verdicts can be published"
         }
         InstrumentationRegistry.getInstrumentation().sendStatus(
