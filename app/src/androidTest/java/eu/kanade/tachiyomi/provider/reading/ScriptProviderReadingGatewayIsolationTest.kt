@@ -2916,6 +2916,10 @@ class ScriptProviderReadingGatewayIsolationTest {
                     "MANGAALL_CI_SHAPE_NATIVE|last=${MangaFireCiShapeSolverGate.lastNativeStage()}" +
                         "|mode=DEBUG_ONLY",
                 )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_JS_PROBE|result=${MangaFireCiShapeSolverGate.lastJavaScriptProbe()}" +
+                        "|mode=DEBUG_ONLY",
+                )
                 if (solver != "SOLVED") {
                     // Do not send another three-source request burst when
                     // the dedicated site challenge has not been cleared.
