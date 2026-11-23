@@ -39,6 +39,7 @@ internal object MangaFireCiShapeSolverGate {
     private val status = AtomicReference("TIMEOUT")
     private val milestone = AtomicReference("NO_EVENT")
     private val nativeStage = AtomicReference("NO_EVENT")
+    private val javaScriptProbe = AtomicReference("PENDING")
     private val documentReady = AtomicBoolean(false)
     private val permittedNativeStages = setOf(
         "ACTIVITY_CREATED",
@@ -66,6 +67,7 @@ internal object MangaFireCiShapeSolverGate {
         status.set("TIMEOUT")
         milestone.set("NO_EVENT")
         nativeStage.set("NO_EVENT")
+        javaScriptProbe.set("PENDING")
         documentReady.set(false)
         latch.set(CountDownLatch(1))
     }
@@ -102,6 +104,14 @@ internal object MangaFireCiShapeSolverGate {
     }
 
     fun lastNativeStage(): String = nativeStage.get()
+
+    fun markJavaScriptProbe(result: String) {
+        if (result in setOf("BRIDGE_READY", "BRIDGE_MISSING", "JS_UNAVAILABLE")) {
+            javaScriptProbe.set(result)
+        }
+    }
+
+    fun lastJavaScriptProbe(): String = javaScriptProbe.get()
 
     fun hasDocumentReady(): Boolean = documentReady.get()
 
@@ -216,6 +226,22 @@ class MangaFireCiShapeSolverActivity : Activity() {
         view.webViewClient = object : WebViewClient() {
             override fun onPageCommitVisible(view: WebView?, url: String?) {
                 MangaFireCiShapeSolverGate.markNativeStage("PAGE_COMMITTED")
+                // Diagnostic only: check whether JS can run and whether the
+                // origin-scoped bridge is injected. Never post a synthetic
+                // DOCUMENT_READY or treat this as a CAPTCHA success.
+                view?.evaluateJavascript(
+                    "(function(){ return typeof bridge === 'object' && " +
+                        "typeof bridge.postMessage === 'function' ? " +
+                        "'BRIDGE_READY' : 'BRIDGE_MISSING'; })()",
+                ) { value ->
+                    MangaFireCiShapeSolverGate.markJavaScriptProbe(
+                        when (value) {
+                            "\"BRIDGE_READY\"" -> "BRIDGE_READY"
+                            "\"BRIDGE_MISSING\"" -> "BRIDGE_MISSING"
+                            else -> "JS_UNAVAILABLE"
+                        },
+                    )
+                }
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
