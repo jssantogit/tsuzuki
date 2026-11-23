@@ -54,6 +54,13 @@ internal object MangaAllInstrumentationVerdict {
                 """HTTP_REJECTED|NAVIGATION_FAILED|TLS_REJECTED|RENDERER_EXITED|""" +
                 """ASSET_INVALID|TIMEOUT)\|mode=DEBUG_ONLY""",
         ),
+        // Last in-memory debug solver phase: known static values only.
+        Regex(
+            """MANGAALL_CI_SHAPE_STAGE\|last=(NO_EVENT|DOCUMENT_READY|""" +
+                """OPENCV_IMPORTED|OPENCV_IMPORT_FAILED|SOLVER_RUNNING|""" +
+                """GENERATE_STARTED|GENERATE_OK|GENERATE_HTTP_ERROR|""" +
+                """VERIFY_STARTED|VERIFY_OK|VERIFY_HTTP_ERROR)\|mode=DEBUG_ONLY""",
+        ),
         // Existing production Browser Host diagnostic enums, not HTTP bodies,
         // HTML, challenge tokens, cookies, response headers or full URLs.
         Regex(
