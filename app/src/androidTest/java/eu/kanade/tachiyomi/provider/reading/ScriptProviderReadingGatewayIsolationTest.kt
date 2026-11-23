@@ -38,6 +38,7 @@ import okio.Buffer
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -2344,6 +2345,44 @@ class ScriptProviderReadingGatewayIsolationTest {
     @Test(timeout = 300_000L)
     fun mangaAllSignedCode10LivePages_downloadAndDecodeAtMostTwo() = runBlocking {
         runPublishedMangaAllLivePages(10L)
+    }
+
+    /** Offline guard for strictly redacted Android A54 instrumentation output. */
+    @Test
+    fun mangaAllA54ClosedVerdictContract_acceptsOnlyExplicitSourceFreeFormats() {
+        val allowed = listOf(
+            "MANGAALL_A54_PROFILE|phase=STARTED",
+            "MANGAALL_A54_PROFILE|phase=ACTIVITY_REQUESTED",
+            "MANGAALL_A54_PROFILE|phase=OPERATOR_CONFIRMED",
+            "MANGAALL_A54_PROFILE|outcome=INCONCLUSIVE|reason=USER_VERIFICATION_NOT_COMPLETED",
+            "MANGAALL_A54_PROFILE|work=punpun|outcome=INCONCLUSIVE" +
+                "|reason=SIGNED_API_REQUEST_NOT_OBSERVED|mangafireCandidates=0",
+            "MANGAALL_A54_PROFILE|work=koe|outcome=SIGNED_API_JSON_VALID" +
+                "|mangafireCandidates=1|browserApi=VALID_JSON",
+            "MANGAALL_A54_PROFILE|outcome=BROWSER_SIGNED_API_ACCEPTED" +
+                "|signedJson=2|works=2|providerCandidateWorks=2" +
+                "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+            "MANGAALL_A54_PROFILE|outcome=INCONCLUSIVE" +
+                "|signedJson=0|works=2|providerCandidateWorks=0" +
+                "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+        allowed.forEach { record ->
+            assertTrue("Closed A54 verdict not accepted: $record", MangaAllInstrumentationVerdict.isPermitted(record))
+        }
+        val blocked = listOf(
+            "MANGAALL_A54_PROFILE|phase=UNKNOWN",
+            "MANGAALL_A54_PROFILE|work=unknown|outcome=SIGNED_API_JSON_VALID" +
+                "|mangafireCandidates=1|browserApi=VALID_JSON",
+            "MANGAALL_A54_PROFILE|phase=STARTED|cookie=secret",
+            "MANGAALL_A54_PROFILE|work=koe|outcome=SIGNED_API_JSON_VALID" +
+                "|mangafireCandidates=1|browserApi=VALID_JSON|url=https://example.test",
+            "MANGAALL_A54_PROFILE|outcome=BROWSER_SIGNED_API_ACCEPTED" +
+                "|signedJson=3|works=2|providerCandidateWorks=2" +
+                "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+        blocked.forEach { record ->
+            assertFalse("Unredacted or unbounded verdict accepted", MangaAllInstrumentationVerdict.isPermitted(record))
+        }
     }
 
     /**
