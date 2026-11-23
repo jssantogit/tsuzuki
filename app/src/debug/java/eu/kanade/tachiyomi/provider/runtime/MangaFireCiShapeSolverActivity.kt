@@ -154,11 +154,12 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 if (request == null) return null
                 if (bridgeOnly) return blockedResponse()
                 val uri = request.url
+                val sameSiteSolver = uri.host == "mangafire.to" &&
+                    uri.encodedPath in setOf("/@waf/generate", "/@waf/verify")
+                val trustedOpenCv = uri.host == "docs.opencv.org" &&
+                    uri.encodedPath == "/5.0/opencv.js"
                 val allowed = uri.scheme == "https" && uri.port == -1 &&
-                    (
-                        uri.host == "mangafire.to" && uri.encodedPath.startsWith("/@waf/") ||
-                            uri.host == "docs.opencv.org" && uri.encodedPath == "/5.0/opencv.js"
-                        )
+                    (sameSiteSolver || trustedOpenCv)
                 return if (allowed) null else blockedResponse()
             }
 
