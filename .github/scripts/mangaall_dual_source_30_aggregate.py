@@ -198,6 +198,8 @@ def aggregate(works, payloads):
             "crossSourceCandidates": 0,
             "primaryExactMatchCount": 0, "aliasOnlyMatchCount": 0,
             "primaryTitleAuthorConflicts": 0, "aliasOnlyWorkCount": 0,
+            "chapterOneVerifiedWorks": 0, "noSourceChapterOneWorks": 0,
+            "partialLookupWithCompleteChapters": 0,
         },
         "works": [],
     }
@@ -251,6 +253,21 @@ def aggregate(works, payloads):
                 issues.append(audit["source"].upper() + "_HOST_64K_RESULT")
         if row.get("auditCandidatesTruncated"):
             issues.append("SOURCE_RIVAL_AUDIT_TRUNCATED")
+        # A complete inventory of one explicitly identified source HID is
+        # useful even when title discovery remains bounded/incomplete.
+        # It does not grant canonical association or Reader pixel success.
+        complete_chapter_one = any(
+            audit["outcome"] == "COMPLETE" and
+            audit["terminal"] is True and audit.get("chapterOne") is True
+            for audit in row["sourceChapterAudits"]
+        )
+        counts["chapterOneVerifiedWorks"] += int(complete_chapter_one)
+        counts["noSourceChapterOneWorks"] += int(not complete_chapter_one)
+        counts["partialLookupWithCompleteChapters"] += int(
+            complete_chapter_one and not row.get("lookupComplete")
+        )
+        if not complete_chapter_one:
+            issues.append("NO_SOURCE_CHAPTER_ONE_ATTESTED")
         output["works"].append({
             "position": row["position"] + 1, "title": row["title"],
             "lookupComplete": bool(row.get("lookupComplete")),
@@ -258,6 +275,8 @@ def aggregate(works, payloads):
             "ambiguous": bool(row.get("unresolvedCandidates")),
             "sameSourceRivals": bool(row.get("sameSourceRivals")),
             "identitySignals": identity,
+            "atLeastOneCompleteSourceChapterOne": complete_chapter_one,
+            "chapterOneAuthority": "SOURCE_HID_ONLY_NOT_CANONICAL",
             "chapterAudits": row["sourceChapterAudits"],
             "issues": sorted(set(issues)),
         })
@@ -335,6 +354,21 @@ def test_self():
     }
     assert conflict_report["outcome"] == "NEEDS_CORRECTION"
     assert "PRIMARY_TITLE_AUTHOR_CONFLICT" in conflict_report["works"][0]["issues"]
+    missing_chapter_one = copy.deepcopy(data)
+    missing_chapter_one[0]["results"][0]["sourceChapterAudits"][0]["chapterOne"] = False
+    missing_report = aggregate(works, missing_chapter_one)
+    assert missing_report["counts"]["noSourceChapterOneWorks"] == 1
+    assert missing_report["counts"]["chapterOneVerifiedWorks"] == 29
+    assert "NO_SOURCE_CHAPTER_ONE_ATTESTED" in missing_report["works"][0]["issues"]
+    assert missing_report["outcome"] == "NEEDS_CORRECTION"
+    partial_but_readable = copy.deepcopy(data)
+    partial_but_readable[0]["results"][0]["lookupComplete"] = False
+    partial_but_readable[0]["results"][0]["lookupPages"] = 32
+    partial_report = aggregate(works, partial_but_readable)
+    assert partial_report["counts"]["partialLookupWithCompleteChapters"] == 1
+    assert partial_report["works"][0]["atLeastOneCompleteSourceChapterOne"] is True
+    assert "LOOKUP_INCOMPLETE" in partial_report["works"][0]["issues"]
+
 
     cases = [
         ("FOREIGN_SOURCE", lambda p: p[0].update(sourceSet=["mangadex", "mangafire"])),
