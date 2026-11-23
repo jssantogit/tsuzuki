@@ -66,6 +66,14 @@ const dualReading = router.createMangaAllReading({
 function safeTestId(value) {
   return typeof value === 'string' && /^(mangadex|mangadot):[A-Za-z0-9._-]{1,128}$/.test(value);
 }
+// Source work IDs and chapter IDs have distinct grammars.
+function safeChapterId(value, source) {
+  if (typeof value !== 'string') return false;
+  return source === 'mangadot'
+    ? /^mangadot:(uploads|chapters):[1-9][0-9]{0,15}$/.test(value)
+    : source === 'mangadex' &&
+      /^mangadex:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
+}
 function sourceOf(id) { return id.split(':', 1)[0]; }
 function closedError(err) {
   const message = typeof err?.message === 'string' ? err.message : '';
@@ -123,7 +131,7 @@ async function auditSourceChapters(candidate) {
     }
     for (const item of page.items) {
       const id = item?.providerChapterId;
-      if (!safeTestId(id) || sourceOf(id) !== source ||
+      if (!safeChapterId(id, source) || sourceOf(id) !== source ||
         !Number.isFinite(item.rawNumber) || item.rawNumber < 0 ||
         (item.language != null && item.language !== 'en')) {
         audit.invalidContract = true;
