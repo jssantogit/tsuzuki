@@ -2851,6 +2851,41 @@ class ScriptProviderReadingGatewayIsolationTest {
     }
 
     /**
+     * Network-setting differential, still ZERO upstream traffic. Executes the
+     * exact solver asset with WebSettings.blockNetworkLoads=false (live mode),
+     * but shouldInterceptRequest rejects every subresource/challenge request.
+     * This distinguishes WebView setting effects from live WAF/network effects.
+     */
+    @Test(timeout = 80_000L)
+    fun mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        MangaFireCiShapeSolverGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaFireCiShapeSolverActivity::class.java)
+                .putExtra("ciOptIn", MangaFireCiShapeSolverGate.INTERCEPT_OFFLINE_ACK)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        try {
+            assertEquals("ASSET_BRIDGE_READY", MangaFireCiShapeSolverGate.await(45))
+            assertTrue(
+                "Live WebSettings with fully intercepted network never emitted DOCUMENT_READY",
+                MangaFireCiShapeSolverGate.hasDocumentReady(),
+            )
+            val probeDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (MangaFireCiShapeSolverGate.lastJavaScriptProbe() == "PENDING" &&
+                System.nanoTime() < probeDeadline
+            ) {
+                Thread.sleep(50)
+            }
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastJavaScriptProbe())
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
+    /**
      * CI-only source chapter gate on the same Android Browser Host profile.
      * The original signed code10 performs one combined-source lookup per
      * title; ONLY the unique returned MangaFire source HID is used to inspect

@@ -71,6 +71,7 @@ jobs:
           assert 'MANGAALL_CI_SHAPE_STAGE|last=' in scope
           assert 'MANGAALL_CI_SHAPE_NATIVE|last=' in scope
           assert 'mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork' in test
+          assert 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork' in test
           live=Path('.github/workflows/mangaall-ci-browser-host-live.yml').read_text()
           assert "if gate == 'shape':" in live
           assert 'I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE' in live
@@ -88,9 +89,12 @@ jobs:
           assert 'stage:DOCUMENT_READY' in activity
           assert 'ASSET_OFFLINE_ACK' in activity
           assert 'blockNetworkLoads = bridgeOnly || exactAssetOffline' in activity
+          assert 'INTERCEPT_OFFLINE_ACK' in activity
+          assert 'bridgeOnly || exactAssetOffline || interceptOffline) return blockedResponse()' in activity
           assert 'MangaFireCiShapeSolverGate.markNativeStage("LOAD_REQUESTED")' in activity
           runner=Path('.github/scripts/run_mangaall_fire_source_allowlist_offline.sh').read_text()
           assert 'mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork' in runner
+          assert 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork' in runner
           assert 'stage:GENERATE_STARTED' in solver
           assert 'stage:VERIFY_STARTED' in solver
           assert 'stage:OPENCV_IMPORT_FAILED' in solver

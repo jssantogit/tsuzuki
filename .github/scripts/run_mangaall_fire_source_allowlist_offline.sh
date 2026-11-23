@@ -35,4 +35,7 @@ run_offline_test 'mangaAllCiShapeSolverBridge_offlineWithoutNetwork'
 # The real 921-line solver asset must load and emit its first JS stage in
 # the same Chromium profile while *all* HTTP requests are blocked.
 run_offline_test 'mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork'
-echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=PASS|source_records=STRICT|bridge=REAL_CHROMIUM|exact_asset=FIRST_JS_STAGE|network=NOT_STARTED'
+# Enable the live WebView network setting, but intercept and block every
+# request. The exact 921-line asset must still emit DOCUMENT_READY.
+run_offline_test 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork'
+echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=PASS|source_records=STRICT|bridge=REAL_CHROMIUM|exact_asset=FIRST_JS_STAGE|intercepted_live_setting=PASS|network=NOT_STARTED'

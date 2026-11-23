@@ -34,6 +34,7 @@ internal object MangaFireCiShapeSolverGate {
     const val ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE"
     const val OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_OFFLINE"
     const val ASSET_OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_ASSET_OFFLINE"
+    const val INTERCEPT_OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_INTERCEPT_OFFLINE"
 
     private val latch = AtomicReference(CountDownLatch(1))
     private val status = AtomicReference("TIMEOUT")
@@ -134,7 +135,10 @@ class MangaFireCiShapeSolverActivity : Activity() {
         val optIn = intent?.getStringExtra("ciOptIn")
         val bridgeOnly = optIn == MangaFireCiShapeSolverGate.OFFLINE_ACK
         val exactAssetOffline = optIn == MangaFireCiShapeSolverGate.ASSET_OFFLINE_ACK
-        if (!bridgeOnly && !exactAssetOffline && optIn != MangaFireCiShapeSolverGate.ACK) {
+        val interceptOffline = optIn == MangaFireCiShapeSolverGate.INTERCEPT_OFFLINE_ACK
+        if (!bridgeOnly && !exactAssetOffline && !interceptOffline &&
+            optIn != MangaFireCiShapeSolverGate.ACK
+        ) {
             finish()
             return
         }
@@ -173,9 +177,9 @@ class MangaFireCiShapeSolverActivity : Activity() {
             domStorageEnabled = true
             allowFileAccess = false
             allowContentAccess = false
-            // Only the offline control/exact-asset diagnostics disable ALL
-            // networking at the Chromium engine level; they also return
-            // blocked responses from shouldInterceptRequest.
+            // The intercepted offline variant keeps this setting identical to
+            // live, but still denies EVERY resource in shouldInterceptRequest.
+            // No browser or source traffic is permitted in any offline mode.
             blockNetworkLoads = bridgeOnly || exactAssetOffline
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
@@ -195,7 +199,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
                         "stage:DOCUMENT_READY" -> MangaFireCiShapeSolverGate.markStage("DOCUMENT_READY")
                         "probe" -> MangaFireCiShapeSolverGate.complete("BRIDGE_READY")
                     }
-                } else if (exactAssetOffline) {
+                } else if (exactAssetOffline || interceptOffline) {
                     // Execute the EXACT debug asset in Chromium with ALL
                     // requests intercepted. The first inline script must
                     // attest that the origin-scoped bridge actually works.
@@ -266,7 +270,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 request: WebResourceRequest?,
             ): WebResourceResponse? {
                 if (request == null) return null
-                if (bridgeOnly || exactAssetOffline) return blockedResponse()
+                if (bridgeOnly || exactAssetOffline || interceptOffline) return blockedResponse()
                 val uri = request.url
                 val sameSiteSolver = uri.host == "mangafire.to" &&
                     uri.encodedPath in setOf("/@waf/generate", "/@waf/verify")
@@ -282,7 +286,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 request: WebResourceRequest?,
                 response: WebResourceResponse?,
             ) {
-                if (!exactAssetOffline && !bridgeOnly &&
+                if (!exactAssetOffline && !interceptOffline && !bridgeOnly &&
                     response != null && response.statusCode >= 400 &&
                     request?.url?.host == "mangafire.to" &&
                     request?.url?.encodedPath?.startsWith("/@waf/") == true
@@ -296,7 +300,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 request: WebResourceRequest?,
                 error: WebResourceError?,
             ) {
-                if (!bridgeOnly && !exactAssetOffline &&
+                if (!bridgeOnly && !exactAssetOffline && !interceptOffline &&
                     request != null && request.url.scheme == "https" &&
                     request.url.host in setOf("mangafire.to", "docs.opencv.org")
                 ) {
