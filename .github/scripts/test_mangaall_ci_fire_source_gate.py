@@ -76,6 +76,24 @@ blocked.append(
     "|cause=CHALLENGE_BLOCKED|http=403"
 )
 assert evaluate(blocked)[1] == "MANGAFIRE_BROWSER_NOT_CALLED"
+shape_required = blocked + [
+    "MANGAALL_CI_FIRE_403|work=punpun|kind=SHAPE_REQUIRED",
+]
+assert evaluate(shape_required)[1] == "MANGAFIRE_SHAPE_REQUIRED_HTTP403"
+assert evaluate(list(reversed(shape_required)))[1] == "MANGAFIRE_SHAPE_REQUIRED_HTTP403"
+assert evaluate(shape_required + shape_required[-1:])[1] == "DUPLICATE_FIRE_403_CLASSIFICATION"
+other_json = blocked + [
+    "MANGAALL_CI_FIRE_403|work=punpun|kind=OTHER_JSON",
+]
+assert evaluate(other_json)[1] == "MANGAFIRE_BROWSER_NOT_CALLED"
+unclassified = blocked + [
+    "MANGAALL_CI_FIRE_403|work=punpun|kind=UNCLASSIFIED",
+]
+assert evaluate(unclassified)[1] == "MANGAFIRE_BROWSER_NOT_CALLED"
+assert evaluate(good + shape_required[-1:])[1] == "FIRE_403_CLASSIFICATION_INCONSISTENT"
+assert evaluate(blocked + [
+    "MANGAALL_CI_FIRE_403|work=punpun|kind=NOT_OBSERVED",
+])[1] == "FIRE_403_CLASSIFICATION_INCONSISTENT"
 
 challenge = [
     line.replace("work=punpun|attempts=0|outcome=NOT_USED",
@@ -121,4 +139,4 @@ budget.extend([
     "MANGAALL_CI_LOOKUP_BLOCKER|work=koe|source=MANGADOT|reason=PAGE_FOUR_PENDING",
 ])
 assert evaluate(budget)[1] == "MANGADOT_PAGE_FOUR_PENDING"
-print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=27|live=NOT_STARTED|unified=NOT_PROVEN")
+print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=35|live=NOT_STARTED|unified=NOT_PROVEN")
