@@ -42,7 +42,7 @@ raw="$(mktemp)"
 trap 'rm -f "$raw"' EXIT
 echo 'Abra a tela MangaFire no A54, conclua somente a verificação normal do site e toque em "Validar sessão".'
 exitcode=0
-timeout --foreground 290s device shell am instrument -w -r \
+timeout --foreground 290s adb -s "$serial" shell am instrument -w -r \
   -e class 'eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllCode10HumanVerifiedBrowserProfile_checksRealSignedApi' \
   -e mangaAllA54SessionOptIn "$ack" \
   app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner > "$raw" 2>&1 || exitcode=$?
