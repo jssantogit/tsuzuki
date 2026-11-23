@@ -18,7 +18,7 @@ MangaDot's real `/api/manga/:id/chapters/list` ignores tested `limit`, `page`, `
 - Naruto source HID 109: 1,628 rows / 826,386 decoded bytes;
 - Bleach source HID 131: 4,341 rows / 2,406,271 decoded bytes.
 
-The unchanged signed code10 cannot serialize these lists through Host's 192 KiB HTTP-text, 256 KiB HTTP-IPC and 64 KiB script-output budgets. Artificially raising global caps is **not** pagination and risks every provider. These HIDs are source candidates, **not** authoritative canonical editions.
+The unchanged signed code10 cannot serialize these lists through Host's 192 KiB HTTP-text, 256 KiB HTTP-IPC and 64 KiB script-output budgets. In fact, the prior [30-work code10 live run #45079717634](https://github.com/jssantogit/tsuzuki/actions/runs/45079717634) revealed **five** real oversized results (425, 548, 653, 753, 477 rows), which [merged Host PR #270](https://github.com/jssantogit/tsuzuki/pull/270) now classifies honestly as `INCONCLUSIVE_HOST_RESULT_LIMIT` instead of falsely declaring them decoded. Artificially raising global caps is **not** pagination and risks every provider. These HIDs are source candidates, **not** authoritative canonical editions.
 
 ## Existing implemented, nonshipping granular foundation
 
@@ -38,7 +38,7 @@ The intended granular contract is:
 1. **Three-work live CI diagnostics:** verify all three source contributions per work, distinguish deferred source failure, HTTP/challenge failure, ambiguous candidate identity and MangaFire chapter pages; no false two-source PASS.
 2. **Native full list integration:** connect a future reviewed code11 adapter and real Host snapshot in Android CI, verify one actual large MangaDot source response can be acquired within limits and paginated to the end. The offline 4,341-row test is a capacity proof, not real upstream data acceptance.
 3. **Exact data parity:** independently verify normalization for source chapter type+ID, language, chapter number, timestamp, title and duplicates; ensure source completeness before committing a snapshot. Revisit the known signed-code10 ID-only versus future kind+ID dedup behavior as an explicit version change.
-4. **Real collector and SQLDelight:** the same bounded continuation must survive source refresh and maintain incomplete/provisional state without deleting accepted chapters on timeout or stale cursor; 32 pages/16,000 rows remains a hard stop.
+4. **Live source → Host → collector and SQLDelight:** the independent [merged Host PR #269](https://github.com/jssantogit/tsuzuki/pull/269) already proves an **offline synthetic** 4,341-row, 17-page production Kotlin collector → refresh → canonical reconciler → real SQLDelight/JDBC round-trip, retaining provisional source-only records without editorial grants. What remains is connecting this proven downstream capacity to **genuinely acquired live MangaDot rows** through the reviewed Host-native code11 continuation, and proving interrupted/stale cursors never erase accepted rows. Host still caps 32 pages/16,000 observations.
 5. **Signed future migration authorization:** require a separate explicit review/approval before any code11 P-256 signing, publishing or app integration. No unsigned test package may become a trusted production provider.
 6. **Only after those checks:** run one on-demand 30-work integrated MangaDex+MangaDot+MangaFire CI, keeping per-source ambiguity, incompleteness and Reader CDN pixels as independent reported gates.
 
