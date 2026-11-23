@@ -2360,6 +2360,10 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_WEBVIEW|work=punpun|api=VALID_JSON|candidates=1",
             "MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=HTTP_REJECTED",
             "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP|outcome=COMPLETE|pages=3|candidates=1",
+            "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP_FAILURE" +
+                "|cause=CHALLENGE_BLOCKED|http=403",
+            "MANGAALL_CI_CHAPTER|work=punpun|phase=API|signedUrl=OBSERVED" +
+                "|http=403|browser=VALID_JSON",
             "MANGAALL_CI_CHAPTER|work=koe|phase=LOOKUP|outcome=READ_ERROR|pages=2|candidates=0",
             "MANGAALL_CI_CHAPTER|work=punpun|outcome=READY|pages=1" +
                 "|count=147|chapterOne=YES|reason=NONE",
@@ -2381,6 +2385,8 @@ class ScriptProviderReadingGatewayIsolationTest {
         val bad = listOf(
             "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=HUMAN_CONFIRMED",
             "MANGAALL_CI_WEBVIEW|work=unknown|api=VALID_JSON|candidates=1",
+            "MANGAALL_CI_CHAPTER|work=punpun|phase=API|signedUrl=OBSERVED" +
+                "|http=403|browser=VALID_JSON|cookie=secret",
             "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP|outcome=COMPLETE" +
                 "|pages=9|candidates=1",
             "MANGAALL_CI_CHAPTER|work=unknown|outcome=READY|pages=1" +
