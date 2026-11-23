@@ -427,8 +427,10 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 // Fail closed on the final document, not a transient
                 // about:blank commit. No challenge or HTTP data is trusted.
                 val finalNativeKind = MangaFireCiShapeSolverGate.lastNavigation("FINISH")
-                if ((finalNativeKind in setOf("EXPECTED", "DATA") ||
-                    (intentionallyOpaqueOffline && finalNativeKind == "ABOUT")) &&
+                if ((
+                        finalNativeKind in setOf("EXPECTED", "DATA") ||
+                            (intentionallyOpaqueOffline && finalNativeKind == "ABOUT")
+                        ) &&
                     origin == "OPAQUE" && bridge == "BRIDGE_MISSING" &&
                     !MangaFireCiShapeSolverGate.hasDocumentReady()
                 ) {
