@@ -42,6 +42,26 @@ internal object MangaAllInstrumentationVerdict {
         ),
         // Test-only CI Android emulator. No sensitive browser state, URLs,
         // cookies, challenge payloads or external IDs are allowed.
+        // Separate CI-only MangaFire chapter/cursor proof; no HIDs or chapter
+        // IDs may leave the instrumentation process.
+        Regex(
+            """MANGAALL_CI_CHAPTER\|phase=WARMUP""" +
+                """\|outcome=(PAGE_FINISHED|HTTP_REJECTED|TLS_REJECTED|""" +
+                """RENDERER_EXITED|TIMEOUT|PROFILE_UNSUPPORTED)""",
+        ),
+        Regex(
+            """MANGAALL_CI_CHAPTER\|work=(punpun|koe)""" +
+                """\|outcome=(READY|INCONCLUSIVE)\|pages=[0-4]""" +
+                """\|count=([0-9]|[1-9][0-9]|[1-9][0-9]{2})""" +
+                """\|chapterOne=(YES|NO|MULTIPLE|UNVERIFIED)""" +
+                """\|reason=(NONE|LOOKUP_AMBIGUOUS|LOOKUP_UNAVAILABLE|TIMEOUT|""" +
+                """SOURCE_TOO_LARGE|SOURCE_READ_ERROR|OTHER|CURSOR_LIMIT|""" +
+                """INVALID_IDENTITY|EMPTY|CHAPTER_ONE_NOT_ATTESTED)""",
+        ),
+        Regex(
+            """MANGAALL_CI_CHAPTER\|outcome=(CHAPTERS_ACCEPTED|INCONCLUSIVE)""" +
+                """\|ready=[0-2]\|works=2\|canonical=NOT_TESTED\|readerPixels=NOT_TESTED""",
+        ),
         Regex("""MANGAALL_CI_WEBVIEW\|phase=STARTED"""),
         Regex(
             """MANGAALL_CI_WEBVIEW\|phase=WARMUP""" +
