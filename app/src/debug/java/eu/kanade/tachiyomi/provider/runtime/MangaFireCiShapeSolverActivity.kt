@@ -16,6 +16,7 @@ import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -32,10 +33,22 @@ import java.util.concurrent.atomic.AtomicReference
 internal object MangaFireCiShapeSolverGate {
     const val ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE"
     const val OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_OFFLINE"
+    const val ASSET_OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_ASSET_OFFLINE"
 
     private val latch = AtomicReference(CountDownLatch(1))
     private val status = AtomicReference("TIMEOUT")
     private val milestone = AtomicReference("NO_EVENT")
+    private val nativeStage = AtomicReference("NO_EVENT")
+    private val documentReady = AtomicBoolean(false)
+    private val permittedNativeStages = setOf(
+        "ACTIVITY_CREATED",
+        "ASSET_READY",
+        "PROFILE_READY",
+        "LISTENER_REGISTERED",
+        "LOAD_REQUESTED",
+        "PAGE_COMMITTED",
+        "PAGE_FINISHED",
+    )
     private val permittedStages = setOf(
         "DOCUMENT_READY",
         "OPENCV_IMPORTED",
@@ -52,6 +65,8 @@ internal object MangaFireCiShapeSolverGate {
     fun reset() {
         status.set("TIMEOUT")
         milestone.set("NO_EVENT")
+        nativeStage.set("NO_EVENT")
+        documentReady.set(false)
         latch.set(CountDownLatch(1))
     }
 
@@ -67,6 +82,7 @@ internal object MangaFireCiShapeSolverGate {
                 "RENDERER_EXITED",
                 "ASSET_INVALID",
                 "BRIDGE_READY",
+                "ASSET_BRIDGE_READY",
             ),
         )
         if (status.compareAndSet("TIMEOUT", outcome)) {
@@ -75,8 +91,19 @@ internal object MangaFireCiShapeSolverGate {
     }
 
     fun markStage(value: String) {
-        if (value in permittedStages) milestone.set(value)
+        if (value in permittedStages) {
+            if (value == "DOCUMENT_READY") documentReady.set(true)
+            milestone.set(value)
+        }
     }
+
+    fun markNativeStage(value: String) {
+        if (value in permittedNativeStages) nativeStage.set(value)
+    }
+
+    fun lastNativeStage(): String = nativeStage.get()
+
+    fun hasDocumentReady(): Boolean = documentReady.get()
 
     fun lastStage(): String = milestone.get()
 
@@ -96,10 +123,12 @@ class MangaFireCiShapeSolverActivity : Activity() {
 
         val optIn = intent?.getStringExtra("ciOptIn")
         val bridgeOnly = optIn == MangaFireCiShapeSolverGate.OFFLINE_ACK
-        if (!bridgeOnly && optIn != MangaFireCiShapeSolverGate.ACK) {
+        val exactAssetOffline = optIn == MangaFireCiShapeSolverGate.ASSET_OFFLINE_ACK
+        if (!bridgeOnly && !exactAssetOffline && optIn != MangaFireCiShapeSolverGate.ACK) {
             finish()
             return
         }
+        MangaFireCiShapeSolverGate.markNativeStage("ACTIVITY_CREATED")
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE) ||
             !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
         ) {
@@ -124,9 +153,11 @@ class MangaFireCiShapeSolverActivity : Activity() {
             finish()
             return
         }
+        MangaFireCiShapeSolverGate.markNativeStage("ASSET_READY")
         val view = WebView(this)
         page = view
         WebViewCompat.setProfile(view, ProviderBrowserProfiles.nameFor("app.tsuzuki.mangaall"))
+        MangaFireCiShapeSolverGate.markNativeStage("PROFILE_READY")
         view.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -150,6 +181,19 @@ class MangaFireCiShapeSolverActivity : Activity() {
                         "stage:DOCUMENT_READY" -> MangaFireCiShapeSolverGate.markStage("DOCUMENT_READY")
                         "probe" -> MangaFireCiShapeSolverGate.complete("BRIDGE_READY")
                     }
+                } else if (exactAssetOffline) {
+                    // Execute the EXACT debug asset in Chromium with ALL
+                    // requests intercepted. The first inline script must
+                    // attest that the origin-scoped bridge actually works.
+                    // No CAPTCHA data, HTTP or JS payload is surfaced.
+                    val stageRecord = message.data
+                    if (stageRecord?.startsWith("stage:") == true) {
+                        val stage = stageRecord.removePrefix("stage:")
+                        MangaFireCiShapeSolverGate.markStage(stage)
+                        if (stage == "DOCUMENT_READY") {
+                            MangaFireCiShapeSolverGate.complete("ASSET_BRIDGE_READY")
+                        }
+                    }
                 } else {
                     when (message.data) {
                         "true" -> MangaFireCiShapeSolverGate.complete("SOLVED")
@@ -164,7 +208,16 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 }
             }
         }
+        MangaFireCiShapeSolverGate.markNativeStage("LISTENER_REGISTERED")
         view.webViewClient = object : WebViewClient() {
+            override fun onPageCommitVisible(view: WebView?, url: String?) {
+                MangaFireCiShapeSolverGate.markNativeStage("PAGE_COMMITTED")
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                MangaFireCiShapeSolverGate.markNativeStage("PAGE_FINISHED")
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 if (request?.isForMainFrame != true) return false
                 val target = request.url
@@ -183,7 +236,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 request: WebResourceRequest?,
             ): WebResourceResponse? {
                 if (request == null) return null
-                if (bridgeOnly) return blockedResponse()
+                if (bridgeOnly || exactAssetOffline) return blockedResponse()
                 val uri = request.url
                 val sameSiteSolver = uri.host == "mangafire.to" &&
                     uri.encodedPath in setOf("/@waf/generate", "/@waf/verify")
@@ -199,7 +252,8 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 request: WebResourceRequest?,
                 response: WebResourceResponse?,
             ) {
-                if (response != null && response.statusCode >= 400 &&
+                if (!exactAssetOffline && !bridgeOnly &&
+                    response != null && response.statusCode >= 400 &&
                     request?.url?.host == "mangafire.to" &&
                     request?.url?.encodedPath?.startsWith("/@waf/") == true
                 ) {
@@ -212,7 +266,8 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 request: WebResourceRequest?,
                 error: WebResourceError?,
             ) {
-                if (request != null && request.url.scheme == "https" &&
+                if (!bridgeOnly && !exactAssetOffline &&
+                    request != null && request.url.scheme == "https" &&
                     request.url.host in setOf("mangafire.to", "docs.opencv.org")
                 ) {
                     MangaFireCiShapeSolverGate.complete("NAVIGATION_FAILED")
@@ -231,6 +286,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
         }
 
         setContentView(view)
+        MangaFireCiShapeSolverGate.markNativeStage("LOAD_REQUESTED")
         // Base origin is exactly the user-facing site. Only @waf endpoints
         // and a single fixed OpenCV.js asset may be requested by this pilot.
         view.loadDataWithBaseURL(
