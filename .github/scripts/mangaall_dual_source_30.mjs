@@ -71,16 +71,53 @@ assert.equal(originalDotSource.split(sourcePageLimit).length, 2,
 const originalHttpImport = 'from "./http.js"';
 assert.equal(originalDotSource.split(originalHttpImport).length, 2,
   'MangaDot source import changed');
-const httpModuleUri = pathToFileURL(path.join(
+// Upstream MangaDot's 2MiB *source adapter* response guard is independent
+// of the CI bridge's separate 8MiB guard. Bleach returned 2,406,521 bytes
+// and was falsely limited by this earlier guard. Override neither the
+// signed archive nor the production Host: build a nonshipping in-memory copy
+// of the EXACT immutable HTTP helper with a bounded experimental 8MiB ceiling.
+const originalDotHttp = readFileSync(path.join(
   sourceRoot, 'modules/sources/mangadot/modules/http.js',
-)).href;
+), 'utf8');
+const dotCeiling = 'const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;';
+assert.equal(originalDotHttp.split(dotCeiling).length, 2,
+  'MangaDot signed source response bound changed; independent audit required');
+const adaptedDotHttp = originalDotHttp.replace(
+  dotCeiling, 'const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;',
+);
+const adaptedDotHttpUri = 'data:text/javascript;base64,' +
+  Buffer.from(adaptedDotHttp, 'utf8').toString('base64');
 const experimentalDotCode = originalDotSource
   .replace(sourcePageLimit,
     'if (n > 8) throw new Error("MangaAll bounded source search exhausted");')
-  .replace(originalHttpImport, 'from "' + httpModuleUri + '"');
+  .replace(originalHttpImport, 'from "' + adaptedDotHttpUri + '"');
 const extendedMangaDot = await import('data:text/javascript;base64,' +
   Buffer.from(experimentalDotCode, 'utf8').toString('base64'));
 assert.equal(typeof extendedMangaDot.lookup, 'function');
+assert.equal(typeof extendedMangaDot.chapters, 'function');
+
+// MangaDex chapter JSON for certain prolific works exceeded the original
+// 192KiB transport ceiling with 100 entries. Trial a conservative 50-entry
+// original-source page (normal nextCursor/offset pagination stays intact).
+// No chapter is dropped or inferred. The 32-page audition cap is independent.
+const originalDexSource = readFileSync(path.join(
+  sourceRoot, 'modules/sources/mangadex/modules/mangadex.js',
+), 'utf8');
+const dexPageSize = 'const CHAPTER_PAGE_SIZE = 100;';
+const dexImport = 'from "./http.js"';
+assert.equal(originalDexSource.split(dexPageSize).length, 2,
+  'MangaDex chapter page size changed; audit before injecting');
+assert.equal(originalDexSource.split(dexImport).length, 2,
+  'MangaDex chapter helper import changed');
+const dexHttpModuleUri = pathToFileURL(path.join(
+  sourceRoot, 'modules/sources/mangadex/modules/http.js',
+)).href;
+const experimentalDexCode = originalDexSource
+  .replace(dexPageSize, 'const CHAPTER_PAGE_SIZE = 50;')
+  .replace(dexImport, 'from "' + dexHttpModuleUri + '"');
+const extendedMangaDex = await import('data:text/javascript;base64,' +
+  Buffer.from(experimentalDexCode, 'utf8').toString('base64'));
+assert.equal(typeof extendedMangaDex.chapters, 'function');
 // Test-only correction: the signed MangaDot adapter yields a complete
 // upstream chapter list in one Host-sized result (often >64KiB). Preserve all
 // original source items and split only OUTPUT into <=48KiB/200-item pages.
@@ -129,7 +166,7 @@ const granularMangaDotAdapter = {
     }
     let rows = chapterCache.get(key);
     if (!rows) {
-      const page = await dotModule.default.reading.chapters({ ...input, cursor: null });
+      const page = await extendedMangaDot.chapters({ ...input, cursor: null });
       if (!Array.isArray(page?.items) || page.items.length > 16000 ||
           page.nextCursor != null) throw Error('MangaAll invalid chapter response');
       rows = page.items;
@@ -140,7 +177,7 @@ const granularMangaDotAdapter = {
   },
 };
 const dualReading = router.createMangaAllReading({
-  mangadex: dexModule.default.reading,
+  mangadex: { ...dexModule.default.reading, chapters: extendedMangaDex.chapters },
   mangadot: granularMangaDotAdapter,
 });
 
@@ -459,6 +496,7 @@ const report = {
   originalCode10SignedPackageChanged: false, adapterRouterModification: 'SOURCE_IDS_ONLY_IN_MEMORY',
   chapterAdaptation: 'MANGADOT_IN_MEMORY_48K_200_NO_RELEASE',
   lookupAdaptation: 'MANGADOT_EIGHT_SOURCE_PAGES_IN_MEMORY',
+  acquisitionAdaptation: 'UNSIGNED_DOT8M_DEX50_CHAPTERS_CI_ONLY',
   sourceSet: SOURCES, shard, shardCount: count, totalWorkCount: 30,
   sourceHttp: 'REAL_GITHUB_ACTIONS_FETCH', canonical: 'NOT_TESTED',
   readerPixels: 'NOT_TESTED', sourceRequestBudget: 320,
