@@ -141,6 +141,7 @@ class ProviderHostInvocationFactory(
 ) {
 
     private val context = context.applicationContext
+
     // Read only when MangaALL has both exact MangaFire grants. No UA or
     // provider secrets are added to logs or shared with other providers.
     private val mangaFireBrowserUserAgent by lazy {
