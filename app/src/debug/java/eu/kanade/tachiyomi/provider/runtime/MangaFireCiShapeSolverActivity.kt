@@ -36,6 +36,7 @@ internal object MangaFireCiShapeSolverGate {
     const val OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_OFFLINE"
     const val ASSET_OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_ASSET_OFFLINE"
     const val INTERCEPT_OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_INTERCEPT_OFFLINE"
+    const val OPAQUE_OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_OPAQUE_OFFLINE"
 
     private val latch = AtomicReference(CountDownLatch(1))
     private val status = AtomicReference("TIMEOUT")
@@ -99,6 +100,7 @@ internal object MangaFireCiShapeSolverGate {
                 "ASSET_INVALID",
                 "BRIDGE_READY",
                 "ASSET_BRIDGE_READY",
+                "UNTRUSTED_ORIGIN",
             ),
         )
         if (status.compareAndSet("TIMEOUT", outcome)) {
@@ -200,7 +202,8 @@ class MangaFireCiShapeSolverActivity : Activity() {
         val bridgeOnly = optIn == MangaFireCiShapeSolverGate.OFFLINE_ACK
         val exactAssetOffline = optIn == MangaFireCiShapeSolverGate.ASSET_OFFLINE_ACK
         val interceptOffline = optIn == MangaFireCiShapeSolverGate.INTERCEPT_OFFLINE_ACK
-        if (!bridgeOnly && !exactAssetOffline && !interceptOffline &&
+        val opaqueOffline = optIn == MangaFireCiShapeSolverGate.OPAQUE_OFFLINE_ACK
+        if (!bridgeOnly && !exactAssetOffline && !interceptOffline && !opaqueOffline &&
             optIn != MangaFireCiShapeSolverGate.ACK
         ) {
             finish()
@@ -244,7 +247,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
             // The intercepted offline variant keeps this setting identical to
             // live, but still denies EVERY resource in shouldInterceptRequest.
             // No browser or source traffic is permitted in any offline mode.
-            blockNetworkLoads = bridgeOnly || exactAssetOffline
+            blockNetworkLoads = bridgeOnly || exactAssetOffline || opaqueOffline
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
         }
@@ -263,7 +266,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
                         "stage:DOCUMENT_READY" -> MangaFireCiShapeSolverGate.markStage("DOCUMENT_READY")
                         "probe" -> MangaFireCiShapeSolverGate.complete("BRIDGE_READY")
                     }
-                } else if (exactAssetOffline || interceptOffline) {
+                } else if (exactAssetOffline || interceptOffline || opaqueOffline) {
                     // Execute the EXACT debug asset in Chromium with ALL
                     // requests intercepted. The first inline script must
                     // attest that the origin-scoped bridge actually works.
@@ -326,7 +329,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 request: WebResourceRequest?,
             ): WebResourceResponse? {
                 if (request == null) return null
-                if (bridgeOnly || exactAssetOffline || interceptOffline) return blockedResponse()
+                if (bridgeOnly || exactAssetOffline || interceptOffline || opaqueOffline) return blockedResponse()
                 val uri = request.url
                 val sameSiteSolver = uri.host == "mangafire.to" &&
                     uri.encodedPath in setOf("/@waf/generate", "/@waf/verify")
@@ -342,7 +345,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 request: WebResourceRequest?,
                 response: WebResourceResponse?,
             ) {
-                if (!exactAssetOffline && !interceptOffline && !bridgeOnly &&
+                if (!exactAssetOffline && !interceptOffline && !bridgeOnly && !opaqueOffline &&
                     response != null && response.statusCode >= 400 &&
                     request?.url?.host == "mangafire.to" &&
                     request?.url?.encodedPath?.startsWith("/@waf/") == true
@@ -356,7 +359,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 request: WebResourceRequest?,
                 error: WebResourceError?,
             ) {
-                if (!bridgeOnly && !exactAssetOffline && !interceptOffline &&
+                if (!bridgeOnly && !exactAssetOffline && !interceptOffline && !opaqueOffline &&
                     request != null && request.url.scheme == "https" &&
                     request.url.host in setOf("mangafire.to", "docs.opencv.org")
                 ) {
@@ -379,13 +382,19 @@ class MangaFireCiShapeSolverActivity : Activity() {
         MangaFireCiShapeSolverGate.markNativeStage("LOAD_REQUESTED")
         // Base origin is exactly the user-facing site. Only @waf endpoints
         // and a single fixed OpenCV.js asset may be requested by this pilot.
-        view.loadDataWithBaseURL(
-            "https://mangafire.to/@waf/solver",
-            html,
-            "text/html",
-            "UTF-8",
-            null,
-        )
+        if (opaqueOffline) {
+            // Negative control: an opaque data: document must NEVER receive
+            // the HTTPS origin-scoped bridge. All network is denied.
+            view.loadData(html, "text/html", "UTF-8")
+        } else {
+            view.loadDataWithBaseURL(
+                "https://mangafire.to/@waf/solver",
+                html,
+                "text/html",
+                "UTF-8",
+                null,
+            )
+        }
     }
 
     /**
@@ -413,6 +422,15 @@ class MangaFireCiShapeSolverActivity : Activity() {
             val origin = closed.substringAfter("|", "JS_UNAVAILABLE")
             if (phase == "FINISH") {
                 MangaFireCiShapeSolverGate.markFinishProbe(bridge, origin)
+                // Fail closed on the final document, not a transient
+                // about:blank commit. No challenge or HTTP data is trusted.
+                if (MangaFireCiShapeSolverGate.lastNavigation("FINISH") in
+                    setOf("EXPECTED", "DATA") &&
+                    origin == "OPAQUE" && bridge == "BRIDGE_MISSING" &&
+                    !MangaFireCiShapeSolverGate.hasDocumentReady()
+                ) {
+                    MangaFireCiShapeSolverGate.complete("UNTRUSTED_ORIGIN")
+                }
             } else {
                 MangaFireCiShapeSolverGate.markJavaScriptProbe(bridge)
                 MangaFireCiShapeSolverGate.markDocumentOrigin(origin)
