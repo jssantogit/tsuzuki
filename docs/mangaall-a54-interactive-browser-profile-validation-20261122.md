@@ -1,6 +1,25 @@
 # MangaALL — same-profile MangaFire verification on Galaxy A54 (test only)
 
-Status: **debug instrumentation, not production functionality and not a confirmed physical test** (2026-11-22).
+Status: **physical Galaxy A54 debug-only verification succeeded for 2/2 API checks; not production functionality or 30-title acceptance** (2026-11-22, user-submitted local runner verdict).
+
+## Physical Galaxy A54 verification evidence — 2026-11-22
+
+The operator ran the Termux + localhost wireless ADB instrumentation on a physical Galaxy A54 and provided the following <b>sanitized local verdict</b> (user-reported, not a GitHub Actions live run):
+
+```text
+MANGAALL_A54_PROFILE|outcome=BROWSER_SIGNED_API_ACCEPTED|signedJson=2|works=2|providerCandidateWorks=2|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED
+MANGAALL_A54_PROFILE|phase=STARTED
+MANGAALL_A54_PROFILE|phase=ACTIVITY_REQUESTED
+MANGAALL_A54_PROFILE|phase=OPERATOR_CONFIRMED
+MANGAALL_A54_PROFILE|work=punpun|outcome=SIGNED_API_JSON_VALID|mangafireCandidates=1|browserApi=VALID_JSON
+MANGAALL_A54_PROFILE|work=koe|outcome=SIGNED_API_JSON_VALID|mangafireCandidates=1|browserApi=VALID_JSON
+```
+
+Interpretation: the original signed P-256 MangaALL code10 lookup surfaced one MangaFire candidate for each of **Oyasumi Punpun** and **Koe no Katachi**, and the same-profile Browser Host returned valid JSON containing an `items` array for both lookup-generated API URLs after interactive on-device verification. This establishes the explicit **A54 debug-only signed-API gate** for **2/2 works**. It does **not** imply that the API behaves the same way in CI, in the existing release-app sandbox, after a fresh session/cold restart, or without human verification. It is not evidence of canonical work binding, chapter-list pagination, page acquisition, or decoded Reader pixels, and does not establish the 30-work tri-source smoke.
+
+[The matching compiled debug/test APK CI #45090863034](https://github.com/jssantogit/tsuzuki/actions/runs/45090863034) completed successfully. GitHub Actions compiled and published APKs; it did **not** run the live A54 session. The session report above was submitted by the operator.
+
+Next technical gates: prove the profile behavior survives reuse/restart as appropriate; exercise canonical work matching and paginated chapter retrieval across all three sources; then expand the same on-device combined-source smoke to the intended 30 works. The >64KiB transport/pagination limitation remains a separate unresolved acceptance dependency.
 
 ## What differs from generic WebView
 
