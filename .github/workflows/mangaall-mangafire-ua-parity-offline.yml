@@ -1,0 +1,76 @@
+name: MangaALL — MangaFire HTTP / Chromium User-Agent parity (OFFLINE)
+
+# This is a transport identity contract, not a challenge solver or source smoke.
+# No request to MangaFire is sent. Do not infer verified catalogue data.
+on:
+  push:
+    branches: ['fix/mangaall-mangafire-http-webview-ua-*']
+    paths:
+      - '.github/workflows/mangaall-mangafire-ua-parity-offline.yml'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderHostInvocation.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/MangaAllMangaFireUserAgent.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllMangaFireUserAgentTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllMangaFireUserAgentInstrumentationTest.kt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-mangafire-ua-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-http-identity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Verify Kotlin formatting and scoped unit contract
+        run: |
+          ./gradlew :app:spotlessKotlinCheck
+          ./gradlew :app:testDebugUnitTest --tests eu.kanade.tachiyomi.provider.runtime.MangaAllMangaFireUserAgentTest
+      - name: Assemble real Android debug and instrumentation APKs
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM for offline emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify actual Android Chromium UA against request header without source traffic
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            app=(app/build/outputs/apk/debug/*universal*.apk)
+            tests=(app/build/outputs/apk/androidTest/debug/*.apk)
+            test "${#app[@]}" -eq 1 && test "${#tests[@]}" -eq 1
+            adb install -r "${app[0]}" >/dev/null
+            adb install -r "${tests[0]}" >/dev/null
+            raw="$(mktemp)"
+            trap 'rm -f "$raw"' EXIT
+            timeout --foreground 90s adb shell am instrument -w -r \
+              -e class eu.kanade.tachiyomi.provider.runtime.MangaAllMangaFireUserAgentInstrumentationTest#mangaAllMangaFireDefaultHttpUserAgent_matchesRealChromiumWithoutCookies \
+              app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner > "$raw" 2>&1 || {
+                echo 'MANGAALL_UA_PARITY|outcome=FAIL|stage=ANDROID_INSTRUMENTATION'
+                exit 1
+              }
+            if ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw"; then
+              echo 'MANGAALL_UA_PARITY|outcome=FAIL|stage=ANDROID_ASSERTIONS'
+              exit 1
+            fi
+            echo 'MANGAALL_UA_PARITY|outcome=PASS|scope=MANGAFIRE_ONLY|realChromium=YES|cookies=NOT_EXPORTED|network=NOT_STARTED'
