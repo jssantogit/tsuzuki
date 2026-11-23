@@ -41,8 +41,6 @@ SUMMARY = (
 def evaluate(lines: list[str]) -> tuple[bool, str]:
     """Report the earliest closed failure category, with no raw log disclosure."""
     records = [line.strip() for line in lines if line.strip()]
-    if records.count(SUMMARY) != 1:
-        return False, "THREE_WORK_SUMMARY_MISSING"
     source: dict[tuple[str, str], tuple[int, str]] = {}
     lookup: dict[str, tuple[str, int, int]] = {}
     api: dict[str, tuple[str, str]] = {}
@@ -86,6 +84,8 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
             result[3], result[4]
         ) != ("YES", "NONE"):
             return False, "CHAPTER_PAGINATION_INCOMPLETE"
+    if records.count(SUMMARY) != 1:
+        return False, "THREE_WORK_SUMMARY_MISSING"
     return True, "SIGNED_CI_THREE_WORKS_ACCEPTED"
 
 
