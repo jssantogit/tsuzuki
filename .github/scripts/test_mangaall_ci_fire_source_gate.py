@@ -166,4 +166,35 @@ non_shape = blocked + [
     "MANGAALL_CI_FIRE_403_EDGE|work=punpun|family=JSON",
 ]
 assert evaluate(non_shape, require_edge=True)[1] == "MANGAFIRE_BROWSER_NOT_CALLED"
-print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=44|live=NOT_STARTED|unified=NOT_PROVEN")
+# Reproduce the fully observed *three-work* direct HTTP403 provenance
+# from CI #45275225376. A browser challenge on a different navigation
+# does not alter the source's own closed CF_SERVER_HTML classification.
+full_edge_block = [
+    line.replace("http=200|transport=HTTP|json=VALIDATED",
+                 "http=403|transport=NONE|json=UNVERIFIED")
+    if "|phase=API" in line else line
+    for line in good
+]
+full_edge_block[0] = (
+    "MANGAALL_CI_FIRE_SOURCE|outcome=INCONCLUSIVE|ready=0|works=3"
+    "|canonical=NOT_TESTED|unified=NOT_PROVEN"
+)
+for work in WORKS:
+    full_edge_block.extend([
+        f"MANGAALL_CI_FIRE_403|work={work}|kind=UNCLASSIFIED",
+        f"MANGAALL_CI_FIRE_403_EDGE|work={work}|family=CF_SERVER_HTML",
+    ])
+assert evaluate(full_edge_block, require_edge=True) == (
+    False, "MANGAFIRE_CF_SERVER_HTML_HTTP403"
+)
+# Never classify a partial response matrix as a three-work edge rejection.
+one_missing = [x for x in full_edge_block if
+               x != "MANGAALL_CI_FIRE_403_EDGE|work=koe|family=CF_SERVER_HTML"]
+assert evaluate(one_missing, require_edge=True)[1] == "FIRE_403_EDGE_EVIDENCE_MISSING"
+mixed = [x.replace(
+    "MANGAALL_CI_FIRE_403_EDGE|work=koe|family=CF_SERVER_HTML",
+    "MANGAALL_CI_FIRE_403_EDGE|work=koe|family=JSON"
+) for x in full_edge_block]
+assert evaluate(mixed, require_edge=True)[0] is False
+assert evaluate(mixed, require_edge=True)[1] != "MANGAFIRE_CF_SERVER_HTML_HTTP403"
+print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=48|live=NOT_STARTED|unified=NOT_PROVEN")
