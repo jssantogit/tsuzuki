@@ -3128,10 +3128,14 @@ class ScriptProviderReadingGatewayIsolationTest {
         response(403, """{"error":"captcha_required"}""").use {
             assertEquals("JSON", classifyMangaFire403Edge(it))
         }
-        response(403, "<!doctype html><html>blocked</html>", mapOf(
-            "Content-Type" to "text/html; charset=UTF-8",
-            "Server" to "cloudflare",
-        )).use {
+        response(
+            403,
+            "<!doctype html><html>blocked</html>",
+            mapOf(
+                "Content-Type" to "text/html; charset=UTF-8",
+                "Server" to "cloudflare",
+            ),
+        ).use {
             assertEquals("UNCLASSIFIED", classifyMangaFire403(it))
             assertEquals("CF_SERVER_HTML", classifyMangaFire403Edge(it))
         }
