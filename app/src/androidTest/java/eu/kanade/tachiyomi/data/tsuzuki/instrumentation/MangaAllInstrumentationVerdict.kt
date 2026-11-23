@@ -50,6 +50,16 @@ internal object MangaAllInstrumentationVerdict {
                 """RENDERER_EXITED|TIMEOUT|PROFILE_UNSUPPORTED)""",
         ),
         Regex(
+            """MANGAALL_CI_CHAPTER\|work=(punpun|koe)\|phase=LOOKUP_FAILURE""" +
+                """\|cause=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|""" +
+                """UNCLASSIFIED_ERROR)\|http=(NONE|200|403|OTHER)""",
+        ),
+        Regex(
+            """MANGAALL_CI_CHAPTER\|work=(punpun|koe)\|phase=API""" +
+                """\|signedUrl=(OBSERVED|NOT_OBSERVED)\|http=(NONE|200|403|OTHER)""" +
+                """\|browser=(VALID_JSON|INCONCLUSIVE)""",
+        ),
+        Regex(
             """MANGAALL_CI_CHAPTER\|work=(punpun|koe)\|phase=LOOKUP""" +
                 """\|outcome=(COMPLETE|CURSOR_LIMIT|READ_ERROR|TOO_LARGE|TIMEOUT|OTHER|""" +
                 """INVALID_IDENTITY|IDENTITY_CONFLICT)\|pages=[0-8]\|candidates=[0-9]{1,2}""",
