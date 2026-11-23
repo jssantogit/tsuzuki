@@ -8,6 +8,7 @@ on:
       - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderBrowserProfiles.kt'
       - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderHostInvocation.kt'
       - 'app/src/debug/AndroidManifest.xml'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/ProviderBrowserProfilesTest.kt'
       - 'app/src/debug/java/eu/kanade/tachiyomi/provider/runtime/MangaFireBrowserSessionTestActivity.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
       - '.github/scripts/run_mangaall_a54_browser_profile.sh'
@@ -85,7 +86,9 @@ jobs:
         with:
           cache-read-only: true
       - name: Format gate and compile debug UI plus signed-code10 instrumentation
-        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest
+        run: |
+          ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest
+          ./gradlew :app:testDebugUnitTest --tests eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfilesTest
       - name: Publish only debug/test APKs for one manual physical session
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
