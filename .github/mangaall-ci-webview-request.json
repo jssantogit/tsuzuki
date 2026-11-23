@@ -1,7 +1,6 @@
 {
   "acknowledge": "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE",
-  "solver_acknowledge": "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE",
-  "gate": "shape",
+  "gate": "fire",
   "works": [
     "Oyasumi Punpun",
     "Koe no Katachi",
