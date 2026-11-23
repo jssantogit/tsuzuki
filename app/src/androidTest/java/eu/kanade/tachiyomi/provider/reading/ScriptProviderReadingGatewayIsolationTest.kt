@@ -3045,6 +3045,54 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
     }
 
+    /**
+     * Captures only a closed challenge classification from the ORIGINAL
+     * signed provider HTTP response. peekBody is capped, leaves the response
+     * readable by code10, and performs no extra GET or WebView operation.
+     * An arbitrary HTML/403 is not evidence of a shape CAPTCHA.
+     */
+    private fun classifyMangaFire403(response: Response): String {
+        if (response.code != 403) return "NOT_403"
+        return runCatching {
+            val json = JSONObject(response.peekBody(1024).string())
+            if (json.optString("error") == "captcha_required") {
+                "SHAPE_REQUIRED"
+            } else {
+                "OTHER_JSON"
+            }
+        }.getOrDefault("UNCLASSIFIED")
+    }
+
+    @Test
+    fun mangaAllCiMangaFire403Classifier_offlineResponseOnly() {
+        fun response(code: Int, body: String): Response =
+            Response.Builder()
+                .request(
+                    okhttp3.Request.Builder()
+                        .url("https://mangafire.to/api/titles?keyword=fixture")
+                        .build(),
+                )
+                .protocol(Protocol.HTTP_1_1)
+                .code(code)
+                .message("Synthetic test only")
+                .body(body.toResponseBody())
+                .build()
+
+        response(403, """{"error":"captcha_required"}""").use {
+            assertEquals("SHAPE_REQUIRED", classifyMangaFire403(it))
+            assertEquals("""{"error":"captcha_required"}""", requireNotNull(it.body).string())
+        }
+        response(403, """{"error":"temporarily_unavailable"}""").use {
+            assertEquals("OTHER_JSON", classifyMangaFire403(it))
+        }
+        response(403, "<html>not a shape JSON error</html>").use {
+            assertEquals("UNCLASSIFIED", classifyMangaFire403(it))
+        }
+        response(200, """{"items":[]}""").use {
+            assertEquals("NOT_403", classifyMangaFire403(it))
+        }
+    }
+
     private suspend fun runMangaAllCiWebviewMangaFireChapterGate(
         works: List<Pair<String, String>>,
         runCiSolverPilot: Boolean = false,
@@ -3166,6 +3214,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         val providerId = ProviderId(manifest.id)
         val signedApi = AtomicReference<String?>(null)
         val sourceHttp = AtomicReference("NONE")
+        val challenge403 = AtomicReference("NOT_OBSERVED")
         // This is the actual signed provider Browser Host fallback, not a
         // second independent request to the same API URL from the test.
         val browserSuccess = AtomicInteger(0)
@@ -3212,6 +3261,9 @@ class ScriptProviderReadingGatewayIsolationTest {
                                 else -> "OTHER"
                             },
                         )
+                        if (response.code == 403) {
+                            challenge403.set(classifyMangaFire403(response))
+                        }
                     }
                     response
                 }
@@ -3223,6 +3275,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         for ((id, title) in works) {
             signedApi.set(null)
             sourceHttp.set("NONE")
+            challenge403.set("NOT_OBSERVED")
             browserSuccess.set(0)
             browserAttempts.set(0)
             browserFailure.set("NONE")
@@ -3382,6 +3435,13 @@ class ScriptProviderReadingGatewayIsolationTest {
                 "MANGAALL_CI_CHAPTER|work=$id|phase=API|signedUrl=$urlSeen" +
                     "|http=${sourceHttp.get()}|transport=$transport|json=$sourceJson",
             )
+            if (sourceHttp.get() == "403") {
+                // The already-observed response, no duplicate source call.
+                // Never publish the JSON, challenge HTML or request URL.
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_FIRE_403|work=$id|kind=${challenge403.get()}",
+                )
+            }
             // Typed, response-body-free evidence from the very same Browser Host
             // invocation used by the signed code10 adapter. A 403 followed by
             // an unavailable WebView is not equivalent to a JSON-bearing 200.
