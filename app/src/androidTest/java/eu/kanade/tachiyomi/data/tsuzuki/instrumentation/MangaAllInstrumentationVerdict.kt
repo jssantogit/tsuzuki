@@ -64,7 +64,7 @@ internal object MangaAllInstrumentationVerdict {
         Regex(
             """MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)\|phase=API""" +
                 """\|signedUrl=(OBSERVED|NOT_OBSERVED)\|http=(NONE|200|403|OTHER)""" +
-                """\|browser=(VALID_JSON|INCONCLUSIVE)""",
+                """\|transport=(HTTP|BROWSER|NONE)\|json=(VALIDATED|UNVERIFIED)""",
         ),
         Regex(
             """MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)\|phase=LOOKUP""" +
