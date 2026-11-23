@@ -40,6 +40,13 @@ internal object MangaAllInstrumentationVerdict {
                 """\|workId=(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}""" +
                 """\|chapterId=[A-Za-z0-9._:-]{1,160}\|language=en""",
         ),
+        // One unified signed-code10 lookup: the three source candidate counts
+        // are diagnostic only, never a canonical identity grant.
+        Regex(
+            """MANGAALL_CI_SOURCE\\|work=(punpun|koe|akame)""" +
+                """\\|source=(mangadex|mangadot|mangafire)""" +
+                """\\|candidates=[0-9]{1,2}\\|lookup=(COMPLETE|PARTIAL)""",
+        ),
         // Test-only CI Android emulator. No sensitive browser state, URLs,
         // cookies, challenge payloads or external IDs are allowed.
         // Separate CI-only MangaFire chapter/cursor proof; no HIDs or chapter
@@ -50,22 +57,22 @@ internal object MangaAllInstrumentationVerdict {
                 """RENDERER_EXITED|TIMEOUT|PROFILE_UNSUPPORTED)""",
         ),
         Regex(
-            """MANGAALL_CI_CHAPTER\|work=(punpun|koe)\|phase=LOOKUP_FAILURE""" +
+            """MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)\|phase=LOOKUP_FAILURE""" +
                 """\|cause=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|""" +
                 """UNCLASSIFIED_ERROR)\|http=(NONE|200|403|OTHER)""",
         ),
         Regex(
-            """MANGAALL_CI_CHAPTER\|work=(punpun|koe)\|phase=API""" +
+            """MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)\|phase=API""" +
                 """\|signedUrl=(OBSERVED|NOT_OBSERVED)\|http=(NONE|200|403|OTHER)""" +
                 """\|browser=(VALID_JSON|INCONCLUSIVE)""",
         ),
         Regex(
-            """MANGAALL_CI_CHAPTER\|work=(punpun|koe)\|phase=LOOKUP""" +
+            """MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)\|phase=LOOKUP""" +
                 """\|outcome=(COMPLETE|CURSOR_LIMIT|READ_ERROR|TOO_LARGE|TIMEOUT|OTHER|""" +
                 """INVALID_IDENTITY|IDENTITY_CONFLICT)\|pages=[0-8]\|candidates=[0-9]{1,2}""",
         ),
         Regex(
-            """MANGAALL_CI_CHAPTER\|work=(punpun|koe)""" +
+            """MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)""" +
                 """\|outcome=(READY|INCONCLUSIVE)\|pages=[0-4]""" +
                 """\|count=([0-9]|[1-9][0-9]|[1-9][0-9]{2})""" +
                 """\|chapterOne=(YES|NO|MULTIPLE|UNVERIFIED)""" +
@@ -84,7 +91,7 @@ internal object MangaAllInstrumentationVerdict {
                 """RENDERER_EXITED|TIMEOUT|PROFILE_UNSUPPORTED)""",
         ),
         Regex(
-            """MANGAALL_CI_WEBVIEW\|work=(punpun|koe)""" +
+            """MANGAALL_CI_WEBVIEW\|work=(punpun|koe|akame)""" +
                 """\|api=(VALID_JSON|BLOCKED|NOT_OBSERVED)\|candidates=[0-9]{1,2}""",
         ),
         Regex(
