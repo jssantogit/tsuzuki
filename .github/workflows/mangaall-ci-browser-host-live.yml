@@ -44,6 +44,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The manifest-only gate compares HEAD to its parent. A one-commit
+          # shallow clone treats HEAD as a root and lists the entire tree.
+          fetch-depth: 2
           persist-credentials: false
       - name: Verify exact scope and authorized live request before any source access
         id: approve
