@@ -2746,7 +2746,7 @@ class ScriptProviderReadingGatewayIsolationTest {
     }
 
     /** Three real signed code10 source lookups, on the same Android CI WebView. */
-    @Test(timeout = 540_000L)
+    @Test(timeout = 720_000L)
     fun mangaAllCode10CiWebviewThreeWorks_liveSourceAndChapterAudit() = runBlocking {
         runMangaAllCiWebviewMangaFireChapterGate(
             listOf(
