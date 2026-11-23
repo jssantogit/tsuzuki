@@ -2836,10 +2836,11 @@ class ScriptProviderReadingGatewayIsolationTest {
                 }
                 val success = response as ProviderCallResult.Success
                 pages++
-                if (success.value.items.any {
-                        !Regex("mangafire:[A-Za-z0-9_-]{1,128}").matches(it.providerChapterId)
-                    }
-                ) {
+                val chapterIdFormat = Regex("mangafire:[A-Za-z0-9_-]{1,128}")
+                val invalidIdentity = success.value.items.any {
+                    !chapterIdFormat.matches(it.providerChapterId)
+                }
+                if (invalidIdentity) {
                     reason = "INVALID_IDENTITY"
                     break
                 }
@@ -2871,16 +2872,16 @@ class ScriptProviderReadingGatewayIsolationTest {
             }
             val ready = outcomeReason == "NONE"
             if (ready) readyWorks++
+            val chapterOutcome = if (ready) "READY" else "INCONCLUSIVE"
             MangaAllInstrumentationVerdict.publish(
-                "MANGAALL_CI_CHAPTER|work=$id|outcome=" +
-                    (if (ready) "READY" else "INCONCLUSIVE") +
+                "MANGAALL_CI_CHAPTER|work=$id|outcome=$chapterOutcome" +
                     "|pages=$pages|count=${chapterIds.size.coerceAtMost(999)}" +
                     "|chapterOne=$chapterOne|reason=$outcomeReason",
             )
         }
+        val chapterGate = if (readyWorks == 2) "CHAPTERS_ACCEPTED" else "INCONCLUSIVE"
         MangaAllInstrumentationVerdict.publish(
-            "MANGAALL_CI_CHAPTER|outcome=" +
-                (if (readyWorks == 2) "CHAPTERS_ACCEPTED" else "INCONCLUSIVE") +
+            "MANGAALL_CI_CHAPTER|outcome=$chapterGate" +
                 "|ready=$readyWorks|works=2|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
         )
     }
