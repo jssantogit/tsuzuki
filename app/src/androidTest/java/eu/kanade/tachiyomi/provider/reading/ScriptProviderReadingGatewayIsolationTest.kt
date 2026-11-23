@@ -2360,11 +2360,15 @@ class ScriptProviderReadingGatewayIsolationTest {
         val context = instrumentation.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)
 
+        MangaAllInstrumentationVerdict.publish("MANGAALL_A54_PROFILE|phase=STARTED")
         MangaFireBrowserSessionTestGate.reset()
-        context.startActivity(
+        // Synchronous launch lets the instrumented runner observe startup
+        // crashes instead of silently timing out with no on-screen activity.
+        instrumentation.startActivitySync(
             Intent(context, MangaFireBrowserSessionTestActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
+        MangaAllInstrumentationVerdict.publish("MANGAALL_A54_PROFILE|phase=ACTIVITY_REQUESTED")
         val operatorFinished = withContext(Dispatchers.IO) {
             MangaFireBrowserSessionTestGate.awaitOperator(150)
         }
@@ -2374,6 +2378,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             )
             return@runBlocking
         }
+        MangaAllInstrumentationVerdict.publish("MANGAALL_A54_PROFILE|phase=OPERATOR_CONFIRMED")
 
         val archive = instrumentation.context.assets
             .open("mangaall/code10-published-package.tsz").use { it.readBytes() }
