@@ -12,6 +12,7 @@ on:
       - 'app/src/debug/java/eu/kanade/tachiyomi/provider/runtime/MangaFireBrowserSessionTestActivity.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
       - '.github/scripts/run_mangaall_a54_browser_profile.sh'
+      - '.github/scripts/run_mangaall_a54_termux.sh'
       - '.github/workflows/mangaall-a54-browser-profile-apks.yml'
       - 'docs/mangaall-a54-interactive-browser-profile-validation-20261122.md'
   workflow_dispatch:
@@ -32,6 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n .github/scripts/run_mangaall_a54_browser_profile.sh
+          bash -n .github/scripts/run_mangaall_a54_termux.sh
           python3 - <<'PY'
           from pathlib import Path
           activity = Path('app/src/debug/java/eu/kanade/tachiyomi/provider/runtime/MangaFireBrowserSessionTestActivity.kt')
