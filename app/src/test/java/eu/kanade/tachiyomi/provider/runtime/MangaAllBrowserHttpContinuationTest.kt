@@ -20,9 +20,9 @@ class MangaAllBrowserHttpContinuationTest {
         continuation.mainFrameStarted()
         continuation.mayReadCompletedPage() shouldBe true
 
-        continuation.deferFirstRejection(ProviderBrowserFailure.HTTP_REJECTED) shouldBe true
+        continuation.deferFirstRejection(ProviderBrowserFailure.UPSTREAM_CHALLENGE) shouldBe true
         continuation.mayReadCompletedPage() shouldBe false
-        continuation.firstDeferredFailure() shouldBe ProviderBrowserFailure.HTTP_REJECTED
+        continuation.firstDeferredFailure() shouldBe ProviderBrowserFailure.UPSTREAM_CHALLENGE
 
         // A real subsequent main-frame navigation is required.
         continuation.mainFrameStarted()
@@ -40,9 +40,10 @@ class MangaAllBrowserHttpContinuationTest {
     }
 
     @Test
-    fun `only HTTP rejection families are eligible for passive continuation`() {
+    fun `only explicitly marked challenges are eligible for passive continuation`() {
         val continuation = MangaAllBrowserHttpContinuation(enabled = true)
         continuation.mainFrameStarted()
+        continuation.deferFirstRejection(ProviderBrowserFailure.HTTP_REJECTED) shouldBe false
         continuation.deferFirstRejection(ProviderBrowserFailure.NAVIGATION) shouldBe false
         continuation.deferFirstRejection(ProviderBrowserFailure.TLS) shouldBe false
         continuation.deferFirstRejection(ProviderBrowserFailure.RENDERER_GONE) shouldBe false
@@ -50,12 +51,21 @@ class MangaAllBrowserHttpContinuationTest {
     }
 
     @Test
+    fun `ordinary 403 never consumes the browser continuation budget`() {
+        val continuation = MangaAllBrowserHttpContinuation(enabled = true)
+        continuation.mainFrameStarted()
+        continuation.deferFirstRejection(ProviderBrowserFailure.HTTP_REJECTED) shouldBe false
+        continuation.firstDeferredFailure() shouldBe null
+        continuation.mayReadCompletedPage() shouldBe true
+    }
+
+    @Test
     fun `unchanged first rejected main frame fails closed at deadline`() {
         val continuation = MangaAllBrowserHttpContinuation(enabled = true)
         continuation.mainFrameStarted()
-        continuation.deferFirstRejection(ProviderBrowserFailure.HTTP_REJECTED) shouldBe true
+        continuation.deferFirstRejection(ProviderBrowserFailure.UPSTREAM_CHALLENGE) shouldBe true
         continuation.mayReadCompletedPage() shouldBe false
         continuation.mayReadCompletedPage() shouldBe false
-        continuation.firstDeferredFailure() shouldBe ProviderBrowserFailure.HTTP_REJECTED
+        continuation.firstDeferredFailure() shouldBe ProviderBrowserFailure.UPSTREAM_CHALLENGE
     }
 }
