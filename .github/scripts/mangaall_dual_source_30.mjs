@@ -58,6 +58,29 @@ const [dexModule, dotModule] = await Promise.all([
 ]);
 assert.deepEqual(Object.keys(dexModule.default.reading).sort(), ['chapters', 'lookup', 'pages']);
 assert.deepEqual(Object.keys(dotModule.default.reading).sort(), ['chapters', 'lookup', 'pages']);
+// The unchanged signed MangaDot module stops lookup after 3 broad source
+// pages, even where the search response explicitly advertises more pages.
+// Lift only that bound to 8 in this UNSIGNED analysis to match the current
+// Host V1 lookup-page budget. Page 9 remains INCOMPLETE, never "no match".
+const originalDotSource = readFileSync(path.join(
+  sourceRoot, 'modules/sources/mangadot/modules/mangadot.js',
+), 'utf8');
+const sourcePageLimit = 'if (n > 3) throw new Error("MangaAll bounded source search exhausted");';
+assert.equal(originalDotSource.split(sourcePageLimit).length, 2,
+  'MangaDot source bound changed: review the pinned adapter before live traffic');
+const originalHttpImport = 'from "./http.js"';
+assert.equal(originalDotSource.split(originalHttpImport).length, 2,
+  'MangaDot source import changed');
+const httpModuleUri = pathToFileURL(path.join(
+  sourceRoot, 'modules/sources/mangadot/modules/http.js',
+)).href;
+const experimentalDotCode = originalDotSource
+  .replace(sourcePageLimit,
+    'if (n > 8) throw new Error("MangaAll bounded source search exhausted");')
+  .replace(originalHttpImport, 'from "' + httpModuleUri + '"');
+const extendedMangaDot = await import('data:text/javascript;base64,' +
+  Buffer.from(experimentalDotCode, 'utf8').toString('base64'));
+assert.equal(typeof extendedMangaDot.lookup, 'function');
 // Test-only correction: the signed MangaDot adapter yields a complete
 // upstream chapter list in one Host-sized result (often >64KiB). Preserve all
 // original source items and split only OUTPUT into <=48KiB/200-item pages.
@@ -87,6 +110,7 @@ function granularPage(items, offset, fingerprint) {
 }
 const granularMangaDotAdapter = {
   ...dotModule.default.reading,
+  lookup: extendedMangaDot.lookup,
   async chapters(input) {
     const workId = input?.binding?.externalWorkId;
     const language = input?.binding?.facetId;
@@ -434,6 +458,7 @@ const report = {
   hostRepository: 'jssantogit/tsuzuki', sourceRepositoryCommit: PROVIDER_SHA,
   originalCode10SignedPackageChanged: false, adapterRouterModification: 'SOURCE_IDS_ONLY_IN_MEMORY',
   chapterAdaptation: 'MANGADOT_IN_MEMORY_48K_200_NO_RELEASE',
+  lookupAdaptation: 'MANGADOT_EIGHT_SOURCE_PAGES_IN_MEMORY',
   sourceSet: SOURCES, shard, shardCount: count, totalWorkCount: 30,
   sourceHttp: 'REAL_GITHUB_ACTIONS_FETCH', canonical: 'NOT_TESTED',
   readerPixels: 'NOT_TESTED', sourceRequestBudget: 320,
