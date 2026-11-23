@@ -13,6 +13,10 @@ on:
       - '.github/scripts/test_mangaall_ci_fire_source_gate.py'
       - '.github/scripts/run_mangaall_ci_webview_android.sh'
       - '.github/scripts/run_mangaall_fire_source_allowlist_offline.sh'
+      - '.github/workflows/mangaall-ci-browser-host-live.yml'
+      - 'app/src/debug/AndroidManifest.xml'
+      - 'app/src/debug/assets/mangafire-ci-solver.html'
+      - 'app/src/debug/java/eu/kanade/tachiyomi/provider/runtime/MangaFireCiShapeSolverActivity.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllInstrumentationVerdict.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
   workflow_dispatch:
@@ -61,6 +65,22 @@ jobs:
           assert 'MANGAALL_CI_FIRE_SOURCE|work=$id' in scope
           assert 'mangaFireLookupComplete' in scope
           assert 'mangaDotPageFourPending' in scope
+          assert 'MangaFireCiShapeSolverGate.ACK' in scope
+          assert 'MANGAALL_CI_SHAPE_SOLVER|outcome=$solver' in scope
+          live=Path('.github/workflows/mangaall-ci-browser-host-live.yml').read_text()
+          assert "if gate == 'shape':" in live
+          assert 'I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE' in live
+          debug=Path('app/src/debug/AndroidManifest.xml').read_text()
+          release=Path('app/src/main/AndroidManifest.xml').read_text()
+          assert 'MangaFireCiShapeSolverActivity' in debug
+          assert 'MangaFireCiShapeSolverActivity' not in release
+          solver=Path('app/src/debug/assets/mangafire-ci-solver.html').read_text()
+          assert 'Array.from({length: 2}, solve)' in solver
+          assert 'Array.from({length: 10}, solve)' not in solver
+          activity=Path('app/src/debug/java/eu/kanade/tachiyomi/provider/runtime/MangaFireCiShapeSolverActivity.kt').read_text()
+          assert 'WebViewCompat.addWebMessageListener' in activity
+          assert 'https://mangafire.to' in activity
+          assert 'I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE' in activity
           print('MANGAALL_CI_SOURCE_EVIDENCE|offline=PASS|duplicate_live_API=DENIED|signed_code10=UNCHANGED|unified=NOT_PROVEN')
           PY
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
