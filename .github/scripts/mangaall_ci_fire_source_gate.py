@@ -160,6 +160,17 @@ def evaluate(lines: list[str], require_edge: bool = False) -> tuple[bool, str]:
                                 for work in WORKS for source in SOURCES):
         return False, "THREE_SOURCE_MATRIX_MISSING"
     if records.count(SUMMARY) != 1:
+        # An edge-produced HTML 403 on all three original signed API calls
+        # is more precise than the Browser Host's later rejection, cancellation
+        # or timeout. This classifies a response, NOT the upstream WAF rule.
+        # It can NEVER result in a source-only or global PASS.
+        if all(
+            api.get(work) == ("OBSERVED", "403", "NONE", "UNVERIFIED") and
+            edge403.get(work) == "CF_SERVER_HTML" and
+            challenge403.get(work) == "UNCLASSIFIED"
+            for work in WORKS
+        ):
+            return False, "MANGAFIRE_CF_SERVER_HTML_HTTP403"
         # Preserve the actual source failure instead of hiding the real
         # HTTP403 behind a generic missing PASS summary. Never treat a
         # blocked API as an empty MangaFire catalog or a chapter defect.
