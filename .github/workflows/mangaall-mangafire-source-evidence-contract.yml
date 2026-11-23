@@ -8,6 +8,8 @@ on:
       - '.github/workflows/mangaall-mangafire-source-evidence-contract.yml'
       - '.github/scripts/mangaall_ci_three_gate.py'
       - '.github/scripts/test_mangaall_ci_three_gate.py'
+      - '.github/scripts/mangaall_ci_fire_source_gate.py'
+      - '.github/scripts/test_mangaall_ci_fire_source_gate.py'
       - '.github/scripts/run_mangaall_ci_webview_android.sh'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllInstrumentationVerdict.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
@@ -34,6 +36,7 @@ jobs:
           set -euo pipefail
           bash -n .github/scripts/run_mangaall_ci_webview_android.sh
           python3 .github/scripts/test_mangaall_ci_three_gate.py
+          python3 .github/scripts/test_mangaall_ci_fire_source_gate.py
           python3 - <<'PY'
           from pathlib import Path
           test=Path('app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt').read_text()
@@ -49,7 +52,10 @@ jobs:
           assert 'signedApi.getAndSet(null)' in scope
           assert 'sourceCandidates["mangafire"]' in scope
           assert 'code10-published-package.tsz' in scope
-          print('MANGAALL_CI_SOURCE_EVIDENCE|offline=PASS|duplicate_live_API=DENIED|signed_code10=UNCHANGED')
+          assert 'MANGAALL_CI_FIRE_SOURCE|work=$id' in scope
+          assert 'mangaFireLookupComplete' in scope
+          assert 'mangaDotPageFourPending' in scope
+          print('MANGAALL_CI_SOURCE_EVIDENCE|offline=PASS|duplicate_live_API=DENIED|signed_code10=UNCHANGED|unified=NOT_PROVEN')
           PY
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
