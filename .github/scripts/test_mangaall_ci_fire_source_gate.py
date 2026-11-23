@@ -32,7 +32,7 @@ def rejected(edits, expected):
 
 good = fixture()
 assert evaluate(good) == (True, "SIGNED_MANGAFIRE_3_SOURCE_CHAPTERS_ACCEPTED_UNIFIED_NOT_PROVEN")
-assert evaluate(list(reversed(good))[0] is True
+assert evaluate(list(reversed(good)))[0] is True
 rejected([("lookup=COMPLETE|api=VALIDATED", "lookup=INCOMPLETE|api=VALIDATED")], "FIRE_SOURCE_NOT_READY")
 rejected([("chapters=COMPLETE|chapterOne=YES", "chapters=INCOMPLETE|chapterOne=YES")], "FIRE_SOURCE_NOT_READY")
 rejected([("json=VALIDATED", "json=UNVERIFIED")], "SOURCE_JSON_NOT_PROVEN")
