@@ -1,0 +1,126 @@
+name: MangaALL — CI Android WebView real MangaFire signed API gate (opt-in)
+# Test-only, same isolated Host profile as the successful physical A54
+# experiment. No user hardware, secrets, cookie replay, solver or release changes.
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge:
+        description: 'Type I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE to authorize two real signed-code10 title checks'
+        required: true
+        type: string
+  push:
+    branches: ['probe/mangaall-a54-browser-profile-validation-*']
+    paths:
+      - '.github/mangaall-ci-webview-request.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-ci-webview-live-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-android-webview:
+    name: Real signed code10 / three-source lookup / genuine Android Browser Host
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify exact scope and authorized live request before any source access
+        env:
+          EVENT: ${{ github.event_name }}
+          MANUAL_ACK: ${{ inputs.acknowledge }}
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/run_mangaall_ci_webview_android.sh
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          approved = 'I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE'
+          works = ['Oyasumi Punpun', 'Koe no Katachi']
+          if os.environ['EVENT'] == 'push':
+              record = Path('.github/mangaall-ci-webview-request.json').read_bytes()
+              assert len(record) <= 256
+              manifest = json.loads(record)
+              assert type(manifest) is dict and set(manifest) == {'acknowledge', 'works'}
+              assert manifest == {'acknowledge': approved, 'works': works}
+          else:
+              assert os.environ['EVENT'] == 'workflow_dispatch'
+              assert os.environ['MANUAL_ACK'] == approved
+          release = Path('app/src/main/AndroidManifest.xml').read_text()
+          debug = Path('app/src/debug/AndroidManifest.xml').read_text()
+          assert 'MangaFireCiBrowserWarmupActivity' in debug
+          assert 'MangaFireCiBrowserWarmupActivity' not in release
+          print('MANGAALL_CI_WEBVIEW|scope=2_WORKS|code10=ORIGINAL_SIGNED|profile=ISOLATED|external=NOT_STARTED')
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 195502f981bd776a68feebde3efc6d20f55cca65
+          path: signed-code10
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact immutable P-256 code10 and stage only androidTest asset
+        run: |
+          set -euo pipefail
+          (cd signed-code10 && node tooling/verify_index.mjs)
+          python3 - <<'PY'
+          import hashlib, json, shutil
+          from pathlib import Path
+          root = Path('signed-code10')
+          index = json.loads((root/'dist/index.payload.json').read_text())
+          assert index['repositoryId'] == 'app.tsuzuki.providers'
+          assert index['sequence'] == 36
+          works = [p for p in index['providers'] if p['providerId'] == 'app.tsuzuki.mangaall']
+          assert len(works) == 1
+          digest = 'bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f'
+          assert works[0]['versionCode'] == 10 and works[0]['versionName'] == '0.5.5'
+          assert works[0]['sha256'] == digest
+          asset = root/'dist/providers/app.tsuzuki.mangaall-10.tsz'
+          assert hashlib.sha256(asset.read_bytes()).hexdigest() == digest
+          out = Path('app/src/androidTest/assets/mangaall/code10-published-package.tsz')
+          out.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copyfile(asset, out)
+          print('MANGAALL_CI_WEBVIEW|signedPackage=P256_VALID|code=10|index=36')
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Compile exact Android production Host plus test-only warmup
+        run: |
+          ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest
+          ./gradlew :app:testDebugUnitTest --tests eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfilesTest
+      - name: Enable KVM for ephemeral Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Execute actual signed code10 2-work API gate on emulated Android WebView
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        env:
+          MANGAALL_CI_WEBVIEW_ACK: I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_ci_webview_android.sh
+      - name: Retain sanitized session/JSON verdict only; never browser data
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0 # v7.0.1
+        with:
+          name: mangaall-ci-webview-signed-api-verdict
+          path: .github/results/mangaall-ci-webview/verdict.txt
+          if-no-files-found: warn
+          retention-days: 3
