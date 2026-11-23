@@ -2361,6 +2361,10 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=HTTP_REJECTED",
             "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=PROFILE_UNSUPPORTED",
             "MANGAALL_CI_WEBVIEW|work=punpun|api=VALID_JSON|candidates=1",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=UNSOLVED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=UNSUPPORTED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=HTTP_REJECTED|mode=DEBUG_ONLY",
             "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=0|outcome=NOT_USED",
             "MANGAALL_CI_BROWSER_FALLBACK|work=koe|attempts=1|outcome=UPSTREAM_CHALLENGE",
             "MANGAALL_CI_BROWSER_FALLBACK|work=akame|attempts=1|outcome=SUCCEEDED",
@@ -2401,6 +2405,10 @@ class ScriptProviderReadingGatewayIsolationTest {
         val bad = listOf(
             "MANGAALL_CI_FIRE_SOURCE|work=punpun|lookup=COMPLETE" +
                 "|api=VALIDATED|chapters=COMPLETE|chapterOne=YES|outcome=SOURCE_READY|cookie=secret",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=PRODUCTION",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=DEBUG_ONLY|cookie=secret",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=DEBUG_ONLY|captchaImage=data:",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=TOKEN_EXPORTED|mode=DEBUG_ONLY",
             "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=1" +
                 "|outcome=UPSTREAM_CHALLENGE|url=https://mangafire.to",
             "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=10|outcome=SUCCEEDED",
