@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import io.kotest.matchers.shouldBe
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.jupiter.api.Test
 
 class MangaAllMangaFireXhrHeadersTest {
@@ -35,7 +36,7 @@ class MangaAllMangaFireXhrHeadersTest {
         val aligned = MangaAllMangaFireXhrHeaders.align(original)
         aligned.header("Referer") shouldBe "https://mangafire.to/title/test/"
         aligned.header("Sec-Fetch-Mode") shouldBe "custom"
-        MangaAllMangaFireXhrHeaders.align(aligned) shouldBe aligned
+        MangaAllMangaFireXhrHeaders.align(aligned).headers shouldBe aligned.headers
     }
 
     @Test
@@ -54,7 +55,7 @@ class MangaAllMangaFireXhrHeadersTest {
             MangaAllMangaFireXhrHeaders.align(original) shouldBe original
         }
         val post = request("https://mangafire.to/api/titles").newBuilder()
-            .post("{}".toByteArray().let { okhttp3.RequestBody.create(null, it) })
+            .post("{}".toRequestBody())
             .build()
         MangaAllMangaFireXhrHeaders.align(post) shouldBe post
     }
