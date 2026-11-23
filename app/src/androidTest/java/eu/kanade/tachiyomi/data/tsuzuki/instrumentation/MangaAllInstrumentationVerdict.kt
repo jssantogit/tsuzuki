@@ -90,8 +90,8 @@ internal object MangaAllInstrumentationVerdict {
         // response: only a closed family, never a server value, response
         // body, challenge token, cookie, header block or signed URL.
         Regex(
-            """MANGAALL_CI_FIRE_403_EDGE\\|work=(punpun|koe|akame)""" +
-                """\\|family=(CF_MITIGATED|JSON|CF_SERVER_HTML|OTHER_HTML|CF_SERVER_OTHER|OTHER)""",
+            """MANGAALL_CI_FIRE_403_EDGE\|work=(punpun|koe|akame)""" +
+                """\|family=(CF_MITIGATED|JSON|CF_SERVER_HTML|OTHER_HTML|CF_SERVER_OTHER|OTHER)""",
         ),
         // Final-page JS diagnostics are distinct from the initial commit.
         // A PENDING value is inconclusive, never evidence of success.
