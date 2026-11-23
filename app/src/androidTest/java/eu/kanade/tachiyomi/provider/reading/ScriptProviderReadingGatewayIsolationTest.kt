@@ -2788,7 +2788,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 "MANGAALL_CI_CHAPTER|outcome=INCONCLUSIVE|ready=0|works=${works.size}" +
                     "|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
             )
-            return@runBlocking
+            return
         }
 
         val archive = instrumentation.context.assets.open("mangaall/code10-published-package.tsz")
@@ -2971,7 +2971,13 @@ class ScriptProviderReadingGatewayIsolationTest {
             // Inspect a MangaFire candidate even if another source has a
             // deferred lookup failure. This is diagnostic evidence ONLY: a
             // globally incomplete lookup cannot yield READY/canonical binding.
-            val workId = found.keys.singleOrNull()
+            val workId = if (lookupOutcome == "INVALID_IDENTITY" ||
+                lookupOutcome == "IDENTITY_CONFLICT"
+            ) {
+                null
+            } else {
+                found.keys.singleOrNull()
+            }
             if (workId == null) {
                 val reason = when {
                     lookupOutcome != "COMPLETE" -> "LOOKUP_INCOMPLETE"
