@@ -2740,6 +2740,27 @@ class ScriptProviderReadingGatewayIsolationTest {
      */
     @Test(timeout = 480_000L)
     fun mangaAllCode10CiWebviewMangaFireChapters_checksRealPagination() = runBlocking {
+        runMangaAllCiWebviewMangaFireChapterGate(
+            listOf("punpun" to "Oyasumi Punpun", "koe" to "Koe no Katachi"),
+        )
+    }
+
+    /** Three real signed code10 source lookups, on the same Android CI WebView. */
+    @Test(timeout = 540_000L)
+    fun mangaAllCode10CiWebviewThreeWorks_liveSourceAndChapterAudit() = runBlocking {
+        runMangaAllCiWebviewMangaFireChapterGate(
+            listOf(
+                "punpun" to "Oyasumi Punpun",
+                "koe" to "Koe no Katachi",
+                "akame" to "Akame ga Kill!",
+            ),
+        )
+    }
+
+    private suspend fun runMangaAllCiWebviewMangaFireChapterGate(
+        works: List<Pair<String, String>>,
+    ) {
+        require(works.size in 2..3)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         assertEquals(
             "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE",
@@ -2764,7 +2785,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         instrumentation.runOnMainSync { activity.finish() }
         if (warmup == "PROFILE_UNSUPPORTED") {
             MangaAllInstrumentationVerdict.publish(
-                "MANGAALL_CI_CHAPTER|outcome=INCONCLUSIVE|ready=0|works=2" +
+                "MANGAALL_CI_CHAPTER|outcome=INCONCLUSIVE|ready=0|works=${works.size}" +
                     "|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
             )
             return@runBlocking
@@ -2813,13 +2834,18 @@ class ScriptProviderReadingGatewayIsolationTest {
                 .build(),
         )
         var readyWorks = 0
-        for ((id, title) in listOf("punpun" to "Oyasumi Punpun", "koe" to "Koe no Katachi")) {
+        for ((id, title) in works) {
             signedApi.set(null)
             sourceHttp.set("NONE")
             // Code10 is a single three-source router with deferred source
             // continuations. Page one alone does not establish an exhaustive
             // MangaFire selection. Drain at most eight bounded Host pages.
             val found = linkedMapOf<String, tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate>()
+            val sourceCandidates = mapOf(
+                "mangadex" to hashSetOf<String>(),
+                "mangadot" to hashSetOf<String>(),
+                "mangafire" to hashSetOf<String>(),
+            )
             val seenLookupCursors = hashSetOf<String>()
             var lookupCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
             var lookupPages = 0
@@ -2867,7 +2893,15 @@ class ScriptProviderReadingGatewayIsolationTest {
                         val success = response as ProviderCallResult.Success
                         lookupPages++
                         for (candidate in success.value.items) {
-                            if (!candidate.externalWorkId.startsWith("mangafire:")) continue
+                            val source = sourceCandidates.keys.firstOrNull {
+                                candidate.externalWorkId.startsWith("$it:")
+                            }
+                            if (source == null) {
+                                lookupOutcome = "INVALID_IDENTITY"
+                                break
+                            }
+                            requireNotNull(sourceCandidates[source]).add(candidate.externalWorkId)
+                            if (source != "mangafire") continue
                             val workId = candidate.externalWorkId
                             if (!Regex("mangafire:[A-Za-z0-9_-]{1,128}").matches(workId)) {
                                 lookupOutcome = "INVALID_IDENTITY"
@@ -2899,6 +2933,13 @@ class ScriptProviderReadingGatewayIsolationTest {
                 "MANGAALL_CI_CHAPTER|work=$id|phase=LOOKUP|outcome=$lookupOutcome" +
                     "|pages=$lookupPages|candidates=${found.size.coerceAtMost(99)}",
             )
+            for (source in listOf("mangadex", "mangadot", "mangafire")) {
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SOURCE|work=$id|source=$source" +
+                        "|candidates=${requireNotNull(sourceCandidates[source]).size.coerceAtMost(99)}" +
+                        "|lookup=" + (if (lookupOutcome == "COMPLETE") "COMPLETE" else "PARTIAL"),
+                )
+            }
             val signedUrl = signedApi.getAndSet(null)
             val directBody = if (signedUrl == null) {
                 null
@@ -2927,7 +2968,10 @@ class ScriptProviderReadingGatewayIsolationTest {
                 "MANGAALL_CI_CHAPTER|work=$id|phase=API|signedUrl=$urlSeen" +
                     "|http=${sourceHttp.get()}|browser=$browserOutcome",
             )
-            val workId = if (lookupOutcome == "COMPLETE") found.keys.singleOrNull() else null
+            // Inspect a MangaFire candidate even if another source has a
+            // deferred lookup failure. This is diagnostic evidence ONLY: a
+            // globally incomplete lookup cannot yield READY/canonical binding.
+            val workId = found.keys.singleOrNull()
             if (workId == null) {
                 val reason = when {
                     lookupOutcome != "COMPLETE" -> "LOOKUP_INCOMPLETE"
@@ -2998,6 +3042,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             }
             val outcomeReason = when {
                 !complete -> reason
+                lookupOutcome != "COMPLETE" -> "LOOKUP_INCOMPLETE"
                 chapterIds.isEmpty() -> "EMPTY"
                 chapterOneIds.size != 1 -> "CHAPTER_ONE_NOT_ATTESTED"
                 else -> "NONE"
@@ -3016,10 +3061,10 @@ class ScriptProviderReadingGatewayIsolationTest {
                     "|chapterOne=$chapterOne|reason=$outcomeReason",
             )
         }
-        val chapterGate = if (readyWorks == 2) "CHAPTERS_ACCEPTED" else "INCONCLUSIVE"
+        val chapterGate = if (readyWorks == works.size) "CHAPTERS_ACCEPTED" else "INCONCLUSIVE"
         MangaAllInstrumentationVerdict.publish(
             "MANGAALL_CI_CHAPTER|outcome=$chapterGate" +
-                "|ready=$readyWorks|works=2|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
+                "|ready=$readyWorks|works=${works.size}|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
         )
     }
 
