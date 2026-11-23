@@ -2874,6 +2874,33 @@ class ScriptProviderReadingGatewayIsolationTest {
     }
 
     /**
+     * Real Chromium negative control. The exact solver HTML is loaded via
+     * data: instead of trusted HTTPS. A bridge event must never be accepted;
+     * the completed document must be classified without external traffic.
+     */
+    @Test(timeout = 80_000L)
+    fun mangaAllCiShapeSolverExactAsset_opaqueOriginFailsClosedOffline() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        MangaFireCiShapeSolverGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaFireCiShapeSolverActivity::class.java)
+                .putExtra("ciOptIn", MangaFireCiShapeSolverGate.OPAQUE_OFFLINE_ACK)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        try {
+            assertEquals("UNTRUSTED_ORIGIN", MangaFireCiShapeSolverGate.await(30))
+            assertFalse(MangaFireCiShapeSolverGate.hasDocumentReady())
+            assertEquals("OPAQUE", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
+            assertEquals("BRIDGE_MISSING", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+            assertEquals("DATA", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
+    /**
      * Uses the exact, unmodified debug solver HTML — not the minimal
      * synthetic handshake — in an origin-scoped Chromium instance.
      * Both WebSettings.blockNetworkLoads and request interception deny all
