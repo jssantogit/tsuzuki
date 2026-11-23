@@ -110,7 +110,10 @@ class MangaFireCiShapeSolverActivity : Activity() {
         val html = if (bridgeOnly) {
             // No external script, WAF endpoint, image, or HTTP request. The
             // same-origin JS bridge can be tested in CI without a challenge.
-            "<!doctype html><html><head><script>bridge.postMessage('probe')</script></head><body></body></html>"
+            "<!doctype html><html><head><script>" +
+                "bridge.postMessage('stage:DOCUMENT_READY');" +
+                "setTimeout(() => bridge.postMessage('probe'), 0);" +
+                "</script></head><body></body></html>"
         } else {
             runCatching {
                 assets.open("mangafire-ci-solver.html").bufferedReader().use { it.readText() }
@@ -143,8 +146,9 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 sourceOrigin.host == "mangafire.to"
             ) {
                 if (bridgeOnly) {
-                    if (message.data == "probe") {
-                        MangaFireCiShapeSolverGate.complete("BRIDGE_READY")
+                    when (message.data) {
+                        "stage:DOCUMENT_READY" -> MangaFireCiShapeSolverGate.markStage("DOCUMENT_READY")
+                        "probe" -> MangaFireCiShapeSolverGate.complete("BRIDGE_READY")
                     }
                 } else {
                     when (message.data) {
