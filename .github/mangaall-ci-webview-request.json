@@ -1,8 +1,9 @@
 {
   "works": [
     "Oyasumi Punpun",
-    "Koe no Katachi"
+    "Koe no Katachi",
+    "Akame ga Kill!"
   ],
-  "gate": "chapters",
+  "gate": "three",
   "acknowledge": "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE"
 }
