@@ -31,6 +31,7 @@ run_offline_test() {
   fi
 }
 run_offline_test 'mangaAllCiBrowserVerdictContract_rejectsUnboundedOrUntrustedData'
+run_offline_test 'mangaAllCiShapeNativeNavigationClassifier_offline'
 run_offline_test 'mangaAllCiShapeSolverBridge_offlineWithoutNetwork'
 # The real 921-line solver asset must load and emit its first JS stage in
 # the same Chromium profile while *all* HTTP requests are blocked.
