@@ -1,5 +1,15 @@
 package eu.kanade.tachiyomi.provider.reading
 
+import android.content.Intent
+import eu.kanade.tachiyomi.provider.runtime.AndroidProviderBrowserHostService
+import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestActivity
+import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestGate
+import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfiles
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -2334,6 +2344,139 @@ class ScriptProviderReadingGatewayIsolationTest {
     @Test(timeout = 300_000L)
     fun mangaAllSignedCode10LivePages_downloadAndDecodeAtMostTwo() = runBlocking {
         runPublishedMangaAllLivePages(10L)
+    }
+
+    /**
+     * Physical A54, explicit opt-in only: the user completes a normal
+     * MangaFire browser verification in the exact production Provider profile,
+     * then the unchanged signed code10 lookup generates its own API URLs.
+     * Never claim API availability from a cookie or from other two sources.
+     */
+    @Test(timeout = 300_000L)
+    fun mangaAllCode10HumanVerifiedBrowserProfile_checksRealSignedApi() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val args = InstrumentationRegistry.getArguments()
+        assertEquals("I_ACCEPT_MANGAFIRE_A54_INTERACTIVE_TEST", args.getString("mangaAllA54SessionOptIn"))
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+
+        MangaFireBrowserSessionTestGate.reset()
+        context.startActivity(
+            Intent(context, MangaFireBrowserSessionTestActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        val operatorFinished = withContext(Dispatchers.IO) {
+            MangaFireBrowserSessionTestGate.awaitOperator(150)
+        }
+        if (!operatorFinished) {
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_A54_PROFILE|outcome=INCONCLUSIVE|reason=USER_VERIFICATION_NOT_COMPLETED",
+            )
+            return@runBlocking
+        }
+
+        val archive = instrumentation.context.assets
+            .open("mangaall/code10-published-package.tsz").use { it.readBytes() }
+        assertEquals(
+            "bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f",
+            tachiyomi.core.provider.supplychain.sha256Hex(archive),
+        )
+        val manifest = ProviderPackageParser().parse(archive).manifest
+        assertEquals("app.tsuzuki.mangaall", manifest.id)
+        assertEquals(10L, manifest.version.code)
+        val providerId = ProviderId(manifest.id)
+        val capturedSignedApi = AtomicReference<String?>(null)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val url = chain.request().url
+                if (url.scheme == "https" && url.host == "mangafire.to" &&
+                    url.encodedPath == "/api/titles" &&
+                    !url.queryParameter("keyword").isNullOrBlank()
+                ) {
+                    // In-memory only, never included in telemetry / artifacts.
+                    capturedSignedApi.set(url.toString())
+                }
+                chain.proceed(chain.request())
+            }
+            .callTimeout(25, TimeUnit.SECONDS)
+            .build()
+        val gateway = gateway(
+            main = "",
+            providerId = providerId,
+            networkOrigins = requireNotNull(manifest.permissions.network).origins,
+            browserOrigins = manifest.permissions.browser?.origins.orEmpty(),
+            localNetwork = false,
+            packageBytesOverride = archive,
+            baseHttpClient = client,
+        )
+        val works = listOf(
+            "punpun" to "Oyasumi Punpun",
+            "koe" to "Koe no Katachi",
+        )
+        var validApiResponses = 0
+        var providerCandidates = 0
+        try {
+            for ((id, title) in works) {
+                capturedSignedApi.set(null)
+                val lookup = runCatching {
+                    withTimeout(55_000L) {
+                        gateway.lookup(
+                            providerId,
+                            ProviderReadingLookupRequest(
+                                titles = listOf(title),
+                                requestedLanguage = "en",
+                            ),
+                        )
+                    }
+                }.getOrNull()
+                val mangafireObserved = (lookup as? ProviderCallResult.Success)
+                    ?.value?.items?.count { it.externalWorkId.startsWith("mangafire:") }
+                    ?.coerceAtMost(99) ?: 0
+                if (mangafireObserved > 0) providerCandidates++
+
+                val signedApi = capturedSignedApi.getAndSet(null)
+                if (signedApi == null) {
+                    MangaAllInstrumentationVerdict.publish(
+                        "MANGAALL_A54_PROFILE|work=$id|outcome=INCONCLUSIVE" +
+                            "|reason=SIGNED_API_REQUEST_NOT_OBSERVED|mangafireCandidates=$mangafireObserved",
+                    )
+                    continue
+                }
+                val body = withContext(Dispatchers.IO) {
+                    runCatching {
+                        AndroidProviderBrowserHostService(
+                            context = context,
+                            policy = ProviderNetworkPolicy(setOf("https://mangafire.to")),
+                            providerProfileName = ProviderBrowserProfiles.nameFor(manifest.id),
+                            timeoutSeconds = 25L,
+                        ).use { it.readText(signedApi, "body") }
+                    }.getOrNull()
+                }
+                // A challenge interstitial or an HTML response cannot pass.
+                val validJson = body?.let {
+                    runCatching {
+                        val json = JSONObject(it)
+                        json.has("items") && json.optJSONArray("items") != null &&
+                            !json.has("error")
+                    }.getOrDefault(false)
+                } ?: false
+                if (validJson) validApiResponses++
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_A54_PROFILE|work=$id|outcome=" +
+                        (if (validJson) "SIGNED_API_JSON_VALID" else "INCONCLUSIVE") +
+                        "|mangafireCandidates=$mangafireObserved" +
+                        "|browserApi=" + (if (validJson) "VALID_JSON" else "BLOCKED_OR_UNVERIFIED"),
+                )
+            }
+        } finally {
+            capturedSignedApi.set(null)
+        }
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_A54_PROFILE|outcome=" +
+                (if (validApiResponses == 2) "BROWSER_SIGNED_API_ACCEPTED" else "INCONCLUSIVE") +
+                "|signedJson=$validApiResponses|works=2|providerCandidateWorks=$providerCandidates" +
+                "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
     }
 
     private suspend fun runPublishedMangaAllLivePages(signedCode: Long) {
