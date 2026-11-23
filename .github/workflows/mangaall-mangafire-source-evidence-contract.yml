@@ -48,6 +48,9 @@ jobs:
           scope=test[start:end]
           assert 'browserDiagnosticSink = {' in scope
           assert 'browserSuccess.get() > 0' in scope
+          assert 'browserAttempts.incrementAndGet()' in scope
+          assert 'browserFailure.set(' in scope
+          assert 'MANGAALL_CI_BROWSER_FALLBACK|work=$id' in scope
           assert 'sourceJson = if (' in scope
           assert 'phase=API|signedUrl=$urlSeen' in scope
           assert 'AndroidProviderBrowserHostService(' not in scope
