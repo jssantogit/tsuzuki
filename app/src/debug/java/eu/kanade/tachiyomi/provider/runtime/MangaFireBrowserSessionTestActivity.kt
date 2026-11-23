@@ -44,9 +44,11 @@ class MangaFireBrowserSessionTestActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
-            setContentView(TextView(this).apply {
-                text = "WebView com perfis isolados indisponível. Teste inconclusivo."
-            })
+            setContentView(
+                TextView(this).apply {
+                    text = "WebView com perfis isolados indisponível. Teste inconclusivo."
+                },
+            )
             return
         }
 
