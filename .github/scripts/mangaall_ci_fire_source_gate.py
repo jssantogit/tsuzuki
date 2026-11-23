@@ -31,13 +31,13 @@ API = re.compile(
     r"\|transport=(HTTP|BROWSER|NONE)\|json=(VALIDATED|UNVERIFIED)"
 )
 FAILURE = re.compile(
-    r"MANGAALL_CI_CHAPTER\\|work=(punpun|koe|akame)\\|phase=LOOKUP_FAILURE"
-    r"\\|cause=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|UNCLASSIFIED_ERROR)"
-    r"\\|http=(NONE|200|403|OTHER)"
+    r"MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)\|phase=LOOKUP_FAILURE"
+    r"\|cause=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|UNCLASSIFIED_ERROR)"
+    r"\|http=(NONE|200|403|OTHER)"
 )
 BUDGET = re.compile(
-    r"MANGAALL_CI_LOOKUP_BLOCKER\\|work=(punpun|koe|akame)"
-    r"\\|source=MANGADOT\\|reason=PAGE_FOUR_PENDING"
+    r"MANGAALL_CI_LOOKUP_BLOCKER\|work=(punpun|koe|akame)"
+    r"\|source=MANGADOT\|reason=PAGE_FOUR_PENDING"
 )
 CHAPTERS = re.compile(
     r"MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)"
