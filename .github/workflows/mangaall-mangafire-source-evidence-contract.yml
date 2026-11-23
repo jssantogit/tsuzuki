@@ -63,6 +63,10 @@ jobs:
           assert 'sourceCandidates["mangafire"]' in scope
           assert 'code10-published-package.tsz' in scope
           assert 'MANGAALL_CI_FIRE_SOURCE|work=$id' in scope
+          assert 'MANGAALL_CI_FIRE_403|work=$id' in scope
+          assert 'classifyMangaFire403(response)' in scope
+          assert 'response.peekBody(1024)' in test
+          assert 'mangaAllCiMangaFire403Classifier_offlineResponseOnly' in test
           assert 'mangaFireLookupComplete' in scope
           assert 'mangaDotPageFourPending' in scope
           assert 'MangaFireCiShapeSolverGate.ACK' in scope
