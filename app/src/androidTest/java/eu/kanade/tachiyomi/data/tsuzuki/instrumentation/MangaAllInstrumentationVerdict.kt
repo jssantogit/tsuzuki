@@ -52,7 +52,7 @@ internal object MangaAllInstrumentationVerdict {
         Regex(
             """MANGAALL_CI_SHAPE_SOLVER\|outcome=(SOLVED|UNSOLVED|UNSUPPORTED|""" +
                 """HTTP_REJECTED|NAVIGATION_FAILED|TLS_REJECTED|RENDERER_EXITED|""" +
-                """ASSET_INVALID|TIMEOUT)\|mode=DEBUG_ONLY""",
+                """ASSET_INVALID|UNTRUSTED_ORIGIN|TIMEOUT)\|mode=DEBUG_ONLY""",
         ),
         // Last in-memory debug solver phase: known static values only.
         Regex(
