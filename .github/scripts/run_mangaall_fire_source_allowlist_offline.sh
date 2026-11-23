@@ -34,6 +34,9 @@ run_offline_test() {
 # uses live WebSettings, but intercepts ALL requests before any remote access.
 # Test the loaded document's final native URL class and JavaScript origin.
 run_offline_test 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork'
+# Negative control: a data: URL has opaque origin and must NEVER receive
+# the HTTPS-only bridge; the verdict is typed, not a 100s blind timeout.
+run_offline_test 'mangaAllCiShapeSolverExactAsset_opaqueOriginFailsClosedOffline'
 run_offline_test 'mangaAllCiBrowserVerdictContract_rejectsUnboundedOrUntrustedData'
 run_offline_test 'mangaAllCiShapeNativeNavigationClassifier_offline'
 run_offline_test 'mangaAllCiShapeSolverBridge_offlineWithoutNetwork'
