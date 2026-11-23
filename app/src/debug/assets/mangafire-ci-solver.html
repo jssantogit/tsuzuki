@@ -9,8 +9,12 @@ Not a release asset; never log the challenge payload, cookie or image.
 <html lang="en-US">
 <head>
     <title>MangaFire Challenge Solver</title>
-    <script src="https://docs.opencv.org/5.0/opencv.js"></script>
+    <script>bridge.postMessage("stage:DOCUMENT_READY");</script>
+    <script src="https://docs.opencv.org/5.0/opencv.js"
+            onload="bridge.postMessage('stage:OPENCV_IMPORTED')"
+            onerror="bridge.postMessage('stage:OPENCV_IMPORT_FAILED')"></script>
     <script>
+        bridge.postMessage("stage:SOLVER_RUNNING");
         const SCALE_FACTOR = 1.5;
         const ANGULAR_BINS = 72;
         const RADIAL_BINS = 24;
@@ -838,11 +842,14 @@ Not a release asset; never log the challenge payload, cookie or image.
         }
 
         async function generate() {
+          bridge.postMessage("stage:GENERATE_STARTED");
           const response = await fetch("generate");
+          bridge.postMessage(response.ok ? "stage:GENERATE_OK" : "stage:GENERATE_HTTP_ERROR");
           return response.json();
         }
 
         async function verify(captcha_id, dots) {
+          bridge.postMessage("stage:VERIFY_STARTED");
           const response = await fetch("verify", {
             method: "POST",
             body: JSON.stringify({
@@ -850,6 +857,7 @@ Not a release asset; never log the challenge payload, cookie or image.
               dots: dots.join(",")
             })
           });
+          bridge.postMessage(response.ok ? "stage:VERIFY_OK" : "stage:VERIFY_HTTP_ERROR");
           return response.json();
         }
 
