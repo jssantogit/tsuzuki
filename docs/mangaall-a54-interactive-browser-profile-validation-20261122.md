@@ -16,6 +16,26 @@ Only a returned JSON object with a real `items` array and no `error` establishes
 
 Run [MangaALL A54 browser-profile APK workflow](../.github/workflows/mangaall-a54-browser-profile-apks.yml) on the reviewed branch. GitHub Actions only compiles. It checks the original P-256 signed sequence36 code10 archive and stages that exact `.tsz` into `androidTest/assets`, not into the application or shipping provider. The artifact contains a universal `app.tsuzuki.dev` APK plus a corresponding test APK, retained for three days. Nothing is deployed to a real phone from CI.
 
+## Sem computador: Termux + Depuração sem fio no próprio A54
+
+Este caminho dispensa PC, root, Shizuku, Gradle e Git no telefone. A interface de verificação continua sendo o APK **debug isolado** e a sessão de navegação com o mesmo perfil Browser Host do debug; **não** é uma alteração da release.
+
+1. Instale o Termux pela distribuição oficial [F-Droid](https://f-droid.org/en/packages/com.termux/) ou [GitHub](https://github.com/termux/termux-app/releases). Abra o Termux e execute `pkg update && pkg install -y android-tools unzip curl coreutils`, depois `termux-setup-storage` e conceda permissão de arquivos.
+2. No navegador do A54, autenticado no GitHub, baixe o artefato **mangaall-a54-debug-profile-test-apks** da [última CI verde deste workflow](https://github.com/jssantogit/tsuzuki/actions/workflows/mangaall-a54-browser-profile-apks.yml). Deixe o **ZIP** em Downloads, sem extrair manualmente. Artefatos expiram em 3 dias; uma nova execução compile-only pode gerá-los novamente.
+3. Com o aparelho conectado a Wi-Fi, abra **Configurações → Opções do desenvolvedor → Depuração sem fio**. Se o menu não existir, toque 7 vezes em **Número de compilação** em **Sobre o telefone → Informações do software**. Mantenha Configurações e Termux em tela dividida durante o pareamento.
+4. No Termux, baixe o script de execução (texto, branch experimental) e rode:
+
+```bash
+curl -fsSL 'https://raw.githubusercontent.com/jssantogit/tsuzuki/probe/mangaall-a54-browser-profile-validation-20261122/.github/scripts/run_mangaall_a54_termux.sh' -o ~/mangaall-a54-termux.sh
+bash ~/mangaall-a54-termux.sh
+```
+
+O script pergunta se já houve pareamento; quando necessário, informe a **porta de pareamento**, digite o código apenas no prompt local do `adb pair`, depois informe a **porta de conexão**, que é diferente e aparece na tela principal de Depuração sem fio. Usa sempre `127.0.0.1:<porta>`, ADB no próprio aparelho. Se o ZIP tiver sido renomeado pelo navegador, execute `bash ~/mangaall-a54-termux.sh ~/storage/downloads/NOME-REAL.zip`.
+
+O runner de Termux verifica que está em Termux, valida a conexão local `adb -s 127.0.0.1:PORT`, rejeita emulador/outro modelo, extrai temporariamente os dois APKs do ZIP e executa o **mesmo script A54** já documentado. Ao abrir o MangaFire, conclua a verificação normal e toque **Validar sessão**. O resultado fechado é armazenado no diretório privado do Termux: `~/.github/results/mangaall-a54-profile/verdict.txt`.
+
+**Segurança:** não compartilhe código de pareamento, cookies, capturas de challenge ou URLs assinadas. O script não precisa e não recebe essas informações; não desinstala nem limpa o Tsuzuki oficial. A sessão exige interação humana e pode falhar mesmo com o site visualmente aberto — isso é inconclusivo, não é um PASS. Após o teste, você pode desligar Depuração sem fio.
+
 ## Manual physical session (only once APKs exist)
 
 On a computer with Android SDK `adb`, connect your Galaxy A54 with USB debugging authorized. Extract the GitHub Actions artifact, identify the debug app APK and AndroidTest APK and run:
