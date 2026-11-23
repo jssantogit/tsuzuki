@@ -23,15 +23,14 @@ internal class MangaAllBrowserHttpContinuation(
     }
 
     /**
-     * Only the first rejected main-frame may be observed passively.
-     * Repeated 403s must be reported immediately rather than looped.
+     * Only a verified main-frame challenge (cf-mitigated: challenge) can
+     * justify one passive continuation. A plain HTTP 403 has no evidence of
+     * recoverable browser-side verification and must fail immediately,
+     * otherwise each lookup wastes the signed provider's bounded deadline.
      */
     fun deferFirstRejection(failure: ProviderBrowserFailure): Boolean {
         if (!enabled || firstRejection != null ||
-            (
-                failure != ProviderBrowserFailure.HTTP_REJECTED &&
-                    failure != ProviderBrowserFailure.UPSTREAM_CHALLENGE
-                )
+            failure != ProviderBrowserFailure.UPSTREAM_CHALLENGE
         ) {
             return false
         }
