@@ -13,6 +13,8 @@ import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestActivity
 import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestGate
 import eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupActivity
 import eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupGate
+import eu.kanade.tachiyomi.provider.runtime.MangaFireCiShapeSolverActivity
+import eu.kanade.tachiyomi.provider.runtime.MangaFireCiShapeSolverGate
 import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserDiagnostic
 import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfiles
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
@@ -2782,8 +2784,25 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
     }
 
+    /**
+     * Explicit opt-in shape-challenge prototype, debug-only. This is a
+     * dedicated CI scenario; ordinary source gate never invokes a solver.
+     */
+    @Test(timeout = 840_000L)
+    fun mangaAllCode10CiWebviewShapeSolverThreeWorks_liveSourceAndChapterAudit() = runBlocking {
+        runMangaAllCiWebviewMangaFireChapterGate(
+            listOf(
+                "punpun" to "Oyasumi Punpun",
+                "koe" to "Koe no Katachi",
+                "akame" to "Akame ga Kill!",
+            ),
+            runCiSolverPilot = true,
+        )
+    }
+
     private suspend fun runMangaAllCiWebviewMangaFireChapterGate(
         works: List<Pair<String, String>>,
+        runCiSolverPilot: Boolean = false,
     ) {
         require(works.size in 2..3)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -2794,11 +2813,44 @@ class ScriptProviderReadingGatewayIsolationTest {
         val context = instrumentation.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)
         if (works.size == 3) {
-            // Real CI observation: homepage itself rejected by Cloudflare in
-            // successful and unsuccessful API sessions. Avoid an unnecessary
-            // challenged homepage GET; the signed lookup still uses the same
-            // real Android Browser Host and must prove API JSON on its own.
-            MangaAllInstrumentationVerdict.publish("MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=SKIPPED")
+            if (runCiSolverPilot) {
+                // Separate exact opt-in; never run the solver for the ordinary
+                // signed provider CI gate, app UI, or release builds.
+                assertEquals(
+                    MangaFireCiShapeSolverGate.ACK,
+                    InstrumentationRegistry.getArguments().getString("mangaAllCiShapeOptIn"),
+                )
+                MangaFireCiShapeSolverGate.reset()
+                val activity = instrumentation.startActivitySync(
+                    Intent(context, MangaFireCiShapeSolverActivity::class.java)
+                        .putExtra("ciOptIn", MangaFireCiShapeSolverGate.ACK)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                val solver = withContext(Dispatchers.IO) {
+                    MangaFireCiShapeSolverGate.await(100)
+                }
+                instrumentation.runOnMainSync { activity.finish() }
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_SOLVER|outcome=$solver|mode=DEBUG_ONLY",
+                )
+                if (solver != "SOLVED") {
+                    // Do not send another three-source request burst when
+                    // the dedicated site challenge has not been cleared.
+                    MangaAllInstrumentationVerdict.publish(
+                        "MANGAALL_CI_FIRE_SOURCE|outcome=INCONCLUSIVE" +
+                            "|ready=0|works=3|canonical=NOT_TESTED|unified=NOT_PROVEN",
+                    )
+                    MangaAllInstrumentationVerdict.publish(
+                        "MANGAALL_CI_CHAPTER|outcome=INCONCLUSIVE|ready=0|works=3" +
+                            "|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
+                    )
+                    return
+                }
+            } else {
+                // Challenged homepage navigation never helped the original CI
+                // API gate. No attempt to solve challenges without opt-in.
+                MangaAllInstrumentationVerdict.publish("MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=SKIPPED")
+            }
         } else {
             MangaFireCiBrowserWarmupGate.reset()
             val activity = instrumentation.startActivitySync(
