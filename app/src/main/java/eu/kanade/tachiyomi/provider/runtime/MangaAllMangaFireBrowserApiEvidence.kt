@@ -1,7 +1,8 @@
 package eu.kanade.tachiyomi.provider.runtime
 
-import org.json.JSONObject
-import org.json.JSONTokener
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 
 /**
  * After a rejected MangaFire API main frame, reading some subsequent WebView
@@ -13,12 +14,9 @@ import org.json.JSONTokener
  */
 internal object MangaAllMangaFireBrowserApiEvidence {
     fun isApiJson(text: String): Boolean {
-        val value = try {
-            JSONTokener(text).nextValue() as? JSONObject
-        } catch (_: Exception) {
-            null
-        } ?: return false
-        if (value.has("error")) return false
-        return value.optJSONArray("items") != null || value.optJSONObject("data") != null
+        val value = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull()
+            ?: return false
+        if ("error" in value) return false
+        return value["items"] is JsonArray || value["data"] is JsonObject
     }
 }
