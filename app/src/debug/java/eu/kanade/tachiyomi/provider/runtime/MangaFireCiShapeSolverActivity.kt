@@ -23,7 +23,8 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * Uses a bounded (at most 4 challenge trials), Apache-2.0-attributed Keiyoushi
  * solver asset. Never exports clearance cookies, captcha images, request URLs,
- * response bodies, WebView storage or JS bridge messages beyond "true"/"false".
+ * response bodies, WebView storage or JS bridge data other than closed verdict
+ * and fixed enumerated, non-sensitive progress stages.
  * Production Browser Host and signed MangaALL code10 remain unchanged.
  *
  * The caller MUST still validate real signed provider API JSON and chapters.
@@ -34,9 +35,23 @@ internal object MangaFireCiShapeSolverGate {
 
     private val latch = AtomicReference(CountDownLatch(1))
     private val status = AtomicReference("TIMEOUT")
+    private val milestone = AtomicReference("NO_EVENT")
+    private val permittedStages = setOf(
+        "DOCUMENT_READY",
+        "OPENCV_IMPORTED",
+        "OPENCV_IMPORT_FAILED",
+        "SOLVER_RUNNING",
+        "GENERATE_STARTED",
+        "GENERATE_OK",
+        "GENERATE_HTTP_ERROR",
+        "VERIFY_STARTED",
+        "VERIFY_OK",
+        "VERIFY_HTTP_ERROR",
+    )
 
     fun reset() {
         status.set("TIMEOUT")
+        milestone.set("NO_EVENT")
         latch.set(CountDownLatch(1))
     }
 
@@ -58,6 +73,12 @@ internal object MangaFireCiShapeSolverGate {
             latch.get().countDown()
         }
     }
+
+    fun markStage(value: String) {
+        if (value in permittedStages) milestone.set(value)
+    }
+
+    fun lastStage(): String = milestone.get()
 
     fun await(seconds: Long): String {
         require(seconds in 1..120)
@@ -129,6 +150,13 @@ class MangaFireCiShapeSolverActivity : Activity() {
                     when (message.data) {
                         "true" -> MangaFireCiShapeSolverGate.complete("SOLVED")
                         "false" -> MangaFireCiShapeSolverGate.complete("UNSOLVED")
+                        else -> {
+                            if (message.data?.startsWith("stage:") == true) {
+                                MangaFireCiShapeSolverGate.markStage(
+                                    message.data!!.removePrefix("stage:"),
+                                )
+                            }
+                        }
                     }
                 }
             }
