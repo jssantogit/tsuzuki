@@ -14,6 +14,7 @@ internal class MangaAllBrowserHttpContinuation(
 ) {
     private var navigationGeneration = 0
     private var rejectedGeneration = -1
+    @Volatile
     private var firstRejection: ProviderBrowserFailure? = null
 
     fun mainFrameStarted() {
