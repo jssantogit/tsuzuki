@@ -2822,6 +2822,16 @@ class ScriptProviderReadingGatewayIsolationTest {
         assertEquals("DATA", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
         MangaFireCiShapeSolverGate.markNavigation("FINISH", null)
         assertEquals("NO_URL", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
+        MangaFireCiShapeSolverGate.markJavaScriptProbe("BRIDGE_MISSING")
+        MangaFireCiShapeSolverGate.markDocumentOrigin("OPAQUE")
+        MangaFireCiShapeSolverGate.markFinishProbe("BRIDGE_READY", "EXPECTED")
+        assertEquals("BRIDGE_MISSING", MangaFireCiShapeSolverGate.lastJavaScriptProbe())
+        assertEquals("OPAQUE", MangaFireCiShapeSolverGate.lastDocumentOrigin())
+        assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+        assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
+        MangaFireCiShapeSolverGate.markFinishProbe("SECRET", "FOREIGN_URL")
+        assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+        assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
     }
 
     /** Offline, real Chromium multi-profile and origin-scoped WebMessage test. */
@@ -2839,6 +2849,16 @@ class ScriptProviderReadingGatewayIsolationTest {
         try {
             assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.await(30))
             assertEquals("DOCUMENT_READY", MangaFireCiShapeSolverGate.lastStage())
+            // A completed document must be sampled independently of the
+            // initial commit, without synthetic clearance or source traffic.
+            val finishDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe() == "PENDING" &&
+                System.nanoTime() < finishDeadline
+            ) {
+                Thread.sleep(50)
+            }
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
         }
@@ -3011,6 +3031,16 @@ class ScriptProviderReadingGatewayIsolationTest {
                 )
                 MangaAllInstrumentationVerdict.publish(
                     "MANGAALL_CI_SHAPE_DOCUMENT|origin=${MangaFireCiShapeSolverGate.lastDocumentOrigin()}" +
+                        "|mode=DEBUG_ONLY",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_FINISH_JS_PROBE" +
+                        "|result=${MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe()}" +
+                        "|mode=DEBUG_ONLY",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_FINISH_DOCUMENT" +
+                        "|origin=${MangaFireCiShapeSolverGate.lastFinishDocumentOrigin()}" +
                         "|mode=DEBUG_ONLY",
                 )
                 for (phase in listOf("START", "COMMIT", "FINISH")) {
