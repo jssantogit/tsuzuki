@@ -151,10 +151,9 @@ class MangaFireCiShapeSolverActivity : Activity() {
                         "true" -> MangaFireCiShapeSolverGate.complete("SOLVED")
                         "false" -> MangaFireCiShapeSolverGate.complete("UNSOLVED")
                         else -> {
-                            if (message.data?.startsWith("stage:") == true) {
-                                MangaFireCiShapeSolverGate.markStage(
-                                    message.data!!.removePrefix("stage:"),
-                                )
+                            val stageRecord = message.data
+                            if (stageRecord?.startsWith("stage:") == true) {
+                                MangaFireCiShapeSolverGate.markStage(stageRecord.removePrefix("stage:"))
                             }
                         }
                     }
