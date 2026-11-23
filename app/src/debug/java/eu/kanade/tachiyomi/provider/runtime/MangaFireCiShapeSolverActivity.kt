@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
 import android.webkit.RenderProcessGoneDetail
@@ -42,6 +43,9 @@ internal object MangaFireCiShapeSolverGate {
     private val nativeStage = AtomicReference("NO_EVENT")
     private val javaScriptProbe = AtomicReference("PENDING")
     private val documentOrigin = AtomicReference("PENDING")
+    private val navigationStart = AtomicReference("PENDING")
+    private val navigationCommit = AtomicReference("PENDING")
+    private val navigationFinish = AtomicReference("PENDING")
     private val documentReady = AtomicBoolean(false)
     private val permittedNativeStages = setOf(
         "ACTIVITY_CREATED",
@@ -71,6 +75,9 @@ internal object MangaFireCiShapeSolverGate {
         nativeStage.set("NO_EVENT")
         javaScriptProbe.set("PENDING")
         documentOrigin.set("PENDING")
+        navigationStart.set("PENDING")
+        navigationCommit.set("PENDING")
+        navigationFinish.set("PENDING")
         documentReady.set(false)
         latch.set(CountDownLatch(1))
     }
@@ -123,6 +130,36 @@ internal object MangaFireCiShapeSolverGate {
     }
 
     fun lastDocumentOrigin(): String = documentOrigin.get()
+
+    // Never expose the callback URL. The JavaScript origin and the native
+    // navigation target are independent diagnostics of the document lifecycle.
+    private fun classifyNavigation(url: String?): String {
+        val uri = url?.let(Uri::parse) ?: return "NO_URL"
+        return when {
+            uri.scheme == "https" && uri.host == "mangafire.to" &&
+                uri.port == -1 && uri.encodedPath == "/@waf/solver" -> "EXPECTED"
+            uri.scheme == "https" && uri.host == "mangafire.to" && uri.port == -1 -> "SAME_SITE"
+            uri.scheme == "about" -> "ABOUT"
+            uri.scheme == "data" -> "DATA"
+            else -> "OTHER"
+        }
+    }
+
+    fun markNavigation(phase: String, url: String?) {
+        val result = classifyNavigation(url)
+        when (phase) {
+            "START" -> navigationStart.set(result)
+            "COMMIT" -> navigationCommit.set(result)
+            "FINISH" -> navigationFinish.set(result)
+        }
+    }
+
+    fun lastNavigation(phase: String): String = when (phase) {
+        "START" -> navigationStart.get()
+        "COMMIT" -> navigationCommit.get()
+        "FINISH" -> navigationFinish.get()
+        else -> "NO_URL"
+    }
 
     fun hasDocumentReady(): Boolean = documentReady.get()
 
@@ -238,8 +275,13 @@ class MangaFireCiShapeSolverActivity : Activity() {
         }
         MangaFireCiShapeSolverGate.markNativeStage("LISTENER_REGISTERED")
         view.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                MangaFireCiShapeSolverGate.markNavigation("START", url)
+            }
+
             override fun onPageCommitVisible(view: WebView?, url: String?) {
                 MangaFireCiShapeSolverGate.markNativeStage("PAGE_COMMITTED")
+                MangaFireCiShapeSolverGate.markNavigation("COMMIT", url)
                 // Diagnostic only: check whether JS can run and whether the
                 // origin-scoped bridge is injected. Never post a synthetic
                 // DOCUMENT_READY or treat this as a CAPTCHA success.
@@ -271,6 +313,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 MangaFireCiShapeSolverGate.markNativeStage("PAGE_FINISHED")
+                MangaFireCiShapeSolverGate.markNavigation("FINISH", url)
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
