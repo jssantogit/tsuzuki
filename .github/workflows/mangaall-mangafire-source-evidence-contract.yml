@@ -1,5 +1,6 @@
 name: MangaALL — signed source MangaFire evidence transport contracts (OFFLINE)
-# No external provider HTTP, no device, no signed asset change, no release.
+# No external provider HTTP: only a disposable emulator running a local
+# allowlist test; no signed asset change, release, secrets, or live challenge.
 # A genuine CI live gate is separate, explicitly opt-in and fail-closed.
 on:
   push:
@@ -64,8 +65,39 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: true
-      - name: Compile actual Android instrumentation test and verify formatting
-        run: ./gradlew :app:spotlessKotlinCheck :app:compileDebugAndroidTestKotlin --stacktrace
+      - name: Assemble debug APK and Android test for actual offline instrumentation
+        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Enable KVM for offline-only ephemeral Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Execute whitelist positive and negative records in actual Android instrumentation (NO NETWORK)
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            app=(app/build/outputs/apk/debug/*universal*.apk)
+            tests=(app/build/outputs/apk/androidTest/debug/*.apk)
+            [[ ${#app[@]} -eq 1 && ${#tests[@]} -eq 1 ]]
+            adb install -r "${app[0]}" >/dev/null
+            adb install -r "${tests[0]}" >/dev/null
+            result="$(timeout --foreground 120s adb shell am instrument -w -r \
+              -e class eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllCiBrowserVerdictContract_rejectsUnboundedOrUntrustedData \
+              app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner 2>&1)" || {
+              echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=INSTRUMENTATION_EXIT'
+              exit 1
+            }
+            if ! grep -Fq 'INSTRUMENTATION_CODE: -1' <<<"$result"; then
+              echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=TEST_DID_NOT_PASS'
+              exit 1
+            fi
+            echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=PASS|source_records=STRICT|network=NOT_STARTED'
       - name: Scope of verdict
         run: |
           echo 'MANGAALL_CI_SOURCE_EVIDENCE|result=OFFLINE_CONTRACT_PASS|live=NOT_STARTED|mangafire=NOT_PROVEN_BY_THIS_RUN'
