@@ -193,6 +193,7 @@ internal object MangaFireCiShapeSolverGate {
 
 class MangaFireCiShapeSolverActivity : Activity() {
     private var page: WebView? = null
+    private var intentionallyOpaqueOffline = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -203,6 +204,7 @@ class MangaFireCiShapeSolverActivity : Activity() {
         val exactAssetOffline = optIn == MangaFireCiShapeSolverGate.ASSET_OFFLINE_ACK
         val interceptOffline = optIn == MangaFireCiShapeSolverGate.INTERCEPT_OFFLINE_ACK
         val opaqueOffline = optIn == MangaFireCiShapeSolverGate.OPAQUE_OFFLINE_ACK
+        intentionallyOpaqueOffline = opaqueOffline
         if (!bridgeOnly && !exactAssetOffline && !interceptOffline && !opaqueOffline &&
             optIn != MangaFireCiShapeSolverGate.ACK
         ) {
@@ -424,8 +426,9 @@ class MangaFireCiShapeSolverActivity : Activity() {
                 MangaFireCiShapeSolverGate.markFinishProbe(bridge, origin)
                 // Fail closed on the final document, not a transient
                 // about:blank commit. No challenge or HTTP data is trusted.
-                if (MangaFireCiShapeSolverGate.lastNavigation("FINISH") in
-                    setOf("EXPECTED", "DATA") &&
+                val finalNativeKind = MangaFireCiShapeSolverGate.lastNavigation("FINISH")
+                if ((finalNativeKind in setOf("EXPECTED", "DATA") ||
+                    (intentionallyOpaqueOffline && finalNativeKind == "ABOUT")) &&
                     origin == "OPAQUE" && bridge == "BRIDGE_MISSING" &&
                     !MangaFireCiShapeSolverGate.hasDocumentReady()
                 ) {
