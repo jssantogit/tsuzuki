@@ -2768,27 +2768,35 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
         val context = instrumentation.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)
-        MangaFireCiBrowserWarmupGate.reset()
-        val activity = instrumentation.startActivitySync(
-            Intent(context, MangaFireCiBrowserWarmupActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
-        val warmup = withContext(Dispatchers.IO) {
-            MangaFireCiBrowserWarmupGate.await(35L)
-        }
-        MangaAllInstrumentationVerdict.publish("MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=$warmup")
-        if (warmup != "PROFILE_UNSUPPORTED" && warmup != "TLS_REJECTED" &&
-            warmup != "RENDERER_EXITED"
-        ) {
-            withContext(Dispatchers.IO) { Thread.sleep(8_000L) }
-        }
-        instrumentation.runOnMainSync { activity.finish() }
-        if (warmup == "PROFILE_UNSUPPORTED") {
-            MangaAllInstrumentationVerdict.publish(
-                "MANGAALL_CI_CHAPTER|outcome=INCONCLUSIVE|ready=0|works=${works.size}" +
-                    "|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
+        if (works.size == 3) {
+            // Real CI observation: homepage itself rejected by Cloudflare in
+            // successful and unsuccessful API sessions. Avoid an unnecessary
+            // challenged homepage GET; the signed lookup still uses the same
+            // real Android Browser Host and must prove API JSON on its own.
+            MangaAllInstrumentationVerdict.publish("MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=SKIPPED")
+        } else {
+            MangaFireCiBrowserWarmupGate.reset()
+            val activity = instrumentation.startActivitySync(
+                Intent(context, MangaFireCiBrowserWarmupActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
-            return
+            val warmup = withContext(Dispatchers.IO) {
+                MangaFireCiBrowserWarmupGate.await(35L)
+            }
+            MangaAllInstrumentationVerdict.publish("MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=$warmup")
+            if (warmup != "PROFILE_UNSUPPORTED" && warmup != "TLS_REJECTED" &&
+                warmup != "RENDERER_EXITED"
+            ) {
+                withContext(Dispatchers.IO) { Thread.sleep(8_000L) }
+            }
+            instrumentation.runOnMainSync { activity.finish() }
+            if (warmup == "PROFILE_UNSUPPORTED") {
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_CHAPTER|outcome=INCONCLUSIVE|ready=0|works=${works.size}" +
+                        "|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
+                )
+                return
+            }
         }
 
         val archive = instrumentation.context.assets.open("mangaall/code10-published-package.tsz")
