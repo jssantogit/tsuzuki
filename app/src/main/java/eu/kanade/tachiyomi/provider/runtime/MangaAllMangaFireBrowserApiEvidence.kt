@@ -13,6 +13,12 @@ import kotlinx.serialization.json.JsonObject
  * Never log or retain the response body or any challenge material.
  */
 internal object MangaAllMangaFireBrowserApiEvidence {
+    // A challenge may redirect to another same-site URL that returns a
+    // valid-looking JSON wrapper. It must never substitute for the signed
+    // API URL that code10 requested, including its query and VRF signature.
+    fun isOriginalApiResponse(requestedUrl: String, finalUrl: String, text: String): Boolean =
+        requestedUrl == finalUrl && isApiJson(text)
+
     fun isApiJson(text: String): Boolean {
         val value = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull()
             ?: return false
