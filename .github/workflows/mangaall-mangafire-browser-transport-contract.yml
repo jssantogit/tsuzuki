@@ -1,0 +1,46 @@
+name: MangaALL MangaFire native browser API transport — offline contract
+
+on:
+  push:
+    branches: ['probe/mangaall-mangafire-shape-*']
+    paths:
+      - '.github/scripts/mangaall_shape_playwright_test.mjs'
+      - '.github/scripts/mangaall_shape_test_core.mjs'
+      - '.github/scripts/test_mangaall_shape_test_core.mjs'
+      - '.github/workflows/mangaall-mangafire-browser-transport-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-api-transport-offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify native-browser API transport source syntax
+        run: |
+          set -euo pipefail
+          node --check .github/scripts/mangaall_shape_playwright_test.mjs
+          node --check .github/scripts/mangaall_shape_test_core.mjs
+          node --check .github/scripts/mangaall_shape_test_launcher.mjs
+          node --check .github/scripts/test_mangaall_shape_test_core.mjs
+      - name: Offline exercise browser-page GET and Cloudflare classification
+        run: node .github/scripts/test_mangaall_shape_test_core.mjs
+      - name: Assert no Node HTTP client is used after browser verification
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('.github/scripts/mangaall_shape_playwright_test.mjs').read_text()
+          assert "requestViaChromiumPage(page, url, options)" in s
+          assert "context.request.get(" not in s
+          assert "credentials: 'same-origin'" in s
+          assert "MAX_RESPONSE_BYTES = 192 * 1024" in s
+          print('MANGAALL_BROWSER_TRANSPORT|type=CHROMIUM_PAGE_FETCH|scope=TEST_ONLY|live=NOT_STARTED')
+          PY
