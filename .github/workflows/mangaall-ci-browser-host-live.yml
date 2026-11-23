@@ -1,6 +1,7 @@
 name: MangaALL — CI Android WebView real MangaFire signed API gate (opt-in)
 # Test-only, same isolated Host profile as the successful physical A54
-# experiment. No user hardware, secrets, cookie replay, solver or release changes.
+# experiment. No user hardware, secrets, cookie replay, or release changes.
+# Shape solver runs only with separately verified explicit opt-in and bounds.
 on:
   workflow_dispatch:
     inputs:
@@ -63,24 +64,39 @@ jobs:
           approved = 'I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE'
           works = ['Oyasumi Punpun', 'Koe no Katachi']
           three_works = ['Oyasumi Punpun', 'Koe no Katachi', 'Akame ga Kill!']
+          shape_consent = 'I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE'
+          solver_ack = ''
           if os.environ['EVENT'] == 'push':
+              import subprocess
+              modified = subprocess.check_output(
+                  ['git', 'show', '--pretty=format:', '--name-only', 'HEAD'], text=True,
+              ).splitlines()
+              assert modified == ['.github/mangaall-ci-webview-request.json']
               record = Path('.github/mangaall-ci-webview-request.json').read_bytes()
-              assert len(record) <= 256
+              assert len(record) <= 384
               manifest = json.loads(record)
-              assert type(manifest) is dict and set(manifest) == {'acknowledge', 'works', 'gate'}
-              assert manifest['acknowledge'] == approved
-              gate = manifest['gate']
-              assert gate in ('api', 'chapters', 'three', 'fire')
-              assert manifest['works'] == (three_works if gate in ('three', 'fire') else works)
+              assert type(manifest) is dict
+              assert manifest.get('acknowledge') == approved
+              gate = manifest.get('gate')
+              assert gate in ('api', 'chapters', 'three', 'fire', 'shape')
+              assert manifest.get('works') == (three_works if gate in ('three', 'fire', 'shape') else works)
+              fields = {'acknowledge', 'works', 'gate'}
+              if gate == 'shape':
+                  fields.add('solver_acknowledge')
+                  assert manifest.get('solver_acknowledge') == shape_consent
+                  solver_ack = shape_consent
+              assert set(manifest) == fields
           else:
               assert os.environ['EVENT'] == 'workflow_dispatch'
               assert os.environ['MANUAL_ACK'] == approved
               gate = os.environ['MANUAL_GATE']
+              assert gate in ('api', 'chapters', 'three', 'fire', 'shape')
               if gate == 'shape':
-                  assert os.environ['MANUAL_SHAPE_ACK'] == 'I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE'
-          assert gate in ('api', 'chapters', 'three', 'fire', 'shape')
+                  assert os.environ['MANUAL_SHAPE_ACK'] == shape_consent
+                  solver_ack = shape_consent
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
               out.write('gate=' + gate + '\n')
+              out.write('shape_ack=' + solver_ack + '\n')
           release = Path('app/src/main/AndroidManifest.xml').read_text()
           debug = Path('app/src/debug/AndroidManifest.xml').read_text()
           assert 'MangaFireCiBrowserWarmupActivity' in debug
@@ -150,7 +166,7 @@ jobs:
         env:
           MANGAALL_CI_WEBVIEW_ACK: I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE
           MANGAALL_CI_GATE_MODE: ${{ steps.approve.outputs.gate }}
-          MANGAALL_CI_SHAPE_ACK: ${{ inputs.solver_acknowledge }}
+          MANGAALL_CI_SHAPE_ACK: ${{ steps.approve.outputs.shape_ack }}
         with:
           api-level: 35
           target: google_apis
