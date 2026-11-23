@@ -43,3 +43,16 @@ The intended granular contract is:
 6. **Only after those checks:** run one on-demand 30-work integrated MangaDex+MangaDot+MangaFire CI, keeping per-source ambiguity, incompleteness and Reader CDN pixels as independent reported gates.
 
 Neither a successful WebView API request nor a green offline 4,341-row regression by itself authorizes the 30-work live suite.
+
+## Live três obras: evidência de intermitência da API e correção do diagnóstico
+
+O primeiro live real das três obras [#45099868765](https://github.com/jssantogit/tsuzuki/actions/runs/45099868765) chegou ao Android 35 e falhou estritamente (não na compilação):
+
+- Punpun: fonte MangaDex 1 candidato parcial; MangaFire `HTTP 403 CHALLENGE_BLOCKED`, Browser Host não retornou JSON; nenhum capítulo em tal execução.
+- Koe: MangaDex 1 candidato parcial; continuação global `UNCLASSIFIED_ERROR`, API assinada observada mas sem JSON válido; nenhum capítulo.
+- Akame ga Kill!: MangaDex 1 e MangaDot 1 candidatos parciais; MangaFire `HTTP 403 CHALLENGE_BLOCKED`; nenhum capítulo.
+- `MANGAALL_CI_CHAPTER|outcome=INCONCLUSIVE|ready=0|works=3`, `MANGAALL_CI_SOURCE` evidenciou as **nove** combinações, todas `PARTIAL`. `MANGAALL_CI_THREE_GATE` negou PASS. Nada comprova ausência definitiva de qualquer manga nas fontes.
+
+Portanto a prova anterior [#45094285225](https://github.com/jssantogit/tsuzuki/actions/runs/45094285225) de API MangaFire JSON válida no Android CI é real, mas **não é garantia de estabilidade contra bloqueio Cloudflare**. A primeira rodada de três títulos recebeu `WARMUP=HTTP_REJECTED` da homepage; em hipótese controlada, a próxima execução omite essa visita inicial inútil no modo três (a consulta assinada real continua obrigatória, sem cookies extraídos/auto-CAPTCHA/stealth/proxies). [CI de teste #45100791260](https://github.com/jssantogit/tsuzuki/actions/runs/45100791260) foi acionada estritamente com as mesmas três obras e o mesmo provider P-256 original, **resultado ainda pendente na última edição**. Não disparar retries equivalentes em sequência se persistir 403.
+
+O parser offline foi corrigido para priorizar o primeiro motivo real de falha (`LOOKUP_NOT_COMPLETE_AND_UNIQUE`, `SIGNED_API_NOT_VALIDATED`, etc.) antes de imprimir erro genérico de resumo final ausente. Essa correção não converte falhas de rede em sucessos. A solução granular offline code11 é independente e não soluciona o desafio MangaFire.
