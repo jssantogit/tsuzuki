@@ -2828,6 +2828,15 @@ class ScriptProviderReadingGatewayIsolationTest {
         try {
             assertEquals("ASSET_BRIDGE_READY", MangaFireCiShapeSolverGate.await(45))
             assertTrue("Real solver HTML did not post DOCUMENT_READY", MangaFireCiShapeSolverGate.hasDocumentReady())
+            // Independent runtime probe: it must not manufacture the
+            // DOCUMENT_READY stage or run any external network requests.
+            val probeDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (MangaFireCiShapeSolverGate.lastJavaScriptProbe() == "PENDING" &&
+                System.nanoTime() < probeDeadline
+            ) {
+                Thread.sleep(50)
+            }
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastJavaScriptProbe())
             assertTrue(
                 "Real solver WebView never reached loadDataWithBaseURL",
                 MangaFireCiShapeSolverGate.lastNativeStage() in setOf(
