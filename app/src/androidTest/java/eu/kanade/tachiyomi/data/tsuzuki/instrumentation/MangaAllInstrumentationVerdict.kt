@@ -80,6 +80,12 @@ internal object MangaAllInstrumentationVerdict {
             """MANGAALL_CI_SHAPE_DOCUMENT\|origin=(PENDING|EXPECTED|SAME_SITE|""" +
                 """OPAQUE|FOREIGN|JS_UNAVAILABLE)\|mode=DEBUG_ONLY""",
         ),
+        // Only the signed provider's existing HTTP403 can produce this
+        // redacted classification; never include the response body or URL.
+        Regex(
+            """MANGAALL_CI_FIRE_403\|work=(punpun|koe|akame)""" +
+                """\|kind=(SHAPE_REQUIRED|OTHER_JSON|UNCLASSIFIED|NOT_OBSERVED)""",
+        ),
         // Final-page JS diagnostics are distinct from the initial commit.
         // A PENDING value is inconclusive, never evidence of success.
         Regex(
