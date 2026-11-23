@@ -80,6 +80,16 @@ internal object MangaAllInstrumentationVerdict {
             """MANGAALL_CI_SHAPE_DOCUMENT\|origin=(PENDING|EXPECTED|SAME_SITE|""" +
                 """OPAQUE|FOREIGN|JS_UNAVAILABLE)\|mode=DEBUG_ONLY""",
         ),
+        // Final-page JS diagnostics are distinct from the initial commit.
+        // A PENDING value is inconclusive, never evidence of success.
+        Regex(
+            """MANGAALL_CI_SHAPE_FINISH_JS_PROBE\|result=(PENDING|BRIDGE_READY|""" +
+                """BRIDGE_MISSING|JS_UNAVAILABLE)\|mode=DEBUG_ONLY""",
+        ),
+        Regex(
+            """MANGAALL_CI_SHAPE_FINISH_DOCUMENT\|origin=(PENDING|EXPECTED|SAME_SITE|""" +
+                """OPAQUE|FOREIGN|JS_UNAVAILABLE)\|mode=DEBUG_ONLY""",
+        ),
         // Native WebView callback URI is classified without exposing its URL.
         // This does not authorize a bridge or attest remote server acceptance.
         Regex(
