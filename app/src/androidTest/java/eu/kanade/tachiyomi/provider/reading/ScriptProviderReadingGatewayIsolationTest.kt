@@ -2366,6 +2366,10 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_SHAPE_SOLVER|outcome=UNSUPPORTED|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_SOLVER|outcome=HTTP_REJECTED|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_STAGE|last=NO_EVENT|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NATIVE|last=NO_EVENT|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NATIVE|last=ASSET_READY|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NATIVE|last=LISTENER_REGISTERED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NATIVE|last=PAGE_FINISHED|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_STAGE|last=OPENCV_IMPORT_FAILED|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_STAGE|last=GENERATE_HTTP_ERROR|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_STAGE|last=VERIFY_OK|mode=DEBUG_ONLY",
@@ -2414,6 +2418,9 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=DEBUG_ONLY|captchaImage=data:",
             "MANGAALL_CI_SHAPE_SOLVER|outcome=TOKEN_EXPORTED|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_STAGE|last=CHALLENGE_IMAGE_BASE64|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NATIVE|last=RESOURCE_URL|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NATIVE|last=ASSET_READY|mode=PRODUCTION",
+            "MANGAALL_CI_SHAPE_NATIVE|last=PAGE_FINISHED|mode=DEBUG_ONLY|cookie=secret",
             "MANGAALL_CI_SHAPE_STAGE|last=GENERATE_OK|mode=PRODUCTION",
             "MANGAALL_CI_SHAPE_STAGE|last=VERIFY_OK|mode=DEBUG_ONLY|cookie=secret",
             "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=1" +
@@ -2795,6 +2802,39 @@ class ScriptProviderReadingGatewayIsolationTest {
     }
 
     /**
+     * Uses the exact, unmodified debug solver HTML — not the minimal
+     * synthetic handshake — in an origin-scoped Chromium instance.
+     * Both WebSettings.blockNetworkLoads and request interception deny all
+     * subresources / challenge endpoints; no site traffic occurs.
+     */
+    @Test(timeout = 80_000L)
+    fun mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        MangaFireCiShapeSolverGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaFireCiShapeSolverActivity::class.java)
+                .putExtra("ciOptIn", MangaFireCiShapeSolverGate.ASSET_OFFLINE_ACK)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        try {
+            assertEquals("ASSET_BRIDGE_READY", MangaFireCiShapeSolverGate.await(45))
+            assertTrue("Real solver HTML did not post DOCUMENT_READY", MangaFireCiShapeSolverGate.hasDocumentReady())
+            assertTrue(
+                "Real solver WebView never reached loadDataWithBaseURL",
+                MangaFireCiShapeSolverGate.lastNativeStage() in setOf(
+                    "LOAD_REQUESTED",
+                    "PAGE_COMMITTED",
+                    "PAGE_FINISHED",
+                ),
+            )
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
+    /**
      * CI-only source chapter gate on the same Android Browser Host profile.
      * The original signed code10 performs one combined-source lookup per
      * title; ONLY the unique returned MangaFire source HID is used to inspect
@@ -2870,6 +2910,10 @@ class ScriptProviderReadingGatewayIsolationTest {
                 )
                 MangaAllInstrumentationVerdict.publish(
                     "MANGAALL_CI_SHAPE_STAGE|last=${MangaFireCiShapeSolverGate.lastStage()}" +
+                        "|mode=DEBUG_ONLY",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_NATIVE|last=${MangaFireCiShapeSolverGate.lastNativeStage()}" +
                         "|mode=DEBUG_ONLY",
                 )
                 if (solver != "SOLVED") {
