@@ -1,0 +1,99 @@
+name: MangaALL — granular 4,341-row chapter continuation readiness (OFFLINE)
+# No live network, publishing, signing, reader access, or code10 modification.
+# Proves the existing future-code11 Host-private snapshot and unchanged
+# three-source router with an ephemeral unsigned candidate.
+on:
+  push:
+    branches: ['probe/mangaall-a54-browser-profile-validation-*']
+    paths:
+      - '.github/workflows/mangaall-granular-pagination-readiness.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  granular-chapter-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: future-code11-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Signed code10 must remain pinned; generate unsigned source only in temporary memory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C future-code11-source rev-parse HEAD)" = 89b5979fff297c2a099359258c9f9249e0089db4
+          (cd future-code11-source && node tooling/verify_index.mjs)
+          python3 - <<'PY'
+          import hashlib, io, json, os, sys, zipfile
+          from pathlib import Path
+          source=Path('future-code11-source').resolve()
+          sys.path.insert(0,str(source/'tooling'))
+          from mangaall_future_code11_candidate import unsigned_candidate_zip
+          payload=json.loads((source/'dist/index.payload.json').read_text())
+          entry=[x for x in payload['providers'] if x['providerId']=='app.tsuzuki.mangaall']
+          assert payload['sequence']==36 and len(entry)==1
+          assert entry[0]['versionCode']==10
+          original=source/'dist/providers/app.tsuzuki.mangaall-10.tsz'
+          assert hashlib.sha256(original.read_bytes()).hexdigest()==entry[0]['sha256']
+          assert entry[0]['sha256']=='bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f'
+          unsigned=unsigned_candidate_zip(source)
+          destination=Path(os.environ['RUNNER_TEMP'])/'mangaall-code11-unsigned'
+          destination.mkdir(parents=True,exist_ok=True)
+          with zipfile.ZipFile(io.BytesIO(unsigned)) as z:
+              assert z.testzip() is None
+              z.extractall(destination)
+          (destination/'package.json').write_text('{"type":"module"}')
+          manifest=json.loads((destination/'manifest.json').read_text())
+          assert manifest['id']=='app.tsuzuki.mangaall'
+          assert manifest['version']['code']==11
+          assert manifest['minHostApi']==2
+          assert manifest['permissions']['mangaAllChapterSnapshot']=={'enabled':True}
+          print('MANGAALL_GRANULAR|candidate=EPHEMERAL_UNSIGNED_CODE11|signedCode10=UNCHANGED|live=NOT_STARTED')
+          PY
+      - name: Offline source byte-envelope, cursor and full original three-source router contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd future-code11-source
+          node tooling/test_mangaall_experimental_chapter_output_paging.mjs
+          node tooling/test_mangaall_future_storage_chapter_pager.mjs
+          node tooling/test_mangaall_future_compact_source_chapter.mjs
+          node tooling/test_mangaall_future_native_chapter_bridge.mjs
+          node tooling/test_mangaall_future_code11_real_router.mjs "$RUNNER_TEMP/mangaall-code11-unsigned"
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Exact Host-private source snapshot 4,341-row quota and continuation regressions
+        run: |
+          ./gradlew :core:common:spotlessKotlinCheck
+          ./gradlew :core:common:testDebugUnitTest \
+            --tests 'tachiyomi.core.provider.runtime.MangaAllFutureHostChapterSnapshotTest' \
+            --tests 'tachiyomi.core.provider.runtime.MangaAllFutureHostQuickJsContinuationTest'
+      - name: Record strictly offline granular readiness, not a green 30-work gate
+        run: |
+          {
+            echo '## MangaALL granular continuation — offline only'
+            echo 'Actual original 3-source JS router under ephemeral unsigned future-code11 overlay: tested'
+            echo 'Synthetic 4,341 MangaDot source rows in <=32 Host pages: tested'
+            echo 'Host output <=48 KiB, per-Provider snapshot <=512 KiB, 64 KiB runtime: unchanged'
+            echo 'Source ID/facet/generation cursor isolation: tested'
+            echo 'Actual new signed code11 provider: NOT AUTHORIZED'
+            echo '3-work real Android live gate: INDEPENDENT'
+            echo '30-work live CI gate: NOT STARTED'
+          } >> "$GITHUB_STEP_SUMMARY"
