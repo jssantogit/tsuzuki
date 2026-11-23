@@ -2359,6 +2359,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=PROFILE_UNSUPPORTED",
             "MANGAALL_CI_WEBVIEW|work=punpun|api=VALID_JSON|candidates=1",
             "MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=HTTP_REJECTED",
+            "MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=SKIPPED",
             "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP|outcome=COMPLETE|pages=3|candidates=1",
             "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP_FAILURE" +
                 "|cause=CHALLENGE_BLOCKED|http=403",
