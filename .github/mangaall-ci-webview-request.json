@@ -1,9 +1,9 @@
 {
+  "gate": "fire",
+  "acknowledge": "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE",
   "works": [
     "Oyasumi Punpun",
     "Koe no Katachi",
     "Akame ga Kill!"
-  ],
-  "gate": "fire",
-  "acknowledge": "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE"
+  ]
 }
