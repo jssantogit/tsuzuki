@@ -31,8 +31,9 @@ internal object MangaFireCiBrowserWarmupGate {
     }
 
     fun completed(value: String) {
-        status.set(value)
-        latch.get().countDown()
+        if (status.compareAndSet("TIMEOUT", value)) {
+            latch.get().countDown()
+        }
     }
 
     fun await(timeoutSeconds: Long): String {
