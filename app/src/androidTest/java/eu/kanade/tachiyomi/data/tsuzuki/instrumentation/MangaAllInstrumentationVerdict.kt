@@ -47,6 +47,24 @@ internal object MangaAllInstrumentationVerdict {
                 """\|source=(mangadex|mangadot|mangafire)""" +
                 """\|candidates=[0-9]{1,2}\|lookup=(COMPLETE|PARTIAL)""",
         ),
+        // MangaFire-source chapter evidence is deliberately independent of
+        // global completion: another source's bounded search cannot certify
+        // or invalidate a MangaFire chapter, and cannot promote unified READY.
+        Regex(
+            """MANGAALL_CI_FIRE_SOURCE\\|work=(punpun|koe|akame)""" +
+                """\\|lookup=(COMPLETE|INCOMPLETE)\\|api=(VALIDATED|UNVERIFIED)""" +
+                """\\|chapters=(COMPLETE|INCOMPLETE)""" +
+                """\\|chapterOne=(YES|NO|MULTIPLE|UNVERIFIED)""" +
+                """\\|outcome=(SOURCE_READY|INCONCLUSIVE)""",
+        ),
+        Regex(
+            """MANGAALL_CI_FIRE_SOURCE\\|outcome=(SOURCE_CHAPTERS_ACCEPTED|INCONCLUSIVE)""" +
+                """\\|ready=[0-3]\\|works=[23]\\|canonical=NOT_TESTED\\|unified=NOT_PROVEN""",
+        ),
+        Regex(
+            """MANGAALL_CI_LOOKUP_BLOCKER\\|work=(punpun|koe|akame)""" +
+                """\\|source=MANGADOT\\|reason=PAGE_FOUR_PENDING""",
+        ),
         // Test-only CI Android emulator. No sensitive browser state, URLs,
         // cookies, challenge payloads or external IDs are allowed.
         // Separate CI-only MangaFire chapter/cursor proof; no HIDs or chapter
