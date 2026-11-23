@@ -40,7 +40,7 @@ internal object MangaAllInstrumentationVerdict {
                 """\|workId=(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}""" +
                 """\|chapterId=[A-Za-z0-9._:-]{1,160}\|language=en""",
         ),
-        Regex("""MANGAALL_A54_PROFILE\\|phase=(STARTED|ACTIVITY_REQUESTED|OPERATOR_CONFIRMED)"""),
+        Regex("""MANGAALL_A54_PROFILE\|phase=(STARTED|ACTIVITY_REQUESTED|OPERATOR_CONFIRMED)"""),
         // Same-profile physical A54 validation. Only the precise closed fields
         // emitted by the manual, debug-only session test are permitted here.
         // Never export challenge content, cookies, URLs or upstream messages.
