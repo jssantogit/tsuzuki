@@ -1,0 +1,121 @@
+name: MangaALL — real large MangaDot Android Host pagination (opt-in, NONSHIPPING)
+# Never run on normal PRs or source edits. No signing/publishing/code10 changes.
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge:
+        description: 'Type I_ACCEPT_MANGAALL_LARGE_LIVE for one genuine MangaDot >2MiB Android test'
+        required: true
+        type: string
+  push:
+    branches: ['probe/mangaall-a54-browser-profile-validation-*']
+    paths:
+      - '.github/mangaall-code11-large-list-request.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-real-large-list-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-large-list:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Gate one source and original runtime budget before any HTTP
+        env:
+          EVENT: ${{ github.event_name }}
+          MANUAL_ACK: ${{ inputs.acknowledge }}
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/run_mangaall_future_real_large_list_ci.sh
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          ack='I_ACCEPT_MANGAALL_LARGE_LIVE'
+          if os.environ['EVENT']=='push':
+              payload=Path('.github/mangaall-code11-large-list-request.json').read_bytes()
+              assert len(payload)<256
+              data=json.loads(payload)
+              assert type(data) is dict and data=={'acknowledge':ack,'source':'mangadot','kind':'large-list-code11'}
+          else:
+              assert os.environ['EVENT']=='workflow_dispatch'
+              assert os.environ['MANUAL_ACK']==ack
+          test=Path('app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureRealThreeSourceCode11InstrumentedTest.kt').read_text()
+          assert 'real_mangadot_over_2mib_list_pages_through_android_host' in test
+          assert 'wallClockTimeoutMs = 20_000L' in test
+          assert 'jsExecutionTimeoutMs = 10_000L' in test
+          print('MANGAALL_GRANULAR_LIVE_GATE|scope=MANGADOT_ONE_LARGE_LIST|external=NOT_STARTED|code11=UNSIGNED')
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: future-code11-source
+          persist-credentials: false
+      - name: Build original three-source future-only unsigned candidate into androidTest
+        run: |
+          set -euo pipefail
+          test "$(git -C future-code11-source rev-parse HEAD)" = 89b5979fff297c2a099359258c9f9249e0089db4
+          python3 - <<'PY'
+          import hashlib, io, json, sys, zipfile
+          from pathlib import Path
+          source=Path('future-code11-source')
+          sys.path.insert(0,str((source/'tooling').resolve()))
+          from mangaall_future_code11_candidate import unsigned_candidate_zip
+          payload=json.loads((source/'dist/index.payload.json').read_text())
+          works=[item for item in payload['providers'] if item['providerId']=='app.tsuzuki.mangaall']
+          assert payload['sequence']==36 and len(works)==1
+          assert works[0]['versionCode']==10
+          exact='bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f'
+          original=(source/'dist/providers/app.tsuzuki.mangaall-10.tsz').read_bytes()
+          assert hashlib.sha256(original).hexdigest()==exact==works[0]['sha256']
+          candidate=unsigned_candidate_zip(source)
+          with zipfile.ZipFile(io.BytesIO(candidate)) as z:
+              assert z.testzip() is None
+              manifest=json.loads(z.read('manifest.json'))
+              assert manifest['version']['code']==11
+              assert manifest['permissions']['mangaAllChapterSnapshot']=={'enabled':True}
+          asset=Path('app/src/androidTest/assets/mangaall-future-code11-unsigned-research.zip')
+          asset.parent.mkdir(parents=True,exist_ok=True)
+          asset.write_bytes(candidate)
+          print('MANGAALL_GRANULAR_LIVE_GATE|signedCode10=UNCHANGED|code11=EPHEMERAL_UNSIGNED|external=NOT_STARTED')
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Check formatting and build emulator APKs
+        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM for Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify one real upstream >2MiB response through Android Binder and granular cursor
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        env:
+          MANGAALL_LARGE_LIVE_ACK: I_ACCEPT_MANGAALL_LARGE_LIVE
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_future_real_large_list_ci.sh
+      - name: Preserve only closed source-capacity verdict
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-granular-real-mangadot-verdict
+          path: .github/results/mangaall-granular-live/verdict.txt
+          if-no-files-found: ignore
+          retention-days: 3
