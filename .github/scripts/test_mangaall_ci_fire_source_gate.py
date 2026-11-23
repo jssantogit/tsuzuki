@@ -50,4 +50,33 @@ assert evaluate([line for line in good if "work=koe|source=mangadex" not in line
 assert evaluate([line for line in good if "work=punpun|phase=API" not in line])[1] == "SOURCE_EVIDENCE_MISSING"
 # Source-only PASS is valid with an INCOMPLETE unified lookup, never a global PASS.
 assert evaluate(good)[0] is True
-print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=17|live=NOT_STARTED|unified=NOT_PROVEN")
+# Reproduce the exact categorical failure from live run #45108738483,
+# without fetching live network or copying private API payloads.
+blocked = fixture()
+blocked[0] = (
+    "MANGAALL_CI_FIRE_SOURCE|outcome=INCONCLUSIVE|ready=0|works=3"
+    "|canonical=NOT_TESTED|unified=NOT_PROVEN"
+)
+blocked = [
+    line.replace("http=200|transport=HTTP|json=VALIDATED",
+                 "http=403|transport=NONE|json=UNVERIFIED")
+    if "work=punpun|phase=API" in line else line for line in blocked
+]
+blocked.append(
+    "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP_FAILURE"
+    "|cause=CHALLENGE_BLOCKED|http=403"
+)
+assert evaluate(blocked)[1] == "MANGAFIRE_UPSTREAM_HTTP403"
+
+budget = fixture()
+budget[0] = (
+    "MANGAALL_CI_FIRE_SOURCE|outcome=INCONCLUSIVE|ready=2|works=3"
+    "|canonical=NOT_TESTED|unified=NOT_PROVEN"
+)
+budget.extend([
+    "MANGAALL_CI_CHAPTER|work=koe|phase=LOOKUP_FAILURE"
+    "|cause=UNCLASSIFIED_ERROR|http=NONE",
+    "MANGAALL_CI_LOOKUP_BLOCKER|work=koe|source=MANGADOT|reason=PAGE_FOUR_PENDING",
+])
+assert evaluate(budget)[1] == "MANGADOT_PAGE_FOUR_PENDING"
+print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=19|live=NOT_STARTED|unified=NOT_PROVEN")
