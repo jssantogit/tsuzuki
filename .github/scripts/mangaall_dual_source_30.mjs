@@ -58,10 +58,12 @@ const [dexModule, dotModule] = await Promise.all([
 ]);
 assert.deepEqual(Object.keys(dexModule.default.reading).sort(), ['chapters', 'lookup', 'pages']);
 assert.deepEqual(Object.keys(dotModule.default.reading).sort(), ['chapters', 'lookup', 'pages']);
-// The unchanged signed MangaDot module stops lookup after 3 broad source
-// pages, even where the search response explicitly advertises more pages.
-// Lift only that bound to 8 in this UNSIGNED analysis to match the current
-// Host V1 lookup-page budget. Page 9 remains INCOMPLETE, never "no match".
+// The unchanged signed MangaDot module stops lookup after 3 broad pages.
+// The previous 8-page Host-budgeted test left eight works INCOMPLETE, despite
+// all source HTTP responses being 200. This unsigned capacity experiment
+// extends ONLY the in-memory search cursor to 32 source pages, the ceiling
+// already validated by the signed MangaDot DTO. Production Host is unchanged
+// and still capped at 8 pages until separately proven and upgraded.
 const originalDotSource = readFileSync(path.join(
   sourceRoot, 'modules/sources/mangadot/modules/mangadot.js',
 ), 'utf8');
@@ -89,7 +91,7 @@ const adaptedDotHttpUri = 'data:text/javascript;base64,' +
   Buffer.from(adaptedDotHttp, 'utf8').toString('base64');
 const experimentalDotCode = originalDotSource
   .replace(sourcePageLimit,
-    'if (n > 8) throw new Error("MangaAll bounded source search exhausted");')
+    'if (n > 32) throw new Error("MangaAll bounded source search exhausted");')
   .replace(originalHttpImport, 'from "' + adaptedDotHttpUri + '"');
 const extendedMangaDot = await import('data:text/javascript;base64,' +
   Buffer.from(experimentalDotCode, 'utf8').toString('base64'));
@@ -374,8 +376,20 @@ if (mode !== '--live' || process.env.MANGAALL_DUAL30_ACK !== ACK) {
   throw Error('Live MangaALL two-source 30 requires explicit opt-in');
 }
 const { createHttpBridge } = await importFromProvider('tooling/mangaall_live_probe_core.mjs');
+// Raise only the UNSIGNED CI probe's overall lookup budget from 8 to 32.
+// In the released Host, this is a limit requiring separate implementation.
+const originalJourney = readFileSync(path.join(
+  providerRoot, 'tooling/mangaall_live_journey_core.mjs',
+), 'utf8');
+const oldJourneyCeiling = 'lookupPageLimit > 8';
+assert.equal(originalJourney.split(oldJourneyCeiling).length, 2,
+  'Pinned real journey source changed, cannot adapt page budget safely');
+const extendedJourneyCode = originalJourney.replace(
+  oldJourneyCeiling, 'lookupPageLimit > 32',
+);
 const { probeJourney, journeyVerdict } =
-  await importFromProvider('tooling/mangaall_live_journey_core.mjs');
+  await import('data:text/javascript;base64,' +
+    Buffer.from(extendedJourneyCode, 'utf8').toString('base64'));
 const stats = [], wireRecords = [], bridges = new Map();
 for (const [origin, source] of Object.entries(ORIGINS)) {
   bridges.set(origin, createHttpBridge({
@@ -424,7 +438,7 @@ for (const [index, work] of assigned.entries()) {
   let probe, failure = null;
   try {
     probe = await probeJourney(dualReading, work, grants, {
-      lookupContract: 'v1', lookupPageLimit: 8, chapterPageLimit: 8,
+      lookupContract: 'v1', lookupPageLimit: 32, chapterPageLimit: 8,
       includeCandidates: true, includeCandidateCoverage: true,
       candidatePreviewLimit: 3, candidateChapterPageLimit: 2,
     });
@@ -495,7 +509,8 @@ const report = {
   hostRepository: 'jssantogit/tsuzuki', sourceRepositoryCommit: PROVIDER_SHA,
   originalCode10SignedPackageChanged: false, adapterRouterModification: 'SOURCE_IDS_ONLY_IN_MEMORY',
   chapterAdaptation: 'MANGADOT_IN_MEMORY_48K_200_NO_RELEASE',
-  lookupAdaptation: 'MANGADOT_EIGHT_SOURCE_PAGES_IN_MEMORY',
+  lookupAdaptation: 'MANGADOT_THIRTYTWO_SOURCE_PAGES_IN_MEMORY',
+  probeBudget: 'UNSIGNED_LOOKUP32_NOT_HOST',
   acquisitionAdaptation: 'UNSIGNED_DOT8M_DEX50_CHAPTERS_CI_ONLY',
   sourceSet: SOURCES, shard, shardCount: count, totalWorkCount: 30,
   sourceHttp: 'REAL_GITHUB_ACTIONS_FETCH', canonical: 'NOT_TESTED',
