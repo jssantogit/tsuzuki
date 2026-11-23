@@ -61,6 +61,14 @@ internal object MangaAllInstrumentationVerdict {
                 """GENERATE_STARTED|GENERATE_OK|GENERATE_HTTP_ERROR|""" +
                 """VERIFY_STARTED|VERIFY_OK|VERIFY_HTTP_ERROR)\|mode=DEBUG_ONLY""",
         ),
+        // Debug-only startup milestones are static enums, independent of the
+        // JS challenge stages. A PAGE_FINISHED callback proves only that the
+        // WebView lifecycle ran, never that clearance or source JSON succeeded.
+        Regex(
+            """MANGAALL_CI_SHAPE_NATIVE\|last=(NO_EVENT|ACTIVITY_CREATED|ASSET_READY|""" +
+                """PROFILE_READY|LISTENER_REGISTERED|LOAD_REQUESTED|""" +
+                """PAGE_COMMITTED|PAGE_FINISHED)\|mode=DEBUG_ONLY""",
+        ),
         // Existing production Browser Host diagnostic enums, not HTTP bodies,
         // HTML, challenge tokens, cookies, response headers or full URLs.
         Regex(
