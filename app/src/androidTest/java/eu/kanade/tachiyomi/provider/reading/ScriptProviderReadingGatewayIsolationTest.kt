@@ -2365,6 +2365,10 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_SHAPE_SOLVER|outcome=UNSOLVED|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_SOLVER|outcome=UNSUPPORTED|mode=DEBUG_ONLY",
             "MANGAALL_CI_SHAPE_SOLVER|outcome=HTTP_REJECTED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_STAGE|last=NO_EVENT|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_STAGE|last=OPENCV_IMPORT_FAILED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_STAGE|last=GENERATE_HTTP_ERROR|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_STAGE|last=VERIFY_OK|mode=DEBUG_ONLY",
             "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=0|outcome=NOT_USED",
             "MANGAALL_CI_BROWSER_FALLBACK|work=koe|attempts=1|outcome=UPSTREAM_CHALLENGE",
             "MANGAALL_CI_BROWSER_FALLBACK|work=akame|attempts=1|outcome=SUCCEEDED",
@@ -2409,6 +2413,9 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=DEBUG_ONLY|cookie=secret",
             "MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=DEBUG_ONLY|captchaImage=data:",
             "MANGAALL_CI_SHAPE_SOLVER|outcome=TOKEN_EXPORTED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_STAGE|last=CHALLENGE_IMAGE_BASE64|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_STAGE|last=GENERATE_OK|mode=PRODUCTION",
+            "MANGAALL_CI_SHAPE_STAGE|last=VERIFY_OK|mode=DEBUG_ONLY|cookie=secret",
             "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=1" +
                 "|outcome=UPSTREAM_CHALLENGE|url=https://mangafire.to",
             "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=10|outcome=SUCCEEDED",
@@ -2859,6 +2866,10 @@ class ScriptProviderReadingGatewayIsolationTest {
                 instrumentation.runOnMainSync { activity.finish() }
                 MangaAllInstrumentationVerdict.publish(
                     "MANGAALL_CI_SHAPE_SOLVER|outcome=$solver|mode=DEBUG_ONLY",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_STAGE|last=${MangaFireCiShapeSolverGate.lastStage()}" +
+                        "|mode=DEBUG_ONLY",
                 )
                 if (solver != "SOLVED") {
                     // Do not send another three-source request burst when
