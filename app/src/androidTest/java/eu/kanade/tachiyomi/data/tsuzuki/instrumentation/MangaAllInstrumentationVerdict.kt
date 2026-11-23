@@ -53,7 +53,7 @@ internal object MangaAllInstrumentationVerdict {
         // IDs may leave the instrumentation process.
         Regex(
             """MANGAALL_CI_CHAPTER\|phase=WARMUP""" +
-                """\|outcome=(PAGE_FINISHED|HTTP_REJECTED|TLS_REJECTED|""" +
+                """\|outcome=(SKIPPED|PAGE_FINISHED|HTTP_REJECTED|TLS_REJECTED|""" +
                 """RENDERER_EXITED|TIMEOUT|PROFILE_UNSUPPORTED)""",
         ),
         Regex(
