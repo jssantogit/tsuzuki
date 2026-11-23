@@ -11,6 +11,7 @@ def fixture():
                 "|candidates=" + ("1" if source == "mangafire" else "0") + "|lookup=PARTIAL"
             )
         rows += [
+            f"MANGAALL_CI_BROWSER_FALLBACK|work={work}|attempts=0|outcome=NOT_USED",
             f"MANGAALL_CI_CHAPTER|work={work}|phase=LOOKUP"
             "|outcome=READ_ERROR|pages=3|candidates=1",
             f"MANGAALL_CI_CHAPTER|work={work}|phase=API"
@@ -44,6 +45,14 @@ rejected([("source=mangafire|candidates=1", "source=mangafire|candidates=2")], "
 rejected([("phase=LOOKUP|outcome=READ_ERROR|pages=3|candidates=1",
            "phase=LOOKUP|outcome=READ_ERROR|pages=3|candidates=2")], "FIRE_LOOKUP_NOT_UNIQUE")
 assert evaluate(good + [good[1]])[1] == "DUPLICATE_SOURCE"
+assert evaluate(good + [
+    "MANGAALL_CI_BROWSER_FALLBACK|work=koe|attempts=0|outcome=NOT_USED"
+])[1] == "DUPLICATE_BROWSER_FALLBACK"
+assert evaluate([l for l in good if "work=koe|attempts=0|outcome=NOT_USED" not in l])[1] == "BROWSER_FALLBACK_EVIDENCE_MISSING"
+rejected([("work=koe|attempts=0|outcome=NOT_USED",
+           "work=koe|attempts=1|outcome=NOT_USED")], "BROWSER_FALLBACK_INCONSISTENT")
+rejected([("work=koe|attempts=0|outcome=NOT_USED",
+           "work=koe|attempts=0|outcome=SUCCEEDED")], "BROWSER_FALLBACK_INCONSISTENT")
 assert evaluate(good + [good[-1]])[1] == "DUPLICATE_FIRE_PROOF"
 assert evaluate([line for line in good if line != SUMMARY])[1] == "FIRE_SOURCE_SUMMARY_MISSING"
 assert evaluate([line for line in good if "work=koe|source=mangadex" not in line])[1] == "THREE_SOURCE_MATRIX_MISSING"
@@ -66,7 +75,40 @@ blocked.append(
     "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP_FAILURE"
     "|cause=CHALLENGE_BLOCKED|http=403"
 )
-assert evaluate(blocked)[1] == "MANGAFIRE_UPSTREAM_HTTP403"
+assert evaluate(blocked)[1] == "MANGAFIRE_BROWSER_NOT_CALLED"
+
+challenge = [
+    line.replace("work=punpun|attempts=0|outcome=NOT_USED",
+                 "work=punpun|attempts=1|outcome=UPSTREAM_CHALLENGE")
+    for line in blocked
+]
+assert evaluate(challenge)[1] == "MANGAFIRE_BROWSER_UPSTREAM_CHALLENGE"
+browser403 = [
+    line.replace("work=punpun|attempts=1|outcome=UPSTREAM_CHALLENGE",
+                 "work=punpun|attempts=1|outcome=HTTP_REJECTED")
+    for line in challenge
+]
+assert evaluate(browser403)[1] == "MANGAFIRE_BROWSER_HTTP_REJECTED"
+unsupported = [
+    line.replace("work=punpun|attempts=1|outcome=UPSTREAM_CHALLENGE",
+                 "work=punpun|attempts=1|outcome=WEBVIEW_UNSUPPORTED")
+    for line in challenge
+]
+assert evaluate(unsupported)[1] == "MANGAFIRE_BROWSER_UNSUPPORTED"
+browserSuccess = [
+    line.replace("work=punpun|attempts=0|outcome=NOT_USED",
+                 "work=punpun|attempts=1|outcome=SUCCEEDED").replace(
+                 "work=punpun|phase=API|signedUrl=OBSERVED|http=200|transport=HTTP",
+                 "work=punpun|phase=API|signedUrl=OBSERVED|http=403|transport=BROWSER")
+    for line in good
+]
+assert evaluate(browserSuccess)[0] is True
+browserFalsePositive = [
+    line.replace("work=punpun|attempts=1|outcome=SUCCEEDED",
+                 "work=punpun|attempts=1|outcome=HTTP_REJECTED")
+    for line in browserSuccess
+]
+assert evaluate(browserFalsePositive)[1] == "BROWSER_SOURCE_NOT_PROVEN"
 
 budget = fixture()
 budget[0] = (
@@ -79,4 +121,4 @@ budget.extend([
     "MANGAALL_CI_LOOKUP_BLOCKER|work=koe|source=MANGADOT|reason=PAGE_FOUR_PENDING",
 ])
 assert evaluate(budget)[1] == "MANGADOT_PAGE_FOUR_PENDING"
-print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=19|live=NOT_STARTED|unified=NOT_PROVEN")
+print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=27|live=NOT_STARTED|unified=NOT_PROVEN")
