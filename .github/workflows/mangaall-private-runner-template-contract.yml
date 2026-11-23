@@ -36,7 +36,9 @@ jobs:
           abort 'not a yaml mapping' unless workflow.is_a?(Hash)
           abort 'wrong private job scope' unless workflow.dig('jobs', 'isolated-android-source-gate', 'runs-on') ==
             ['self-hosted', 'Linux', 'X64', 'mangaall-ephemeral-android']
-          triggers = workflow.fetch('on')
+          # Ruby Psych uses YAML 1.1 where the unquoted "on" may parse as true.
+          # GitHub Actions correctly interprets it as the event key.
+          triggers = workflow['on'] || workflow[true]
           abort 'wrong triggers' unless triggers.is_a?(Hash) && triggers.keys == ['workflow_dispatch']
           abort 'private preflight missing' unless workflow.fetch('jobs').key?('private-repository-preflight')
           puts 'MANGAALL_PRIVATE_CI_TEMPLATE|yaml=PASS|offline=YES|runner=NONE|network=NOT_STARTED'
