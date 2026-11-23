@@ -38,6 +38,7 @@ run_offline_test 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork
 # the HTTPS-only bridge; the verdict is typed, not a 100s blind timeout.
 run_offline_test 'mangaAllCiShapeSolverExactAsset_opaqueOriginFailsClosedOffline'
 run_offline_test 'mangaAllCiBrowserVerdictContract_rejectsUnboundedOrUntrustedData'
+run_offline_test 'mangaAllCiMangaFire403Classifier_offlineResponseOnly'
 run_offline_test 'mangaAllCiShapeNativeNavigationClassifier_offline'
 run_offline_test 'mangaAllCiShapeSolverBridge_offlineWithoutNetwork'
 # Second differential: the exact 921-line HTML asset with blockNetworkLoads.
