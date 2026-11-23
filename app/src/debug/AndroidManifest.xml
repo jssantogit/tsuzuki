@@ -5,6 +5,11 @@
             android:name="eu.kanade.tachiyomi.DefaultSkinValidationActivity"
             android:exported="false"
             android:theme="@style/Theme.Tachiyomi" />
+        <!-- Passive Chromium/WebView comparison for explicit CI tests only. -->
+        <activity
+            android:name="eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Tachiyomi" />
         <!-- Debug/instrumentation only; never present in release manifest. -->
         <activity
             android:name="eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestActivity"
