@@ -69,6 +69,12 @@ internal object MangaAllInstrumentationVerdict {
                 """PROFILE_READY|LISTENER_REGISTERED|LOAD_REQUESTED|""" +
                 """PAGE_COMMITTED|PAGE_FINISHED)\|mode=DEBUG_ONLY""",
         ),
+        // Runtime probe is independent of JavaScript solver-stage events. It
+        // may establish the presence of an injected bridge, never clearance.
+        Regex(
+            """MANGAALL_CI_SHAPE_JS_PROBE\|result=(PENDING|BRIDGE_READY|""" +
+                """BRIDGE_MISSING|JS_UNAVAILABLE)\|mode=DEBUG_ONLY""",
+        ),
         // Existing production Browser Host diagnostic enums, not HTTP bodies,
         // HTML, challenge tokens, cookies, response headers or full URLs.
         Regex(
