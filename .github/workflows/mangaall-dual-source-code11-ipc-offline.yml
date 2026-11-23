@@ -33,7 +33,9 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           workflow=Path('.github/workflows/mangaall-dual-source-code11-ipc-offline.yml').read_text()
-          assert "workflow_dispatch:" not in workflow and "pull_request:" not in workflow
+          import re
+          assert re.search(r"(?m)^on:$", workflow)
+          assert not re.search(r"(?m)^  (?:workflow_dispatch|pull_request):", workflow)
           assert "on:\n  push:" in workflow
           script=Path('.github/scripts/run_mangaall_dual_source_code11_ipc.sh').read_text()
           assert 'airplane-mode enable' in script
