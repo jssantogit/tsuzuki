@@ -63,36 +63,6 @@ internal object MangaAllInstrumentationVerdict {
                 """\|signedJson=[0-2]\|works=2\|providerCandidateWorks=[0-2]""" +
                 """\|canonical=NOT_TESTED\|chapters=NOT_TESTED\|readerPixels=NOT_TESTED""",
         ),
-        // A54 process-reuse proof: no new Activity, cookie, query, URL, or token.
-        Regex(
-            """MANGAALL_A54_REUSE\|work=(punpun|koe)\|api=(VALID_JSON|INCONCLUSIVE)""" +
-                """\|candidates=([0-9]|[1-9][0-9])""",
-        ),
-        Regex(
-            """MANGAALL_A54_REUSE\|outcome=(PASS|INCONCLUSIVE)\|signedJson=[0-2]""" +
-                """\|newVerification=NONE\|officialApp=NOT_TESTED""",
-        ),
-        // One physical A54 work index (01..30), one actual signed three-source lookup.
-        // Truncation/cursor limits remain explicit, never silently treated as absence.
-        Regex(
-            """MANGAALL_A54_AUDIT\|index=(0[1-9]|[12][0-9]|30)""" +
-                """\|phase=LOOKUP\|outcome=(COMPLETE|TOO_LARGE|TIMEOUT|READ_ERROR|""" +
-                """RUNTIME_DIED|OTHER|INVALID_IDENTITY|IDENTITY_CONFLICT|CURSOR_LIMIT)""" +
-                """\|pages=([0-9]|1[0-2])""",
-        ),
-        Regex(
-            """MANGAALL_A54_AUDIT\|index=(0[1-9]|[12][0-9]|30)\|phase=METADATA""" +
-                """\|titles=(CONSISTENT|VARIANCE|UNVERIFIED)""" +
-                """\|authors=(CONSISTENT|VARIANCE|UNVERIFIED)\|canonical=NOT_ATTESTED""",
-        ),
-        Regex(
-            """MANGAALL_A54_AUDIT\|index=(0[1-9]|[12][0-9]|30)""" +
-                """\|source=(mangadex|mangadot|mangafire)\|candidates=([0-9]|""" +
-                """[1-9][0-9]|[1-9][0-9]{2})""" +
-                """\|chapters=(COMPLETE|MISSING|AMBIGUOUS|INVALID_IDENTITY|TOO_LARGE|""" +
-                """TIMEOUT|READ_ERROR|RUNTIME_DIED|OTHER|CURSOR_LIMIT)""" +
-                """\|pages=([0-9]|1[0-6])\|chapterOne=(YES|NO|MULTIPLE|UNVERIFIED)""",
-        ),
         Regex("""MANGAALL_LIVE_PAGE_GATE\|outcome=INCONCLUSIVE\|reason=[A-Z_]{3,64}"""),
         // Accept only closed Host page diagnostic enums for the signed code9 live gate.
         // Generic code8 inconclusive records above remain unchanged.
