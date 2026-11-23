@@ -56,6 +56,7 @@ def check_shard(payload, index, works):
     require(payload.get("originalCode10SignedPackageChanged") is False and
             payload.get("adapterRouterModification") == "SOURCE_IDS_ONLY_IN_MEMORY" and
             payload.get("chapterAdaptation") == "MANGADOT_IN_MEMORY_48K_200_NO_RELEASE" and
+            payload.get("lookupAdaptation") == "MANGADOT_EIGHT_SOURCE_PAGES_IN_MEMORY" and
             payload.get("sourceSet") == ["mangadex", "mangadot"],
             "SOURCE_IDENTITY_MISMATCH")
     require(payload.get("shard") == index and payload.get("shardCount") == 3 and
@@ -246,6 +247,7 @@ def fixture(works):
             "sourceRepositoryCommit": ORIGIN_SHA, "originalCode10SignedPackageChanged": False,
             "adapterRouterModification": "SOURCE_IDS_ONLY_IN_MEMORY",
             "chapterAdaptation": "MANGADOT_IN_MEMORY_48K_200_NO_RELEASE",
+            "lookupAdaptation": "MANGADOT_EIGHT_SOURCE_PAGES_IN_MEMORY",
             "sourceSet": ["mangadex", "mangadot"], "shard": shard,
             "shardCount": 3, "totalWorkCount": 30, "sourceRequestBudget": 320,
             "sourceHttp": "REAL_GITHUB_ACTIONS_FETCH", "canonical": "NOT_TESTED",
