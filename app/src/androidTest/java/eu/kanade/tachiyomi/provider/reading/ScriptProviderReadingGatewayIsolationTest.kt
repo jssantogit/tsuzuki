@@ -1,15 +1,6 @@
 package eu.kanade.tachiyomi.provider.reading
 
 import android.content.Intent
-import eu.kanade.tachiyomi.provider.runtime.AndroidProviderBrowserHostService
-import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestActivity
-import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestGate
-import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfiles
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -17,6 +8,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.data.tsuzuki.instrumentation.MangaAllInstrumentationVerdict
+import eu.kanade.tachiyomi.provider.runtime.AndroidProviderBrowserHostService
+import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestActivity
+import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestGate
+import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfiles
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase
@@ -27,9 +22,11 @@ import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
 import eu.kanade.tachiyomi.ui.reader.loader.LocalChapterLoader
 import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpChapterLoader
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -46,6 +43,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
+import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
@@ -87,8 +85,10 @@ import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import javax.crypto.Cipher
