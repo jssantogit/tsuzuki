@@ -30,6 +30,12 @@ API = re.compile(
     r"\|signedUrl=(OBSERVED|NOT_OBSERVED)\|http=(NONE|200|403|OTHER)"
     r"\|transport=(HTTP|BROWSER|NONE)\|json=(VALIDATED|UNVERIFIED)"
 )
+BROWSER = re.compile(
+    r"MANGAALL_CI_BROWSER_FALLBACK\|work=(punpun|koe|akame)"
+    r"\|attempts=([0-9])\|outcome=(NOT_USED|SUCCEEDED|UPSTREAM_CHALLENGE|"
+    r"HTTP_REJECTED|TIMEOUT|NAVIGATION|TLS|RENDERER_GONE|WEBVIEW_UNSUPPORTED|"
+    r"SELECTOR_MISSING|CANCELLED|UNKNOWN|NO_RESULT)"
+)
 FAILURE = re.compile(
     r"MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)\|phase=LOOKUP_FAILURE"
     r"\|cause=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|UNCLASSIFIED_ERROR)"
@@ -61,6 +67,7 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
     chapter: dict[str, tuple[str, ...]] = {}
     lookup: dict[str, tuple[str, ...]] = {}
     failed: dict[str, tuple[str, str]] = {}
+    browser: dict[str, tuple[int, str]] = {}
     budget: set[str] = set()
     records = [s.strip() for s in lines if s.strip()]
     for item in records:
@@ -80,6 +87,11 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
             if work in api:
                 return False, "DUPLICATE_API"
             api[work] = tuple(data)
+        elif match := BROWSER.fullmatch(item):
+            work, attempts, outcome = match.groups()
+            if work in browser:
+                return False, "DUPLICATE_BROWSER_FALLBACK"
+            browser[work] = (int(attempts), outcome)
         elif match := FAILURE.fullmatch(item):
             work, cause, http = match.groups()
             if work in failed:
@@ -107,11 +119,22 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
         # Preserve the actual source failure instead of hiding the real
         # HTTP403 behind a generic missing PASS summary. Never treat a
         # blocked API as an empty MangaFire catalog or a chapter defect.
-        if any(
-            api.get(work) == ("OBSERVED", "403", "NONE", "UNVERIFIED") and
+        blocked = [
+            work for work in WORKS
+            if api.get(work) == ("OBSERVED", "403", "NONE", "UNVERIFIED") and
             failed.get(work) == ("CHALLENGE_BLOCKED", "403")
-            for work in WORKS
-        ):
+        ]
+        for work in blocked:
+            attempts, outcome = browser.get(work, (0, "NOT_USED"))
+            if attempts > 0 and outcome == "UPSTREAM_CHALLENGE":
+                return False, "MANGAFIRE_BROWSER_UPSTREAM_CHALLENGE"
+            if attempts > 0 and outcome == "HTTP_REJECTED":
+                return False, "MANGAFIRE_BROWSER_HTTP_REJECTED"
+            if attempts > 0 and outcome == "WEBVIEW_UNSUPPORTED":
+                return False, "MANGAFIRE_BROWSER_UNSUPPORTED"
+            if attempts == 0:
+                return False, "MANGAFIRE_BROWSER_NOT_CALLED"
+        if blocked:
             return False, "MANGAFIRE_UPSTREAM_HTTP403"
         if any(
             work in budget and failed.get(work) == ("UNCLASSIFIED_ERROR", "NONE")
@@ -121,12 +144,19 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
         return False, "FIRE_SOURCE_SUMMARY_MISSING"
     if len(proven) != 3 or len(api) != 3 or len(chapter) != 3 or len(lookup) != 3:
         return False, "SOURCE_EVIDENCE_MISSING"
+    if len(browser) != 3:
+        return False, "BROWSER_FALLBACK_EVIDENCE_MISSING"
     for work in WORKS:
         if proven[work] != ("COMPLETE", "VALIDATED", "COMPLETE", "YES", "SOURCE_READY"):
             return False, "FIRE_SOURCE_NOT_READY"
         if sources[(work, "mangafire")][0] != 1:
             return False, "FIRE_CANDIDATE_NOT_UNIQUE"
         signed, http, transport, json_state = api[work]
+        attempts, fallback_outcome = browser[work]
+        if (attempts == 0) != (fallback_outcome == "NOT_USED"):
+            return False, "BROWSER_FALLBACK_INCONSISTENT"
+        if transport == "BROWSER" and (attempts == 0 or fallback_outcome != "SUCCEEDED"):
+            return False, "BROWSER_SOURCE_NOT_PROVEN"
         if signed != "OBSERVED" or json_state != "VALIDATED" or (
             not (http == "200" and transport == "HTTP") and transport != "BROWSER"
         ):
