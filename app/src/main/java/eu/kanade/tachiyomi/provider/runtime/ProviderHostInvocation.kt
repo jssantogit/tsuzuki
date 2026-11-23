@@ -206,6 +206,11 @@ class ProviderHostInvocationFactory(
                         allowLocalNetwork = policy.allowLocalNetwork,
                     ),
                     providerProfileName = ProviderBrowserProfiles.nameFor(policy.providerId),
+                    allowMangaFireApiPassiveContinuation = MangaAllMangaFireUserAgent.enabled(
+                        policy.providerId,
+                        policy.networkOrigins,
+                        policy.browserOrigins,
+                    ),
                 )
                 object : ProviderBrowserHostService, AutoCloseable {
                     override suspend fun readText(url: String, cssSelector: String): String {
