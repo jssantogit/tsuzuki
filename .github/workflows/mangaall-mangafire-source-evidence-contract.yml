@@ -1,0 +1,65 @@
+name: MangaALL — signed source MangaFire evidence transport contracts (OFFLINE)
+# No external provider HTTP, no device, no signed asset change, no release.
+# A genuine CI live gate is separate, explicitly opt-in and fail-closed.
+on:
+  push:
+    branches: ['probe/mangaall-a54-browser-profile-validation-*']
+    paths:
+      - '.github/workflows/mangaall-mangafire-source-evidence-contract.yml'
+      - '.github/scripts/mangaall_ci_three_gate.py'
+      - '.github/scripts/test_mangaall_ci_three_gate.py'
+      - '.github/scripts/run_mangaall_ci_webview_android.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllInstrumentationVerdict.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-mangafire-source-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  signed-source-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Offline fail-closed source API receipt contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/run_mangaall_ci_webview_android.sh
+          python3 .github/scripts/test_mangaall_ci_three_gate.py
+          python3 - <<'PY'
+          from pathlib import Path
+          test=Path('app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt').read_text()
+          start=test.index('private suspend fun runMangaAllCiWebviewMangaFireChapterGate(')
+          end=test.index('private suspend fun runPublishedMangaAllLivePages(', start)
+          scope=test[start:end]
+          assert 'browserDiagnosticSink = {' in scope
+          assert 'browserSuccess.get() > 0' in scope
+          assert 'sourceJson = if (' in scope
+          assert 'phase=API|signedUrl=$urlSeen' in scope
+          assert 'AndroidProviderBrowserHostService(' not in scope
+          assert 'directBody' not in scope
+          assert 'signedApi.getAndSet(null)' in scope
+          assert 'sourceCandidates["mangafire"]' in scope
+          assert 'code10-published-package.tsz' in scope
+          print('MANGAALL_CI_SOURCE_EVIDENCE|offline=PASS|duplicate_live_API=DENIED|signed_code10=UNCHANGED')
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Compile actual Android instrumentation test and verify formatting
+        run: ./gradlew :app:spotlessKotlinCheck :app:compileDebugAndroidTestKotlin --stacktrace
+      - name: Scope of verdict
+        run: |
+          echo 'MANGAALL_CI_SOURCE_EVIDENCE|result=OFFLINE_CONTRACT_PASS|live=NOT_STARTED|mangafire=NOT_PROVEN_BY_THIS_RUN'
