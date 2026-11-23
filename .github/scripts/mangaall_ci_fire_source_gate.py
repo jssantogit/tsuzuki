@@ -49,6 +49,10 @@ CHALLENGE403 = re.compile(
     r"MANGAALL_CI_FIRE_403\|work=(punpun|koe|akame)"
     r"\|kind=(SHAPE_REQUIRED|OTHER_JSON|UNCLASSIFIED|NOT_OBSERVED)"
 )
+EDGE403 = re.compile(
+    r"MANGAALL_CI_FIRE_403\\|work=(punpun|koe|akame)"
+    r"\\|family=(CF_MITIGATED|JSON|CF_SERVER_HTML|OTHER_HTML|CF_SERVER_OTHER|OTHER)"
+)
 CHAPTERS = re.compile(
     r"MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)"
     r"\|outcome=(READY|INCONCLUSIVE)\|pages=([0-4])"
@@ -64,7 +68,7 @@ SUMMARY = (
     "|ready=3|works=3|canonical=NOT_TESTED|unified=NOT_PROVEN"
 )
 
-def evaluate(lines: list[str]) -> tuple[bool, str]:
+def evaluate(lines: list[str], require_edge: bool = False) -> tuple[bool, str]:
     sources: dict[tuple[str, str], tuple[int, str]] = {}
     proven: dict[str, tuple[str, ...]] = {}
     api: dict[str, tuple[str, ...]] = {}
@@ -74,6 +78,7 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
     browser: dict[str, tuple[int, str]] = {}
     budget: set[str] = set()
     challenge403: dict[str, str] = {}
+    edge403: dict[str, str] = {}
     records = [s.strip() for s in lines if s.strip()]
     for item in records:
         if match := SCOPE.fullmatch(item):
@@ -112,6 +117,11 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
             if work in challenge403:
                 return False, "DUPLICATE_FIRE_403_CLASSIFICATION"
             challenge403[work] = kind
+        elif match := EDGE403.fullmatch(item):
+            work, family = match.groups()
+            if work in edge403:
+                return False, "DUPLICATE_FIRE_403_EDGE"
+            edge403[work] = family
         elif match := CHAPTERS.fullmatch(item):
             work, *data = match.groups()
             if work in chapter:
@@ -130,6 +140,22 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
         for work, kind in challenge403.items()
     ):
         return False, "FIRE_403_CLASSIFICATION_INCONSISTENT"
+    # Observed from the same signed provider HTTP response. Never accept
+    # forged/contradictory source challenge and edge classifications.
+    if any(api.get(work, (None, None))[1] != "403" for work in edge403):
+        return False, "FIRE_403_EDGE_INCONSISTENT"
+    if any(
+        kind in ("SHAPE_REQUIRED", "OTHER_JSON") and edge403.get(work) not in ("JSON", "CF_MITIGATED")
+        for work, kind in challenge403.items() if work in edge403
+    ):
+        return False, "FIRE_403_KIND_EDGE_CONFLICT"
+    if require_edge and any(
+        api.get(work, (None, None))[1] == "403" and (
+            work not in edge403 or work not in challenge403
+        )
+        for work in WORKS
+    ):
+        return False, "FIRE_403_EDGE_EVIDENCE_MISSING"
     if len(sources) != 9 or any((work, source) not in sources
                                 for work in WORKS for source in SOURCES):
         return False, "THREE_SOURCE_MATRIX_MISSING"
@@ -202,7 +228,7 @@ def main() -> int:
     if not path.is_file() or path.stat().st_size > 20_000:
         print("MANGAALL_CI_FIRE_GATE|outcome=FAIL|reason=INVALID_VERDICT_INPUT")
         return 2
-    ok, reason = evaluate(path.read_text(encoding="utf-8").splitlines())
+    ok, reason = evaluate(path.read_text(encoding="utf-8").splitlines(), require_edge=True)
     print(
         f"MANGAALL_CI_FIRE_GATE|outcome={'PASS' if ok else 'INCONCLUSIVE'}"
         f"|reason={reason}|unified=NOT_PROVEN|canonical=NOT_TESTED"
