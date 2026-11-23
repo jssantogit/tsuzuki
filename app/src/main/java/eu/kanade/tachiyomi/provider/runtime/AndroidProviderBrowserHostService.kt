@@ -204,7 +204,15 @@ class AndroidProviderBrowserHostService(
                             """.trimIndent(),
                         ) { raw ->
                             runCatching { decodeJavascriptText(raw) }
-                                .onSuccess { complete(Result.success(it)) }
+                                .onSuccess { text ->
+                                    // After a 403, navigation alone is not
+                                    // evidence: challenge HTML may have loaded.
+                                    // The unchanged signed adapter still checks
+                                    // the complete API schema and source data.
+                                    val accepted = continuation.firstDeferredFailure() == null ||
+                                        MangaAllMangaFireBrowserApiEvidence.isApiJson(text)
+                                    if (accepted) complete(Result.success(text))
+                                }
                                 .onFailure { complete(Result.failure(it)) }
                         }
                     }
