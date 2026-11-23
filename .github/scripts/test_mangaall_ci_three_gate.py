@@ -45,6 +45,16 @@ assert evaluate(good + [good[6]])[1] == "DUPLICATE_CHAPTER_VERDICT"
 assert evaluate([line for line in good if line != SUMMARY])[1] == "THREE_WORK_SUMMARY_MISSING"
 assert evaluate([line for line in good if "work=akame|phase=LOOKUP" not in line])[1] == "LOOKUP_NOT_COMPLETE_AND_UNIQUE"
 
+# An inconclusive summary must not hide the first actual broken source
+# continuation from the operator behind a generic summary-missing label.
+partial = fixture()
+partial[0] = (
+    "MANGAALL_CI_CHAPTER|outcome=INCONCLUSIVE|ready=0|works=3"
+    "|canonical=NOT_TESTED|readerPixels=NOT_TESTED"
+)
+partial[1] = partial[1].replace("outcome=COMPLETE", "outcome=READ_ERROR")
+assert evaluate(partial)[1] == "LOOKUP_NOT_COMPLETE_AND_UNIQUE"
+
 reject_modified(1, good[1].replace("outcome=COMPLETE", "outcome=READ_ERROR"), "LOOKUP_NOT_COMPLETE_AND_UNIQUE")
 reject_modified(1, good[1].replace("candidates=1", "candidates=2"), "LOOKUP_NOT_COMPLETE_AND_UNIQUE")
 reject_modified(4, good[4].replace("candidates=1", "candidates=2"), "MANGAFIRE_CANDIDATE_NOT_UNIQUE")
