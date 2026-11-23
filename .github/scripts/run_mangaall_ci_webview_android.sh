@@ -49,7 +49,9 @@ else
   test_method='mangaAllCode10CiWebviewSameProfile_checksRealSignedApi'
   pattern='MANGAALL_CI_WEBVIEW\|phase=STARTED|MANGAALL_CI_WEBVIEW\|phase=WARMUP\|outcome=(PAGE_FINISHED|HTTP_REJECTED|TLS_REJECTED|RENDERER_EXITED|TIMEOUT|PROFILE_UNSUPPORTED)|MANGAALL_CI_WEBVIEW\|work=(punpun|koe)\|api=(VALID_JSON|BLOCKED|NOT_OBSERVED)\|candidates=[0-9]{1,2}|MANGAALL_CI_WEBVIEW\|outcome=(CI_SIGNED_API_ACCEPTED|CI_INCONCLUSIVE)\|signedJson=[0-2]\|works=2\|providerCandidateWorks=[0-2]\|canonical=NOT_TESTED\|chapters=NOT_TESTED\|readerPixels=NOT_TESTED'
 fi
-timeout --foreground 545s adb shell am instrument -w -r \
+timeout_seconds=545
+if [[ "$mode" == 'three' ]]; then timeout_seconds=760; fi
+timeout --foreground "${timeout_seconds}s" adb shell am instrument -w -r \
   -e class "eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#$test_method" \
   -e mangaAllCiWebviewOptIn "$ack" \
   app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner > "$raw" 2>&1 || code=$?
@@ -88,6 +90,15 @@ if [[ "$mode" == 'chapters' || "$mode" == 'three' ]]; then
         fi
       done
     done
+  fi
+  # The three-work mode additionally requires a 3x3 source provenance
+  # matrix, a complete unique lookup, valid signed browser API and every
+  # chapter cursor ending with chapter one attested.
+  if [[ "$mode" == 'three' ]]; then
+    if ! python3 .github/scripts/mangaall_ci_three_gate.py "$out/verdict.txt"; then
+      echo 'MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=THREE_SOURCES|reason=EVIDENCE_NOT_COMPLETE' >&2
+      exit 3
+    fi
   fi
   if [[ "$code" -eq 0 ]] &&
     grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw" &&
