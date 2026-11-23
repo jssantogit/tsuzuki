@@ -68,9 +68,12 @@ jobs:
           solver_ack = ''
           if os.environ['EVENT'] == 'push':
               import subprocess
-              modified = subprocess.check_output(
-                  ['git', 'show', '--pretty=format:', '--name-only', 'HEAD'], text=True,
-              ).splitlines()
+              modified = [
+                  path for path in subprocess.check_output(
+                      ['git', 'show', '--pretty=format:', '--name-only', 'HEAD'],
+                      text=True,
+                  ).splitlines() if path.strip()
+              ]
               assert modified == ['.github/mangaall-ci-webview-request.json']
               record = Path('.github/mangaall-ci-webview-request.json').read_bytes()
               assert len(record) <= 384
