@@ -29,6 +29,23 @@ Keiyoushi `extensions-source`, Apache License 2.0: <https://github.com/keiyoushi
 2. The two-work experiment yields real sanitized source evidence and explicitly reports the shape attempt outcome.
 3. Only an observed successful session should justify enabling the full 30-work experiment. An unresolved Cloudflare challenge, the independent >64 KiB Host result limit and real Reader pixels remain separate blockers.
 
+
+## CI: correção de transporte nativo do navegador após o PASS físico A54 (2026-11-22)
+
+O teste físico A54 de [PR #272](https://github.com/jssantogit/tsuzuki/pull/272) alcançou **2/2 respostas JSON válidas** da API assinada MangaFire depois de uma verificação interativa no WebView do próprio Browser Host. Essa é prova **limitada ao ambiente debug do A54**, não um passe da CI.
+
+Auditoria da [PR #271](https://github.com/jssantogit/tsuzuki/pull/271) identificou uma diferença de implementação ainda não testada: o Chromium era usado para adquirir a sessão, mas a consulta assinada era enviada através de `BrowserContext.request.get`, que [compartilha o cookie jar mas é a API HTTP do Playwright](https://playwright.dev/docs/api/class-apirequestcontext), não uma solicitação feita dentro da página. Cloudflare pode diferenciar essas solicitações. Essa **hipótese técnica não é uma causa confirmada** dos 403 anteriores.
+
+Mudança experimental, ainda estritamente test-only:
+
+- Manter a sessão no mesmo Chromium e fazer o GET assinado na origem por `page.evaluate(() => fetch(...))`, com `credentials: same-origin`, redirecionamento bloqueado, timeout de 12s e limite de 192 KiB.
+- Não copiar cookies, User-Agent, tokens, URLs assinadas nem HTML de desafios para logs/artefatos. Não alterar programa, plugin/provider assinado, release ou permissões.
+- Após uma sessão verificada no Chromium, restringir a rota a GET `https://mangafire.to/api/*`. Em browser inicial, permitir somente o JS oficial do challenge. O solver de figuras permanece isolado e só é acionado se o site retornar `captcha_required` como JSON — **não** quando Cloudflare retornar `cf-mitigated: challenge`.
+- A aceitação exige HTTP 200, JSON objeto com campo `items` array e sem `error`, para o **mesmo URL produzido pelo code10 original**. Cookie ou tela carregada sozinho não vale.
+- Novo workflow `mangaall-mangafire-browser-transport-contract.yml` executa contrato offline por push, sem tráfego externo, e cobre 403 challenge, controle de URL/método, resposta grande e JSON 200 sem `items`. A execução live segue explicitamente opt-in e limitada a duas obras pela configuração original.
+
+**Sem promessas de superação automática de desafio interativo:** se o runner hospedado pelo GitHub permanecer bloqueado pela infraestrutura anti-bot, o resultado correto continua sendo `INCONCLUSIVE`. O PASS Android não pode ser transplantado via cookies entre ambientes.
+
 ## Live observations (2026-11-22)
 
 - [Run #45085281359](https://github.com/jssantogit/tsuzuki/actions/runs/45085281359): CI SUCCESS, offline shape suite SUCCESS; 2 inconclusive source cases; 6 MangaDex/5 MangaDot HTTP200, MangaFire 1 HTTP403 `cf-mitigated: challenge`. Shape solver correctly not invoked (0 shape attempts). Browser challenge not tried.
