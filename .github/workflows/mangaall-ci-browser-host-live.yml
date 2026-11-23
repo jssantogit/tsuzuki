@@ -5,17 +5,18 @@ on:
   workflow_dispatch:
     inputs:
       acknowledge:
-        description: 'Type I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE to authorize two real signed-code10 title checks'
+        description: 'Type I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE to authorize a bounded two/three-work live gate'
         required: true
         type: string
       gate_mode:
-        description: 'Choose strict source access or chapter cursor test, both on Android emulator'
+        description: 'Choose API, two-work chapter or three-work combined-source chapter test'
         required: true
         type: choice
         default: api
         options:
           - api
           - chapters
+          - three
   push:
     branches: ['probe/mangaall-a54-browser-profile-validation-*']
     paths:
@@ -46,31 +47,34 @@ jobs:
         run: |
           set -euo pipefail
           bash -n .github/scripts/run_mangaall_ci_webview_android.sh
+          python3 .github/scripts/test_mangaall_ci_three_gate.py
           python3 - <<'PY'
           import json
           import os
           from pathlib import Path
           approved = 'I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE'
           works = ['Oyasumi Punpun', 'Koe no Katachi']
+          three_works = ['Oyasumi Punpun', 'Koe no Katachi', 'Akame ga Kill!']
           if os.environ['EVENT'] == 'push':
               record = Path('.github/mangaall-ci-webview-request.json').read_bytes()
               assert len(record) <= 256
               manifest = json.loads(record)
               assert type(manifest) is dict and set(manifest) == {'acknowledge', 'works', 'gate'}
-              assert manifest['acknowledge'] == approved and manifest['works'] == works
+              assert manifest['acknowledge'] == approved
               gate = manifest['gate']
+              assert manifest['works'] == (three_works if gate == 'three' else works)
           else:
               assert os.environ['EVENT'] == 'workflow_dispatch'
               assert os.environ['MANUAL_ACK'] == approved
               gate = os.environ['MANUAL_GATE']
-          assert gate in ('api', 'chapters')
+          assert gate in ('api', 'chapters', 'three')
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
               out.write('gate=' + gate + '\n')
           release = Path('app/src/main/AndroidManifest.xml').read_text()
           debug = Path('app/src/debug/AndroidManifest.xml').read_text()
           assert 'MangaFireCiBrowserWarmupActivity' in debug
           assert 'MangaFireCiBrowserWarmupActivity' not in release
-          print('MANGAALL_CI_WEBVIEW|scope=2_WORKS|code10=ORIGINAL_SIGNED|profile=ISOLATED|gate=' + gate + '|external=NOT_STARTED')
+          print('MANGAALL_CI_WEBVIEW|scope=' + ('3' if gate == 'three' else '2') + '_WORKS|code10=ORIGINAL_SIGNED|profile=ISOLATED|gate=' + gate + '|external=NOT_STARTED')
           PY
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
