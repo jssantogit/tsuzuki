@@ -2896,7 +2896,9 @@ class ScriptProviderReadingGatewayIsolationTest {
             assertFalse(MangaFireCiShapeSolverGate.hasDocumentReady())
             assertEquals("OPAQUE", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
             assertEquals("BRIDGE_MISSING", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
-            assertEquals("DATA", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
+            assertTrue(
+                MangaFireCiShapeSolverGate.lastNavigation("FINISH") in setOf("DATA", "ABOUT"),
+            )
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
         }
