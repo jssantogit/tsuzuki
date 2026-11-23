@@ -1,10 +1,10 @@
 {
-  "solver_acknowledge": "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE",
-  "acknowledge": "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE",
   "works": [
     "Oyasumi Punpun",
     "Koe no Katachi",
     "Akame ga Kill!"
   ],
-  "gate": "shape"
+  "gate": "shape",
+  "acknowledge": "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE",
+  "solver_acknowledge": "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE"
 }
