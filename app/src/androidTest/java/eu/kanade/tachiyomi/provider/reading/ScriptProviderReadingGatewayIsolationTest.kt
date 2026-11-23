@@ -2903,6 +2903,15 @@ class ScriptProviderReadingGatewayIsolationTest {
             }
             assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastJavaScriptProbe())
             assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastDocumentOrigin())
+            val finishedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe() == "PENDING" &&
+                System.nanoTime() < finishedDeadline
+            ) {
+                Thread.sleep(50)
+            }
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
             assertTrue(
                 "Real solver WebView never reached loadDataWithBaseURL",
                 MangaFireCiShapeSolverGate.lastNativeStage() in setOf(
@@ -2947,6 +2956,18 @@ class ScriptProviderReadingGatewayIsolationTest {
             }
             assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastJavaScriptProbe())
             assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastDocumentOrigin())
+            // In a fresh instrumentation process, the first full solver
+            // document must retain its source origin after page finish.
+            // This is an offline Chromium lifecycle proof, NOT MangaFire access.
+            val finishedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe() == "PENDING" &&
+                System.nanoTime() < finishedDeadline
+            ) {
+                Thread.sleep(50)
+            }
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
         }
