@@ -2711,6 +2711,169 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
     }
 
+    /**
+     * CI-only source chapter gate on the same Android Browser Host profile.
+     * The original signed code10 performs one combined-source lookup per
+     * title; ONLY the unique returned MangaFire source HID is used to inspect
+     * real MangaFire chapter cursors. Nothing is bound canonically/persisted.
+     */
+    @Test(timeout = 360_000L)
+    fun mangaAllCode10CiWebviewMangaFireChapters_checksRealPagination() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        assertEquals(
+            "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE",
+            InstrumentationRegistry.getArguments().getString("mangaAllCiWebviewOptIn"),
+        )
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        MangaFireCiBrowserWarmupGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaFireCiBrowserWarmupActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        val warmup = withContext(Dispatchers.IO) {
+            MangaFireCiBrowserWarmupGate.await(35L)
+        }
+        MangaAllInstrumentationVerdict.publish("MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=$warmup")
+        if (warmup != "PROFILE_UNSUPPORTED" && warmup != "TLS_REJECTED" &&
+            warmup != "RENDERER_EXITED"
+        ) {
+            withContext(Dispatchers.IO) { Thread.sleep(8_000L) }
+        }
+        instrumentation.runOnMainSync { activity.finish() }
+        if (warmup == "PROFILE_UNSUPPORTED") {
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_CHAPTER|outcome=INCONCLUSIVE|ready=0|works=2" +
+                    "|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
+            )
+            return@runBlocking
+        }
+
+        val archive = instrumentation.context.assets.open("mangaall/code10-published-package.tsz")
+            .use { it.readBytes() }
+        assertEquals(
+            "bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f",
+            tachiyomi.core.provider.supplychain.sha256Hex(archive),
+        )
+        val manifest = ProviderPackageParser().parse(archive).manifest
+        assertEquals("app.tsuzuki.mangaall", manifest.id)
+        assertEquals(10L, manifest.version.code)
+        val providerId = ProviderId(manifest.id)
+        val gateway = gateway(
+            main = "",
+            providerId = providerId,
+            networkOrigins = requireNotNull(manifest.permissions.network).origins,
+            browserOrigins = manifest.permissions.browser?.origins.orEmpty(),
+            localNetwork = false,
+            packageBytesOverride = archive,
+            baseHttpClient = OkHttpClient.Builder().callTimeout(25, TimeUnit.SECONDS).build(),
+        )
+        var readyWorks = 0
+        for ((id, title) in listOf("punpun" to "Oyasumi Punpun", "koe" to "Koe no Katachi")) {
+            val lookup = runCatching {
+                withTimeout(48_000L) {
+                    gateway.lookup(
+                        providerId,
+                        ProviderReadingLookupRequest(titles = listOf(title), requestedLanguage = "en"),
+                    )
+                }
+            }.getOrNull()
+            val sourceMatches = (lookup as? ProviderCallResult.Success)
+                ?.value?.items?.filter { it.externalWorkId.startsWith("mangafire:") }
+                .orEmpty()
+            val workId = sourceMatches.singleOrNull()?.externalWorkId
+            val validWorkId = workId != null &&
+                Regex("mangafire:[A-Za-z0-9_-]{1,128}").matches(workId)
+            if (!validWorkId) {
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_CHAPTER|work=$id|outcome=INCONCLUSIVE|pages=0|count=0" +
+                        "|chapterOne=UNVERIFIED|reason=" +
+                        (if (sourceMatches.size > 1) "LOOKUP_AMBIGUOUS" else "LOOKUP_UNAVAILABLE"),
+                )
+                continue
+            }
+
+            val binding = ProviderBindingRef(providerId, "en", requireNotNull(workId))
+            val chapterIds = hashSetOf<String>()
+            val chapterOneIds = hashSetOf<String>()
+            val seenCursors = hashSetOf<String>()
+            var cursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+            var pages = 0
+            var reason = "CURSOR_LIMIT"
+            var complete = false
+            for (page in 0 until 4) {
+                val response = runCatching {
+                    withTimeout(24_000L) {
+                        gateway.chapters(
+                            providerId,
+                            ProviderReadingChaptersRequest(binding, cursor = cursor),
+                        )
+                    }
+                }.getOrNull()
+                if (response == null) {
+                    reason = "TIMEOUT"
+                    break
+                }
+                if (response is ProviderCallResult.Failure) {
+                    reason = when (response.error.code.name) {
+                        "SOURCE_TOO_LARGE" -> "SOURCE_TOO_LARGE"
+                        "SOURCE_READ_ERROR" -> "SOURCE_READ_ERROR"
+                        "TIMEOUT" -> "TIMEOUT"
+                        else -> "OTHER"
+                    }
+                    break
+                }
+                val success = response as ProviderCallResult.Success
+                pages++
+                if (success.value.items.any {
+                        !Regex("mangafire:[A-Za-z0-9_-]{1,128}").matches(it.providerChapterId)
+                    }
+                ) {
+                    reason = "INVALID_IDENTITY"
+                    break
+                }
+                for (chapter in success.value.items) {
+                    if (chapter.language != null && chapter.language != "en") continue
+                    chapterIds.add(chapter.providerChapterId)
+                    if (chapter.rawNumber == 1.0 && chapter.volume == null) {
+                        chapterOneIds.add(chapter.providerChapterId)
+                    }
+                }
+                val next = success.value.nextCursor
+                if (next == null) {
+                    complete = true
+                    break
+                }
+                if (!seenCursors.add(next.toString())) break
+                cursor = next
+            }
+            val outcomeReason = when {
+                !complete -> reason
+                chapterIds.isEmpty() -> "EMPTY"
+                chapterOneIds.size != 1 -> "CHAPTER_ONE_NOT_ATTESTED"
+                else -> "NONE"
+            }
+            val chapterOne = when (chapterOneIds.size) {
+                1 -> "YES"
+                0 -> "NO"
+                else -> "MULTIPLE"
+            }
+            val ready = outcomeReason == "NONE"
+            if (ready) readyWorks++
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_CHAPTER|work=$id|outcome=" +
+                    (if (ready) "READY" else "INCONCLUSIVE") +
+                    "|pages=$pages|count=${chapterIds.size.coerceAtMost(999)}" +
+                    "|chapterOne=$chapterOne|reason=$outcomeReason",
+            )
+        }
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_CI_CHAPTER|outcome=" +
+                (if (readyWorks == 2) "CHAPTERS_ACCEPTED" else "INCONCLUSIVE") +
+                "|ready=$readyWorks|works=2|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+    }
+
     private suspend fun runPublishedMangaAllLivePages(signedCode: Long) {
         require(signedCode == 8L || signedCode == 9L || signedCode == 10L)
 
