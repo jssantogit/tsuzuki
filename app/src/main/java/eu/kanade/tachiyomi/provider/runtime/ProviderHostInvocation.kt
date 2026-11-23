@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.provider.runtime
 
 import android.content.Context
+import android.webkit.WebSettings
 import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import okhttp3.OkHttpClient
@@ -141,6 +142,12 @@ class ProviderHostInvocationFactory(
 
     private val context = context.applicationContext
 
+    // Read only when MangaALL has both exact MangaFire grants. No UA or
+    // provider secrets are added to logs or shared with other providers.
+    private val mangaFireBrowserUserAgent by lazy {
+        WebSettings.getDefaultUserAgent(context)
+    }
+
     fun create(
         policy: ProviderHostInvocationPolicy,
         invocationTimeoutMs: Long = ProviderRuntimeLimitsDto().wallClockTimeoutMs,
@@ -150,6 +157,25 @@ class ProviderHostInvocationFactory(
             invocationId = policy.invocationId,
         )
         val resources = ProviderResourceStore()
+
+        // The signed MangaALL adapter does not supply User-Agent. Align its
+        // MangaFire HTTP request with the default Android WebView identity
+        // without copying or replaying any cookies from the browser profile.
+        val httpBaseClient = if (MangaAllMangaFireUserAgent.enabled(
+                policy.providerId,
+                policy.networkOrigins,
+                policy.browserOrigins,
+            )
+        ) {
+            baseHttpClient.newBuilder()
+                .addInterceptor { chain ->
+                    chain.proceed(
+                        MangaAllMangaFireUserAgent.align(chain.request(), mangaFireBrowserUserAgent),
+                    )
+                }.build()
+        } else {
+            baseHttpClient
+        }
 
         val http = policy.networkOrigins
             .takeIf { it.isNotEmpty() }
@@ -162,7 +188,7 @@ class ProviderHostInvocationFactory(
                         allowLocalNetwork = policy.allowLocalNetwork,
                     ),
                     cookieJar = httpSessions.cookieJar(policy.providerId),
-                    baseClient = baseHttpClient,
+                    baseClient = httpBaseClient,
                     invocationTimeoutMs = invocationTimeoutMs,
                     diagnosticSink = { diagnostic ->
                         logSink(policy.providerId, diagnostic.toRuntimeLogMessage())
