@@ -167,7 +167,9 @@ class ProviderHostInvocationFactory(
             baseHttpClient.newBuilder()
                 .addInterceptor { chain ->
                     chain.proceed(
-                        MangaAllMangaFireUserAgent.align(chain.request(), mangaFireBrowserUserAgent),
+                        MangaAllMangaFireXhrHeaders.align(
+                            MangaAllMangaFireUserAgent.align(chain.request(), mangaFireBrowserUserAgent),
+                        ),
                     )
                 }.build()
         } else {
