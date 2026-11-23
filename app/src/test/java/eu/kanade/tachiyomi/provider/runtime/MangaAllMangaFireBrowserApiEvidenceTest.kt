@@ -17,6 +17,28 @@ class MangaAllMangaFireBrowserApiEvidenceTest {
     }
 
     @Test
+    fun `post challenge JSON must match the original signed URL exactly`() {
+        val signed = "https://mangafire.to/api/titles?keyword=punpun&vrf=abc"
+        val json = """{"items":[{"id":"safe"}]}"""
+        MangaAllMangaFireBrowserApiEvidence.isOriginalApiResponse(signed, signed, json) shouldBe true
+        MangaAllMangaFireBrowserApiEvidence.isOriginalApiResponse(
+            signed,
+            "https://mangafire.to/api/titles?keyword=koe&vrf=abc",
+            json,
+        ) shouldBe false
+        MangaAllMangaFireBrowserApiEvidence.isOriginalApiResponse(
+            signed,
+            "https://mangafire.to/@waf/solver",
+            json,
+        ) shouldBe false
+        MangaAllMangaFireBrowserApiEvidence.isOriginalApiResponse(
+            signed,
+            signed,
+            "<!doctype html>challenge",
+        ) shouldBe false
+    }
+
+    @Test
     fun `WAF HTML and JSON errors never become accepted API evidence`() {
         for (body in listOf(
             "<!doctype html><html><body>checking</body></html>",
