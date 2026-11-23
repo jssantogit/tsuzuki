@@ -50,7 +50,7 @@ CHALLENGE403 = re.compile(
     r"\|kind=(SHAPE_REQUIRED|OTHER_JSON|UNCLASSIFIED|NOT_OBSERVED)"
 )
 EDGE403 = re.compile(
-    r"MANGAALL_CI_FIRE_403\|work=(punpun|koe|akame)"
+    r"MANGAALL_CI_FIRE_403_EDGE\|work=(punpun|koe|akame)"
     r"\|family=(CF_MITIGATED|JSON|CF_SERVER_HTML|OTHER_HTML|CF_SERVER_OTHER|OTHER)"
 )
 CHAPTERS = re.compile(
