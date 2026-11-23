@@ -12,6 +12,7 @@ on:
       - '.github/scripts/mangaall_ci_fire_source_gate.py'
       - '.github/scripts/test_mangaall_ci_fire_source_gate.py'
       - '.github/scripts/run_mangaall_ci_webview_android.sh'
+      - '.github/scripts/run_mangaall_fire_source_allowlist_offline.sh'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllInstrumentationVerdict.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
   workflow_dispatch:
@@ -36,6 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n .github/scripts/run_mangaall_ci_webview_android.sh
+          bash -n .github/scripts/run_mangaall_fire_source_allowlist_offline.sh
           python3 .github/scripts/test_mangaall_ci_three_gate.py
           python3 .github/scripts/test_mangaall_ci_fire_source_gate.py
           python3 - <<'PY'
@@ -80,24 +82,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: |
-            set -euo pipefail
-            app=(app/build/outputs/apk/debug/*universal*.apk)
-            tests=(app/build/outputs/apk/androidTest/debug/*.apk)
-            [[ ${#app[@]} -eq 1 && ${#tests[@]} -eq 1 ]]
-            adb install -r "${app[0]}" >/dev/null
-            adb install -r "${tests[0]}" >/dev/null
-            result="$(timeout --foreground 120s adb shell am instrument -w -r \
-              -e class eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllCiBrowserVerdictContract_rejectsUnboundedOrUntrustedData \
-              app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner 2>&1)" || {
-              echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=INSTRUMENTATION_EXIT'
-              exit 1
-            }
-            if ! grep -Fq 'INSTRUMENTATION_CODE: -1' <<<"$result"; then
-              echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=TEST_DID_NOT_PASS'
-              exit 1
-            fi
-            echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=PASS|source_records=STRICT|network=NOT_STARTED'
+          script: bash .github/scripts/run_mangaall_fire_source_allowlist_offline.sh
       - name: Scope of verdict
         run: |
           echo 'MANGAALL_CI_SOURCE_EVIDENCE|result=OFFLINE_CONTRACT_PASS|live=NOT_STARTED|mangafire=NOT_PROVEN_BY_THIS_RUN'
