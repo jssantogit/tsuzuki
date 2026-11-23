@@ -99,7 +99,7 @@ export function makeTestOnlyMangaFireFetch({ fetchImpl, browserFactory, enabled 
         try {
           const payload = await retry.clone().json();
           validJson = payload !== null && typeof payload === 'object' &&
-            !Array.isArray(payload) && !payload.error;
+            !Array.isArray(payload) && Array.isArray(payload.items) && !payload.error;
         } catch { /* A 200 header with broken JSON is not a solved challenge. */ }
       }
       if (!validJson) {
