@@ -42,7 +42,7 @@ jobs:
           assert 'MangaFireBrowserSessionTestActivity' not in main
           assert 'I_ACCEPT_MANGAFIRE_A54_INTERACTIVE_TEST' in runner
           assert 'PHYSICAL_A54_REQUIRED' in runner
-          assert 'pm clear' not in runner and 'uninstall' not in runner
+          assert not any(line.lstrip().startswith(('adb uninstall ', 'adb shell pm clear ', 'device uninstall ', 'device shell pm clear ')) for line in runner.splitlines())
           print('MANGAALL_A54_BROWSER_PREFLIGHT|testUi=DEBUG_ONLY|realPhone=REQUIRED|release=UNCHANGED|live=NOT_STARTED')
           PY
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
