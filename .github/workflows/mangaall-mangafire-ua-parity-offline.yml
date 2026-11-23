@@ -7,6 +7,7 @@ on:
     branches: ['fix/mangaall-mangafire-http-webview-ua-*']
     paths:
       - '.github/workflows/mangaall-mangafire-ua-parity-offline.yml'
+      - '.github/scripts/run_mangaall_mangafire_ua_parity_offline.sh'
       - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderHostInvocation.kt'
       - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/MangaAllMangaFireUserAgent.kt'
       - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllMangaFireUserAgentTest.kt'
@@ -54,23 +55,4 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: |
-            set -euo pipefail
-            app=(app/build/outputs/apk/debug/*universal*.apk)
-            tests=(app/build/outputs/apk/androidTest/debug/*.apk)
-            test "${#app[@]}" -eq 1 && test "${#tests[@]}" -eq 1
-            adb install -r "${app[0]}" >/dev/null
-            adb install -r "${tests[0]}" >/dev/null
-            raw="$(mktemp)"
-            trap 'rm -f "$raw"' EXIT
-            timeout --foreground 90s adb shell am instrument -w -r \
-              -e class eu.kanade.tachiyomi.provider.runtime.MangaAllMangaFireUserAgentInstrumentationTest#mangaAllMangaFireDefaultHttpUserAgent_matchesRealChromiumWithoutCookies \
-              app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner > "$raw" 2>&1 || {
-                echo 'MANGAALL_UA_PARITY|outcome=FAIL|stage=ANDROID_INSTRUMENTATION'
-                exit 1
-              }
-            if ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw"; then
-              echo 'MANGAALL_UA_PARITY|outcome=FAIL|stage=ANDROID_ASSERTIONS'
-              exit 1
-            fi
-            echo 'MANGAALL_UA_PARITY|outcome=PASS|scope=MANGAFIRE_ONLY|realChromium=YES|cookies=NOT_EXPORTED|network=NOT_STARTED'
+          script: bash .github/scripts/run_mangaall_mangafire_ua_parity_offline.sh
