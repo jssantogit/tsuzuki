@@ -13,11 +13,24 @@ if ! command -v adb >/dev/null 2>&1; then
   exit 2
 fi
 serials="$(adb devices | awk 'NR>1 && $2=="device" {print $1}')"
-if [[ "$(printf '%s\n' "$serials" | sed '/^$/d' | wc -l)" -ne 1 ]]; then
-  echo 'MANGAALL_A54_PROFILE|outcome=HARD_STOP|reason=EXACTLY_ONE_AUTHORIZED_DEVICE_REQUIRED' >&2
-  exit 2
+if [[ -n "${MANGAALL_A54_ADB_SERIAL:-}" ]]; then
+  serial="$MANGAALL_A54_ADB_SERIAL"
+  if [[ ! "$serial" =~ ^127[.]0[.]0[.]1:([0-9]{4,5})$ ]]; then
+    echo 'MANGAALL_A54_PROFILE|outcome=HARD_STOP|reason=LOCALHOST_ADB_SERIAL_REQUIRED' >&2
+    exit 2
+  fi
+  port="${BASH_REMATCH[1]}"
+  if (( port < 1024 || port > 65535 )) || ! grep -Fxq "$serial" <<< "$serials"; then
+    echo 'MANGAALL_A54_PROFILE|outcome=HARD_STOP|reason=ADB_CONNECTION_NOT_READY' >&2
+    exit 2
+  fi
+else
+  if [[ "$(printf '%s\n' "$serials" | sed '/^$/d' | wc -l)" -ne 1 ]]; then
+    echo 'MANGAALL_A54_PROFILE|outcome=HARD_STOP|reason=EXACTLY_ONE_AUTHORIZED_DEVICE_REQUIRED' >&2
+    exit 2
+  fi
+  serial="$serials"
 fi
-serial="$serials"
 device() { adb -s "$serial" "$@"; }
 qemu="$(device shell getprop ro.kernel.qemu | tr -d '\r')"
 model="$(device shell getprop ro.product.model | tr -d '\r')"
