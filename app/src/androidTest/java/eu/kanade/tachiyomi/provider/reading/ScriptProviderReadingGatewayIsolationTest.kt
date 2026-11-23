@@ -13,8 +13,8 @@ import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestActivity
 import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestGate
 import eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupActivity
 import eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupGate
-import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfiles
 import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserDiagnostic
+import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfiles
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase
