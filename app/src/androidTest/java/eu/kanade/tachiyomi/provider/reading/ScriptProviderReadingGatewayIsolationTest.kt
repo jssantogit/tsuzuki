@@ -2915,11 +2915,11 @@ class ScriptProviderReadingGatewayIsolationTest {
                         !response.has("error")
                 }.getOrDefault(false)
             } ?: false
+            val urlSeen = if (signedUrl != null) "OBSERVED" else "NOT_OBSERVED"
+            val browserOutcome = if (validDirectApi) "VALID_JSON" else "INCONCLUSIVE"
             MangaAllInstrumentationVerdict.publish(
-                "MANGAALL_CI_CHAPTER|work=$id|phase=API" +
-                    "|signedUrl=" + (if (signedUrl != null) "OBSERVED" else "NOT_OBSERVED") +
-                    "|http=${sourceHttp.get()}" +
-                    "|browser=" + (if (validDirectApi) "VALID_JSON" else "INCONCLUSIVE"),
+                "MANGAALL_CI_CHAPTER|work=$id|phase=API|signedUrl=$urlSeen" +
+                    "|http=${sourceHttp.get()}|browser=$browserOutcome",
             )
             val workId = if (lookupOutcome == "COMPLETE") found.keys.singleOrNull() else null
             if (workId == null) {
