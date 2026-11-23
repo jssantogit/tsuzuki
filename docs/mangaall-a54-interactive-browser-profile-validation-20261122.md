@@ -20,7 +20,7 @@ Run [MangaALL A54 browser-profile APK workflow](../.github/workflows/mangaall-a5
 
 Este caminho dispensa PC, root, Shizuku, Gradle e Git no telefone. A interface de verificação continua sendo o APK **debug isolado** e a sessão de navegação com o mesmo perfil Browser Host do debug; **não** é uma alteração da release.
 
-1. Instale o Termux pela distribuição oficial [F-Droid](https://f-droid.org/en/packages/com.termux/) ou [GitHub](https://github.com/termux/termux-app/releases). Abra o Termux e execute `pkg update && pkg install -y android-tools unzip curl coreutils`, depois `termux-setup-storage` e conceda permissão de arquivos.
+1. Instale o Termux pela distribuição oficial [F-Droid](https://f-droid.org/en/packages/com.termux/) ou [GitHub](https://github.com/termux/termux-app/releases). Abra o Termux e execute `apt update && apt full-upgrade && apt install android-tools unzip coreutils`, depois `termux-setup-storage` e conceda permissão de arquivos. Se o `curl` estiver quebrado por incompatibilidade de bibliotecas (`CANNOT LINK EXECUTABLE`), **não use `pkg` para repará-lo**: o próprio Termux recomenda `apt update && apt full-upgrade`, pois `pkg` depende de `curl`.
 2. No navegador do A54, autenticado no GitHub, baixe o artefato **mangaall-a54-debug-profile-test-apks** da [última CI verde deste workflow](https://github.com/jssantogit/tsuzuki/actions/workflows/mangaall-a54-browser-profile-apks.yml). Deixe o **ZIP** em Downloads, sem extrair manualmente. Artefatos expiram em 3 dias; uma nova execução compile-only pode gerá-los novamente.
 3. Com o aparelho conectado a Wi-Fi, abra **Configurações → Opções do desenvolvedor → Depuração sem fio**. Se o menu não existir, toque 7 vezes em **Número de compilação** em **Sobre o telefone → Informações do software**. Mantenha Configurações e Termux em tela dividida durante o pareamento.
 4. No Termux, baixe o script de execução (texto, branch experimental) e rode:
@@ -29,6 +29,8 @@ Este caminho dispensa PC, root, Shizuku, Gradle e Git no telefone. A interface d
 curl -fsSL 'https://raw.githubusercontent.com/jssantogit/tsuzuki/probe/mangaall-a54-browser-profile-validation-20261122/.github/scripts/run_mangaall_a54_termux.sh' -o ~/mangaall-a54-termux.sh
 bash ~/mangaall-a54-termux.sh
 ```
+
+Se o `curl` ainda falhar, abra pelo navegador do celular o [arquivo de execução Termux](https://github.com/jssantogit/tsuzuki/blob/probe/mangaall-a54-browser-profile-validation-20261122/.github/scripts/run_mangaall_a54_termux.sh), toque em **Raw / Download raw file** e salve como `run_mangaall_a54_termux.sh` na pasta Downloads. Execute diretamente do Termux com `bash ~/storage/downloads/run_mangaall_a54_termux.sh`. A versão atual do executor **não utiliza `curl` nem `wget` durante o teste**: o runner A54 revisado foi incorporado como texto dentro dele; o único ZIP necessário é o artefato da CI já baixado. Em caso de nome diferente atribuído pelo navegador, use `ls ~/storage/downloads` e passe o nome exato ao `bash`.
 
 O script pergunta se já houve pareamento; quando necessário, informe a **porta de pareamento**, digite o código apenas no prompt local do `adb pair`, depois informe a **porta de conexão**, que é diferente e aparece na tela principal de Depuração sem fio. Usa sempre `127.0.0.1:<porta>`, ADB no próprio aparelho. Se o ZIP tiver sido renomeado pelo navegador, execute `bash ~/mangaall-a54-termux.sh ~/storage/downloads/NOME-REAL.zip`.
 
