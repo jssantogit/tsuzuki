@@ -47,6 +47,13 @@ internal object MangaAllInstrumentationVerdict {
                 """\|source=(mangadex|mangadot|mangafire)""" +
                 """\|candidates=[0-9]{1,2}\|lookup=(COMPLETE|PARTIAL)""",
         ),
+        // The debug-only shape solver reports only closed outcome categories.
+        // A "SOLVED" signal never substitutes for signed source JSON evidence.
+        Regex(
+            """MANGAALL_CI_SHAPE_SOLVER\|outcome=(SOLVED|UNSOLVED|UNSUPPORTED|""" +
+                """HTTP_REJECTED|NAVIGATION_FAILED|TLS_REJECTED|RENDERER_EXITED|""" +
+                """ASSET_INVALID|TIMEOUT)\|mode=DEBUG_ONLY""",
+        ),
         // Existing production Browser Host diagnostic enums, not HTTP bodies,
         // HTML, challenge tokens, cookies, response headers or full URLs.
         Regex(
