@@ -55,6 +55,7 @@ def check_shard(payload, index, works):
             "SOURCE_COMMIT_MISMATCH")
     require(payload.get("originalCode10SignedPackageChanged") is False and
             payload.get("adapterRouterModification") == "SOURCE_IDS_ONLY_IN_MEMORY" and
+            payload.get("chapterAdaptation") == "MANGADOT_IN_MEMORY_48K_200_NO_RELEASE" and
             payload.get("sourceSet") == ["mangadex", "mangadot"],
             "SOURCE_IDENTITY_MISMATCH")
     require(payload.get("shard") == index and payload.get("shardCount") == 3 and
@@ -86,7 +87,11 @@ def check_shard(payload, index, works):
                 "SOURCE_HTTP_MISSING")
         fields = ("requests", "http200", "http403", "http429", "otherHttp", "transportError")
         for data in http.values():
-            require(isinstance(data, dict) and all(
+            require(isinstance(data, dict) and
+                    type(data.get("maxUpstreamBodyBytes")) is int and
+                    0 <= data["maxUpstreamBodyBytes"] <= 8 * 1024 * 1024 and
+                    type(data.get("upstreamOver192KiB")) is int and
+                    0 <= data["upstreamOver192KiB"] <= 320 and all(
                 type(data.get(f)) is int and 0 <= data[f] <= 320 for f in fields
             ) and data["requests"] == sum(data[f] for f in fields[1:]),
                 "SOURCE_HTTP_COUNTERS_INVALID")
@@ -103,6 +108,8 @@ def check_shard(payload, index, works):
                     isinstance(candidate.get("workId"), str) and
                     candidate["workId"].startswith(candidate["source"] + ":"),
                     "FOREIGN_CANDIDATE")
+        require(row.get("granularChapterPagination") == "UNSIGNED_CI_EPHEMERAL_CACHE_48K_200",
+                "GRANULAR_OUTPUT_PROVENANCE_MISSING")
         audits = row.get("sourceChapterAudits")
         require(isinstance(audits, list) and len(audits) <= 4,
                 "CHAPTER_AUDIT_UNBOUNDED")
@@ -148,6 +155,8 @@ def aggregate(works, payloads):
             "partialChapterAudits": 0, "oversized64KiB": 0,
             "missingChapterOne": 0, "invalidSourceAudits": 0,
             "http403": 0, "http429": 0, "transportFailures": 0,
+            "upstreamOver192KiB": 0, "maxUpstreamMangaDotBytes": 0,
+            "crossSourceCandidates": 0,
         },
         "works": [],
     }
@@ -155,6 +164,9 @@ def aggregate(works, payloads):
     for row in records:
         counts["completeLookup" if row.get("lookupComplete") else "incompleteLookup"] += 1
         counts["noCandidate"] += int(row["candidateCount"] == 0)
+        counts["crossSourceCandidates"] += int(len({
+            x["source"] for x in row["candidates"] if x.get("exactMatch") is True
+        }) > 1)
         counts["ambiguous"] += int(bool(row.get("unresolvedCandidates")))
         counts["sameSourceRivals"] += int(bool(row.get("sameSourceRivals")))
         counts["authorDisagreements"] += int(bool(row.get("sourceAuthorDisagreement")))
@@ -166,6 +178,13 @@ def aggregate(works, payloads):
             counts["http403"] += http["http403"]
             counts["http429"] += http["http429"]
             counts["transportFailures"] += http["transportError"]
+            counts["upstreamOver192KiB"] += http["upstreamOver192KiB"]
+            if source == "mangadot":
+                counts["maxUpstreamMangaDotBytes"] = max(
+                    counts["maxUpstreamMangaDotBytes"], http["maxUpstreamBodyBytes"]
+                )
+            if http["upstreamOver192KiB"]:
+                issues.append(source.upper() + "_UPSTREAM_BODY_EXCEEDS_HOST_192K")
             if http["http403"] or http["http429"] or http["transportError"] or http["otherHttp"]:
                 issues.append(source.upper() + "_HTTP_OR_TRANSPORT")
         for audit in row["sourceChapterAudits"]:
@@ -208,6 +227,7 @@ def fixture(works):
                 "position": i, "id": title_id(works[i]), "title": works[i],
                 "lookupComplete": True, "lookupPages": 1, "candidateCount": 1,
                 "candidates": [{"source": "mangadex", "workId": "mangadex:valid"}],
+                "granularChapterPagination": "UNSIGNED_CI_EPHEMERAL_CACHE_48K_200",
                 "sourceChapterAudits": [{
                     "source": "mangadex", "authority": "SOURCE_HID_DIAGNOSTIC_ONLY",
                     "outcome": "COMPLETE", "pages": 1, "chapterCount": 2,
@@ -216,7 +236,8 @@ def fixture(works):
                 }], "canonicalBinding": "NOT_AUTHORIZED",
                 "readerPixels": "NOT_TESTED", "httpBySource": {
                     source: {"requests": 1, "http200": 1, "http403": 0,
-                             "http429": 0, "otherHttp": 0, "transportError": 0}
+                             "http429": 0, "otherHttp": 0, "transportError": 0,
+                             "maxUpstreamBodyBytes": 100, "upstreamOver192KiB": 0}
                     for source in SOURCE_IDS
                 },
             })
@@ -224,6 +245,7 @@ def fixture(works):
             "schema": 1, "kind": KIND, "hostRepository": "jssantogit/tsuzuki",
             "sourceRepositoryCommit": ORIGIN_SHA, "originalCode10SignedPackageChanged": False,
             "adapterRouterModification": "SOURCE_IDS_ONLY_IN_MEMORY",
+            "chapterAdaptation": "MANGADOT_IN_MEMORY_48K_200_NO_RELEASE",
             "sourceSet": ["mangadex", "mangadot"], "shard": shard,
             "shardCount": 3, "totalWorkCount": 30, "sourceRequestBudget": 320,
             "sourceHttp": "REAL_GITHUB_ACTIONS_FETCH", "canonical": "NOT_TESTED",
