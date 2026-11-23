@@ -42,7 +42,7 @@ def audit(text: str) -> None:
     assert "source=EXPECTED" not in text
     assert "ref: main" not in text and "ref: HEAD" not in text
     assert "ref: ${{" not in text
-    assert "persist-credentials: false" in text
+    assert text.count("persist-credentials: false") == 2
     assert "permissions:\n  contents: read" in text
 
     # No extra privileges, cookie bridge, challenge automation or exports.
@@ -52,9 +52,8 @@ def audit(text: str) -> None:
     assert "actions/upload-artifact@" in text
     assert "tsuzuki/.github/results/mangaall-ci-webview/verdict.txt" in text
     assert "retention-days: 1" in text
-    assert "shape" not in text.lower().split("MANGAALL_CI_SHAPE_ACK: NOT_AUTHORIZED")[-1].split(
-        "- name: Retain ONLY"
-    )[0]  # nothing in runner code attempts a solver
+    assert "MANGAALL_CI_GATE_MODE: shape" not in text
+    assert "MANGAALL_CI_SHAPE_ACK: I_ACCEPT_MANGAFIRE_SHAPE_SOLVER" not in text
     assert "cancel-in-progress: false" in text
 
 
