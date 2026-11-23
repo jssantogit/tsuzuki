@@ -315,11 +315,11 @@ if (mode !== '--live' || process.env.MANGAALL_DUAL30_ACK !== ACK) {
 const { createHttpBridge } = await importFromProvider('tooling/mangaall_live_probe_core.mjs');
 const { probeJourney, journeyVerdict } =
   await importFromProvider('tooling/mangaall_live_journey_core.mjs');
-const stats = [], bridges = new Map();
+const stats = [], wireRecords = [], bridges = new Map();
 for (const [origin, source] of Object.entries(ORIGINS)) {
   bridges.set(origin, createHttpBridge({
     origin, maxRequests: 320,
-    maxResponseBytes: source === 'mangadot' ? 2 * 1024 * 1024 : 192 * 1024,
+    maxResponseBytes: source === 'mangadot' ? 8 * 1024 * 1024 : 192 * 1024,
     timeoutMs: 12000,
     fetchImpl: async (url, options) => {
       const start = performance.now();
@@ -344,7 +344,13 @@ globalThis.tsuzuki = { http: { async request(method,url,headers,body) {
     prohibitedCalls++;
     throw Error('Unauthorized two-source HTTP origin');
   }
-  return bridge.request(method,url,headers,body);
+  const encoded = await bridge.request(method,url,headers,body);
+  const response = JSON.parse(encoded);
+  wireRecords.push({
+    source: ORIGINS[origin],
+    bytes: typeof response.body === 'string' ? Buffer.byteLength(response.body, 'utf8') : 0,
+  });
+  return encoded;
 } } };
 const grants = [
   'https://api.mangadex.org', 'https://uploads.mangadex.org',
@@ -353,6 +359,7 @@ const grants = [
 const results = [];
 for (const [index, work] of assigned.entries()) {
   const before = stats.length;
+  const beforeWire = wireRecords.length;
   let probe, failure = null;
   try {
     probe = await probeJourney(dualReading, work, grants, {
@@ -377,7 +384,10 @@ for (const [index, work] of assigned.entries()) {
     }
   }
   const observations = stats.slice(before);
+  const wireObserved = wireRecords.slice(beforeWire);
   const bySource = Object.fromEntries(SOURCES.map(source => [source, {
+    maxUpstreamBodyBytes: Math.max(0, ...wireObserved.filter(x => x.source === source).map(x => x.bytes)),
+    upstreamOver192KiB: wireObserved.filter(x => x.source === source && x.bytes > 192 * 1024).length,
     requests: observations.filter(x => x.source === source).length,
     http200: observations.filter(x => x.source === source && x.status === 200).length,
     http403: observations.filter(x => x.source === source && x.status === 403).length,
@@ -404,6 +414,7 @@ for (const [index, work] of assigned.entries()) {
     chapterHasMore: probe.chapterHasMore === true, numberingGapObserved:
       probe.numberingGapObserved === true,
     sourceChapterAudits: audits,
+    granularChapterPagination: 'UNSIGNED_CI_EPHEMERAL_CACHE_48K_200',
     auditCandidatesTruncated: candidates.some(x =>
       candidates.filter(y => y.source === x.source).length > 2),
     httpBySource: bySource,
@@ -422,6 +433,7 @@ const report = {
   schema: 1, kind: 'MANGAALL_TWO_SOURCE_UNSIGNED_CI_PREVIEW',
   hostRepository: 'jssantogit/tsuzuki', sourceRepositoryCommit: PROVIDER_SHA,
   originalCode10SignedPackageChanged: false, adapterRouterModification: 'SOURCE_IDS_ONLY_IN_MEMORY',
+  chapterAdaptation: 'MANGADOT_IN_MEMORY_48K_200_NO_RELEASE',
   sourceSet: SOURCES, shard, shardCount: count, totalWorkCount: 30,
   sourceHttp: 'REAL_GITHUB_ACTIONS_FETCH', canonical: 'NOT_TESTED',
   readerPixels: 'NOT_TESTED', sourceRequestBudget: 320,
