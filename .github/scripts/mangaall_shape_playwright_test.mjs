@@ -8,6 +8,79 @@ const SOLVER_URL = ORIGIN + '/@waf/solver';
 const MAX_RESPONSE_BYTES = 192 * 1024;
 const MAX_SOLVE_MS = 30_000;
 
+// All test-only signed API requests use Chromium's *page network stack*.
+// BrowserContext.request shares cookies but is an independent API client;
+// a successful challenge visit is not proof that client gets API access.
+// This function never exposes browser cookies or challenge HTML in artifacts.
+export async function requestViaChromiumPage(page, url, options = {}) {
+  const parsed = new URL(url);
+  if (parsed.origin !== ORIGIN || !parsed.pathname.startsWith('/api/') ||
+      parsed.port || parsed.username || parsed.password || parsed.hash ||
+      String(options?.method || 'GET').toUpperCase() !== 'GET') {
+    throw Error('Test-only browser request outside MangaFire API');
+  }
+  const originalAccept = options?.headers?.Accept || options?.headers?.accept;
+  const accept = typeof originalAccept === 'string' &&
+    originalAccept.length > 0 && originalAccept.length <= 128 &&
+    /^[\w/.*+;= ,-]+$/.test(originalAccept)
+    ? originalAccept : 'application/json';
+  const result = await page.evaluate(async ({ apiUrl, acceptHeader, maxBytes }) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12_000);
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'GET', credentials: 'same-origin', redirect: 'error',
+        cache: 'no-store', headers: { Accept: acceptHeader },
+        signal: controller.signal,
+      });
+      const declared = Number(response.headers.get('content-length') || 0);
+      if (declared > maxBytes) throw Error('Browser response exceeds cap');
+      const reader = response.body?.getReader();
+      const chunks = [];
+      let total = 0;
+      if (reader) {
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            total += value.byteLength;
+            if (total > maxBytes) throw Error('Browser response exceeds cap');
+            chunks.push(value);
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      }
+      const bytes = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return {
+        status: response.status,
+        body: new TextDecoder().decode(bytes),
+        contentType: response.headers.get('content-type') || 'application/octet-stream',
+        cfMitigated: response.headers.get('cf-mitigated') || '',
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }, { apiUrl: url, acceptHeader: accept, maxBytes: MAX_RESPONSE_BYTES });
+  if (!Number.isInteger(result?.status) || result.status < 200 || result.status > 599 ||
+      typeof result.body !== 'string' ||
+      new TextEncoder().encode(result.body).byteLength > MAX_RESPONSE_BYTES) {
+    throw Error('Invalid bounded Chromium response');
+  }
+  return new Response([204, 205, 304].includes(result.status) ? null : result.body, {
+    status: result.status,
+    headers: {
+      'content-type': result.contentType || 'application/octet-stream',
+      ...(result.cfMitigated ? { 'cf-mitigated': result.cfMitigated } : {}),
+    },
+  });
+}
+
 export function capKeiyoushiSolver(html) {
   if (typeof html !== 'string' || !html.includes('bridge.postMessage(`${complete}`)')) {
     throw Error('Pinned upstream solver bridge contract changed');
@@ -40,6 +113,13 @@ export async function createPlaywrightShapeSession({
     page = await context.newPage();
     await context.route('**/*', (route) => {
       const url = new URL(route.request().url());
+      if (mode === 'api') {
+        // The same Chromium renderer that established the browser session
+        // must issue the signed API GET. No separate Playwright HTTP client.
+        if (url.origin === ORIGIN && url.pathname.startsWith('/api/') &&
+            route.request().method() === 'GET') return route.continue();
+        return route.abort();
+      }
       if (mode === 'cloudflare') {
         // Standard browser-side Cloudflare JS only: no CAPTCHA clicking or
         // solver injection, proxies, fingerprint changes or cookie export.
@@ -73,7 +153,10 @@ export async function createPlaywrightShapeSession({
           await page.goto(ORIGIN + '/', { waitUntil: 'domcontentloaded', timeout: 12_000 });
           await page.waitForTimeout(8_000);
           const cookies = await context.cookies(ORIGIN);
-          return cookies.some((cookie) => cookie.name === 'cf_clearance' && cookie.value.length > 0);
+          const verified = cookies.some((cookie) =>
+            cookie.name === 'cf_clearance' && cookie.value.length > 0);
+          if (verified) mode = 'api';
+          return verified;
         } catch {
           return false;
         }
@@ -90,30 +173,17 @@ export async function createPlaywrightShapeSession({
           // The remote server must set its own clearance cookie. The value
           // stays exclusively inside the disposable Playwright context.
           const cookies = await context.cookies(ORIGIN);
-          return cookies.some((cookie) => cookie.name === 'waf_pass' && cookie.value.length > 0);
+          const verified = cookies.some((cookie) =>
+            cookie.name === 'waf_pass' && cookie.value.length > 0);
+          if (verified) mode = 'api';
+          return verified;
         } finally {
           clearTimeout(timeout);
         }
       },
       async request(url, options) {
-        const parsed = new URL(url);
-        if (parsed.origin !== ORIGIN || !parsed.pathname.startsWith('/api/') ||
-            parsed.port || parsed.username || parsed.password ||
-            String(options?.method || 'GET').toUpperCase() !== 'GET') {
-          throw Error('Test-only browser request outside MangaFire API');
-        }
-        const origHeaders = options?.headers || {};
-        const accept = origHeaders.Accept || origHeaders.accept || 'application/json';
-        const response = await context.request.get(url, {
-          maxRedirects: 0, timeout: 12_000, headers: { Accept: accept },
-        });
-        const body = await response.body();
-        if (body.byteLength > MAX_RESPONSE_BYTES) throw Error('Shape test response cap');
-        const original = response.headers();
-        return new Response(body, { status: response.status(), headers: {
-          'content-type': original['content-type'] || 'application/octet-stream',
-          ...(original['cf-mitigated'] ? { 'cf-mitigated': original['cf-mitigated'] } : {}),
-        } });
+        if (mode !== 'api') throw Error('No browser-verified API session');
+        return requestViaChromiumPage(page, url, options);
       },
       close,
     };
