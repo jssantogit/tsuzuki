@@ -22,11 +22,11 @@ run_offline_test() {
   result="$(timeout --foreground 120s adb shell am instrument -w -r \
     -e class "eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#${method}" \
     app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner 2>&1)" || {
-    echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=INSTRUMENTATION_EXIT' >&2
+    echo "MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=INSTRUMENTATION_EXIT|test=$method" >&2
     exit 1
   }
   if ! grep -Fq 'INSTRUMENTATION_CODE: -1' <<<"$result"; then
-    echo 'MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=TEST_DID_NOT_PASS' >&2
+    echo "MANGAALL_CI_SOURCE_ALLOWLIST|outcome=FAIL|reason=TEST_DID_NOT_PASS|test=$method" >&2
     exit 1
   fi
 }
