@@ -10,6 +10,8 @@ import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.data.tsuzuki.instrumentation.MangaAllInstrumentationVerdict
 import eu.kanade.tachiyomi.provider.runtime.AndroidProviderBrowserHostService
 import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestActivity
+import eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupActivity
+import eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupGate
 import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestGate
 import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfiles
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
@@ -2518,6 +2520,154 @@ class ScriptProviderReadingGatewayIsolationTest {
         MangaAllInstrumentationVerdict.publish(
             "MANGAALL_A54_PROFILE|outcome=" +
                 (if (validApiResponses == 2) "BROWSER_SIGNED_API_ACCEPTED" else "INCONCLUSIVE") +
+                "|signedJson=$validApiResponses|works=2|providerCandidateWorks=$providerCandidates" +
+                "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+    }
+
+    /**
+     * GitHub Actions opt-in only: passive ordinary Android WebView navigation,
+     * then the ORIGINAL signed code10 generates the MangaFire API URL through
+     * a unified 3-source lookup. No user verification, captcha solving,
+     * session export, canonical grants, chapters or Reader claims.
+     *
+     * Green test-infrastructure does NOT imply successful MangaFire access.
+     * Runner checks a separate closed CI_SIGNED_API_ACCEPTED summary.
+     */
+    @Test(timeout = 300_000L)
+    fun mangaAllCode10CiWebviewSameProfile_checksRealSignedApi() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val args = InstrumentationRegistry.getArguments()
+        assertEquals(
+            "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE",
+            args.getString("mangaAllCiWebviewOptIn"),
+        )
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        MangaAllInstrumentationVerdict.publish("MANGAALL_CI_WEBVIEW|phase=STARTED")
+        MangaFireCiBrowserWarmupGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaFireCiBrowserWarmupActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        val warmup = withContext(Dispatchers.IO) {
+            MangaFireCiBrowserWarmupGate.await(35L)
+        }
+        MangaAllInstrumentationVerdict.publish("MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=$warmup")
+        if (warmup != "PROFILE_UNSUPPORTED" && warmup != "TLS_REJECTED" &&
+            warmup != "RENDERER_EXITED"
+        ) {
+            // The site may perform ordinary asynchronous JS verification.
+            // This does not interact with any challenge and is not a PASS.
+            withContext(Dispatchers.IO) { Thread.sleep(8_000L) }
+        }
+        instrumentation.runOnMainSync { activity.finish() }
+        if (warmup == "PROFILE_UNSUPPORTED") {
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_WEBVIEW|outcome=CI_INCONCLUSIVE|signedJson=0" +
+                    "|works=2|providerCandidateWorks=0|canonical=NOT_TESTED" +
+                    "|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+            )
+            return@runBlocking
+        }
+
+        val archive = instrumentation.context.assets.open("mangaall/code10-published-package.tsz")
+            .use { it.readBytes() }
+        assertEquals(
+            "bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f",
+            tachiyomi.core.provider.supplychain.sha256Hex(archive),
+        )
+        val manifest = ProviderPackageParser().parse(archive).manifest
+        assertEquals("app.tsuzuki.mangaall", manifest.id)
+        assertEquals(10L, manifest.version.code)
+        val providerId = ProviderId(manifest.id)
+        val capturedSignedApi = AtomicReference<String?>(null)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val url = chain.request().url
+                if (url.scheme == "https" && url.host == "mangafire.to" &&
+                    url.encodedPath == "/api/titles" &&
+                    !url.queryParameter("keyword").isNullOrBlank()
+                ) {
+                    // Ephemeral only: no raw URL, query or cookie leaves RAM.
+                    capturedSignedApi.set(url.toString())
+                }
+                chain.proceed(chain.request())
+            }
+            .callTimeout(25, TimeUnit.SECONDS)
+            .build()
+        val gateway = gateway(
+            main = "",
+            providerId = providerId,
+            networkOrigins = requireNotNull(manifest.permissions.network).origins,
+            browserOrigins = manifest.permissions.browser?.origins.orEmpty(),
+            localNetwork = false,
+            packageBytesOverride = archive,
+            baseHttpClient = client,
+        )
+        val works = listOf(
+            "punpun" to "Oyasumi Punpun",
+            "koe" to "Koe no Katachi",
+        )
+        var validApiResponses = 0
+        var providerCandidates = 0
+        try {
+            for ((id, title) in works) {
+                capturedSignedApi.set(null)
+                val lookup = runCatching {
+                    withTimeout(48_000L) {
+                        gateway.lookup(
+                            providerId,
+                            ProviderReadingLookupRequest(
+                                titles = listOf(title),
+                                requestedLanguage = "en",
+                            ),
+                        )
+                    }
+                }.getOrNull()
+                val mangaFireCount = (lookup as? ProviderCallResult.Success)
+                    ?.value?.items?.count { it.externalWorkId.startsWith("mangafire:") }
+                    ?.coerceAtMost(99) ?: 0
+                if (mangaFireCount > 0) providerCandidates++
+                val signedApi = capturedSignedApi.getAndSet(null)
+                val body = if (signedApi == null) {
+                    null
+                } else {
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            AndroidProviderBrowserHostService(
+                                context = context,
+                                policy = ProviderNetworkPolicy(setOf("https://mangafire.to")),
+                                providerProfileName = ProviderBrowserProfiles.nameFor(manifest.id),
+                                timeoutSeconds = 25L,
+                            ).use { it.readText(signedApi, "body") }
+                        }.getOrNull()
+                    }
+                }
+                val validJson = body?.let {
+                    runCatching {
+                        val json = JSONObject(it)
+                        json.has("items") && json.optJSONArray("items") != null &&
+                            !json.has("error")
+                    }.getOrDefault(false)
+                } ?: false
+                if (validJson) validApiResponses++
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_WEBVIEW|work=$id|api=" +
+                        (if (validJson) "VALID_JSON" else if (signedApi != null) "BLOCKED" else "NOT_OBSERVED") +
+                        "|candidates=$mangaFireCount",
+                )
+            }
+        } finally {
+            capturedSignedApi.set(null)
+        }
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_CI_WEBVIEW|outcome=" +
+                (if (validApiResponses == 2 && providerCandidates == 2) {
+                    "CI_SIGNED_API_ACCEPTED"
+                } else {
+                    "CI_INCONCLUSIVE"
+                }) +
                 "|signedJson=$validApiResponses|works=2|providerCandidateWorks=$providerCandidates" +
                 "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
         )
