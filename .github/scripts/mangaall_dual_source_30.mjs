@@ -58,9 +58,66 @@ const [dexModule, dotModule] = await Promise.all([
 ]);
 assert.deepEqual(Object.keys(dexModule.default.reading).sort(), ['chapters', 'lookup', 'pages']);
 assert.deepEqual(Object.keys(dotModule.default.reading).sort(), ['chapters', 'lookup', 'pages']);
+// Test-only correction: the signed MangaDot adapter yields a complete
+// upstream chapter list in one Host-sized result (often >64KiB). Preserve all
+// original source items and split only OUTPUT into <=48KiB/200-item pages.
+// Cache is per CI process, NOT a shippable persistence mechanism.
+const chapterCache = new Map();
+function granularPage(items, offset, fingerprint) {
+  if (!Number.isInteger(offset) || offset < 0 || offset > items.length) {
+    throw Error('MangaAll invalid cursor');
+  }
+  const page = [];
+  for (let index = offset; index < items.length && page.length < 200; index++) {
+    const next = index + 1 < items.length ? 'g.' + (index + 1) + '.' + fingerprint : null;
+    const candidate = [...page, items[index]];
+    if (Buffer.byteLength(JSON.stringify({ items: candidate, nextCursor: next }), 'utf8') >
+        48 * 1024) {
+      if (!page.length) throw Error('MangaAll single chapter exceeds Host page budget');
+      break;
+    }
+    page.push(items[index]);
+  }
+  const newOffset = offset + page.length;
+  return {
+    items: page,
+    nextCursor: newOffset < items.length
+      ? 'g.' + newOffset + '.' + fingerprint : null,
+  };
+}
+const granularMangaDotAdapter = {
+  ...dotModule.default.reading,
+  async chapters(input) {
+    const workId = input?.binding?.externalWorkId;
+    const language = input?.binding?.facetId;
+    if (typeof workId !== 'string' ||
+        !/^mangadot:[1-9][0-9]{0,15}$/.test(workId) || language !== 'en') {
+      throw Error('MangaAll invalid work binding');
+    }
+    const key = workId + '|' + language;
+    const fingerprint = createHash('sha256').update(key).digest('hex').slice(0, 12);
+    const cursor = input?.cursor ?? null;
+    let offset = 0;
+    if (cursor != null) {
+      const match = /^g\.([0-9]{1,5})\.([a-f0-9]{12})$/.exec(cursor);
+      if (!match || match[2] !== fingerprint) throw Error('MangaAll invalid cursor');
+      offset = Number(match[1]);
+    }
+    let rows = chapterCache.get(key);
+    if (!rows) {
+      const page = await dotModule.default.reading.chapters({ ...input, cursor: null });
+      if (!Array.isArray(page?.items) || page.items.length > 16000 ||
+          page.nextCursor != null) throw Error('MangaAll invalid chapter response');
+      rows = page.items;
+      chapterCache.set(key, rows);
+    }
+    if (offset === 0 && cursor != null) throw Error('MangaAll invalid cursor');
+    return granularPage(rows, offset, fingerprint);
+  },
+};
 const dualReading = router.createMangaAllReading({
   mangadex: dexModule.default.reading,
-  mangadot: dotModule.default.reading,
+  mangadot: granularMangaDotAdapter,
 });
 
 function safeTestId(value) {
@@ -171,6 +228,29 @@ async function auditSourceChapters(candidate) {
 // router. It proves that no path can invoke MangaFire or silently complete a
 // failed lookup before any source traffic is authorized.
 async function offlineContracts() {
+  const syntheticChapters = Array.from({length: 501}, (_,i) => ({
+    providerChapterId: 'mangadot:chapters:' + (i + 1),
+    rawNumber: i + 1, language: null,
+  }));
+  let start = 0, pageCount = 0, count = 0;
+  const cursorMark = 'abcdef012345';
+  do {
+    const page = granularPage(syntheticChapters, start, cursorMark);
+    assert.ok(page.items.length > 0 && page.items.length <= 200);
+    assert.ok(Buffer.byteLength(JSON.stringify(page), 'utf8') <= 48 * 1024);
+    assert.ok(page.items.every(x => safeChapterId(x.providerChapterId, 'mangadot')));
+    count += page.items.length;
+    pageCount++;
+    if (page.nextCursor == null) break;
+    const m = /^g\.([0-9]{1,5})\.([a-f0-9]{12})$/.exec(page.nextCursor);
+    assert.equal(m[2], cursorMark);
+    start = Number(m[1]);
+  } while (pageCount < 32);
+  assert.equal(count, 501);
+  assert.equal(pageCount, 3);
+  assert.throws(() => granularPage(syntheticChapters, 600, cursorMark));
+  assert.equal(safeChapterId('mangadot:uploads:123', 'mangadot'), true);
+  assert.equal(safeChapterId('mangadot:123', 'mangadot'), false);
   const called = [];
   const candidate = (source, id) => ({
     externalWorkId: source + ':' + id, title: 'Akame ga Kill!',
