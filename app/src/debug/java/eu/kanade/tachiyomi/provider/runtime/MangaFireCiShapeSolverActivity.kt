@@ -163,6 +163,10 @@ class MangaFireCiShapeSolverActivity : Activity() {
             domStorageEnabled = true
             allowFileAccess = false
             allowContentAccess = false
+            // Only the offline control/exact-asset diagnostics disable ALL
+            // networking at the Chromium engine level; they also return
+            // blocked responses from shouldInterceptRequest.
+            blockNetworkLoads = bridgeOnly || exactAssetOffline
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
         }
