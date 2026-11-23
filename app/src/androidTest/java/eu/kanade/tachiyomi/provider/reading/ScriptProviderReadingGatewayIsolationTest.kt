@@ -3069,6 +3069,32 @@ class ScriptProviderReadingGatewayIsolationTest {
         }.getOrDefault("UNCLASSIFIED")
     }
 
+    /**
+     * Distinguish HTML edge rejection from the source's JSON challenge using
+     * headers and at most 1024 already-received response-body bytes.
+     * Only closed types leave the Android test. No Cloudflare identifiers,
+     * response headers, URL, cookie or HTML/text are logged or persisted.
+     * This does NOT grant challenge clearance or imply an acceptable API.
+     */
+    private fun classifyMangaFire403Edge(response: Response): String {
+        if (response.code != 403) return "NOT_403"
+        if (response.header("cf-mitigated")?.equals("challenge", ignoreCase = true) == true) {
+            return "CF_MITIGATED"
+        }
+        val sample = runCatching { response.peekBody(1024).string() }.getOrDefault("")
+        if (runCatching { JSONObject(sample) }.isSuccess) return "JSON"
+        val html = response.header("Content-Type")?.startsWith("text/html", ignoreCase = true) == true ||
+            sample.trimStart().startsWith("<!doctype html", ignoreCase = true) ||
+            sample.trimStart().startsWith("<html", ignoreCase = true)
+        val cfServer = response.header("Server")?.contains("cloudflare", ignoreCase = true) == true
+        return when {
+            cfServer && html -> "CF_SERVER_HTML"
+            html -> "OTHER_HTML"
+            cfServer -> "CF_SERVER_OTHER"
+            else -> "OTHER"
+        }
+    }
+
     @Test
     fun mangaAllCiMangaFire403Classifier_offlineResponseOnly() {
         fun response(code: Int, body: String): Response =
@@ -3221,6 +3247,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         val signedApi = AtomicReference<String?>(null)
         val sourceHttp = AtomicReference("NONE")
         val challenge403 = AtomicReference("NOT_OBSERVED")
+        val edge403 = AtomicReference("NOT_OBSERVED")
         // This is the actual signed provider Browser Host fallback, not a
         // second independent request to the same API URL from the test.
         val browserSuccess = AtomicInteger(0)
@@ -3269,6 +3296,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                         )
                         if (response.code == 403) {
                             challenge403.set(classifyMangaFire403(response))
+                            edge403.set(classifyMangaFire403Edge(response))
                         }
                     }
                     response
@@ -3282,6 +3310,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             signedApi.set(null)
             sourceHttp.set("NONE")
             challenge403.set("NOT_OBSERVED")
+            edge403.set("NOT_OBSERVED")
             browserSuccess.set(0)
             browserAttempts.set(0)
             browserFailure.set("NONE")
@@ -3446,6 +3475,9 @@ class ScriptProviderReadingGatewayIsolationTest {
                 // Never publish the JSON, challenge HTML or request URL.
                 MangaAllInstrumentationVerdict.publish(
                     "MANGAALL_CI_FIRE_403|work=$id|kind=${challenge403.get()}",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_FIRE_403_EDGE|work=$id|family=${edge403.get()}",
                 )
             }
             // Typed, response-body-free evidence from the very same Browser Host
