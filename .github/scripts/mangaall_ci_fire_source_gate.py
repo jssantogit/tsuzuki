@@ -30,6 +30,15 @@ API = re.compile(
     r"\|signedUrl=(OBSERVED|NOT_OBSERVED)\|http=(NONE|200|403|OTHER)"
     r"\|transport=(HTTP|BROWSER|NONE)\|json=(VALIDATED|UNVERIFIED)"
 )
+FAILURE = re.compile(
+    r"MANGAALL_CI_CHAPTER\\|work=(punpun|koe|akame)\\|phase=LOOKUP_FAILURE"
+    r"\\|cause=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|UNCLASSIFIED_ERROR)"
+    r"\\|http=(NONE|200|403|OTHER)"
+)
+BUDGET = re.compile(
+    r"MANGAALL_CI_LOOKUP_BLOCKER\\|work=(punpun|koe|akame)"
+    r"\\|source=MANGADOT\\|reason=PAGE_FOUR_PENDING"
+)
 CHAPTERS = re.compile(
     r"MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)"
     r"\|outcome=(READY|INCONCLUSIVE)\|pages=([0-4])"
@@ -51,6 +60,8 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
     api: dict[str, tuple[str, ...]] = {}
     chapter: dict[str, tuple[str, ...]] = {}
     lookup: dict[str, tuple[str, ...]] = {}
+    failed: dict[str, tuple[str, str]] = {}
+    budget: set[str] = set()
     records = [s.strip() for s in lines if s.strip()]
     for item in records:
         if match := SCOPE.fullmatch(item):
@@ -69,6 +80,16 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
             if work in api:
                 return False, "DUPLICATE_API"
             api[work] = tuple(data)
+        elif match := FAILURE.fullmatch(item):
+            work, cause, http = match.groups()
+            if work in failed:
+                return False, "DUPLICATE_LOOKUP_FAILURE"
+            failed[work] = (cause, http)
+        elif match := BUDGET.fullmatch(item):
+            work = match.group(1)
+            if work in budget:
+                return False, "DUPLICATE_SOURCE_BUDGET_DIAGNOSTIC"
+            budget.add(work)
         elif match := CHAPTERS.fullmatch(item):
             work, *data = match.groups()
             if work in chapter:
@@ -83,6 +104,20 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
                                 for work in WORKS for source in SOURCES):
         return False, "THREE_SOURCE_MATRIX_MISSING"
     if records.count(SUMMARY) != 1:
+        # Preserve the actual source failure instead of hiding the real
+        # HTTP403 behind a generic missing PASS summary. Never treat a
+        # blocked API as an empty MangaFire catalog or a chapter defect.
+        if any(
+            api.get(work) == ("OBSERVED", "403", "NONE", "UNVERIFIED") and
+            failed.get(work) == ("CHALLENGE_BLOCKED", "403")
+            for work in WORKS
+        ):
+            return False, "MANGAFIRE_UPSTREAM_HTTP403"
+        if any(
+            work in budget and failed.get(work) == ("UNCLASSIFIED_ERROR", "NONE")
+            for work in WORKS
+        ):
+            return False, "MANGADOT_PAGE_FOUR_PENDING"
         return False, "FIRE_SOURCE_SUMMARY_MISSING"
     if len(proven) != 3 or len(api) != 3 or len(chapter) != 3 or len(lookup) != 3:
         return False, "SOURCE_EVIDENCE_MISSING"
