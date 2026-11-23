@@ -2373,6 +2373,13 @@ class ScriptProviderReadingGatewayIsolationTest {
                 "|count=147|chapterOne=YES|reason=NONE",
             "MANGAALL_CI_CHAPTER|work=koe|outcome=INCONCLUSIVE|pages=0" +
                 "|count=0|chapterOne=UNVERIFIED|reason=SOURCE_READ_ERROR",
+            "MANGAALL_CI_FIRE_SOURCE|work=punpun|lookup=COMPLETE" +
+                "|api=VALIDATED|chapters=COMPLETE|chapterOne=YES|outcome=SOURCE_READY",
+            "MANGAALL_CI_FIRE_SOURCE|work=koe|lookup=INCOMPLETE" +
+                "|api=UNVERIFIED|chapters=INCOMPLETE|chapterOne=UNVERIFIED|outcome=INCONCLUSIVE",
+            "MANGAALL_CI_FIRE_SOURCE|outcome=SOURCE_CHAPTERS_ACCEPTED" +
+                "|ready=3|works=3|canonical=NOT_TESTED|unified=NOT_PROVEN",
+            "MANGAALL_CI_LOOKUP_BLOCKER|work=koe|source=MANGADOT|reason=PAGE_FOUR_PENDING",
             "MANGAALL_CI_CHAPTER|outcome=CHAPTERS_ACCEPTED|ready=2|works=2" +
                 "|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
             "MANGAALL_CI_WEBVIEW|work=koe|api=BLOCKED|candidates=0",
@@ -2387,6 +2394,12 @@ class ScriptProviderReadingGatewayIsolationTest {
             assertTrue("CI verdict format unexpectedly denied", MangaAllInstrumentationVerdict.isPermitted(record))
         }
         val bad = listOf(
+            "MANGAALL_CI_FIRE_SOURCE|work=punpun|lookup=COMPLETE" +
+                "|api=VALIDATED|chapters=COMPLETE|chapterOne=YES|outcome=SOURCE_READY|cookie=secret",
+            "MANGAALL_CI_FIRE_SOURCE|outcome=SOURCE_CHAPTERS_ACCEPTED" +
+                "|ready=3|works=3|canonical=NOT_TESTED|unified=READY",
+            "MANGAALL_CI_LOOKUP_BLOCKER|work=koe|source=MANGADOT" +
+                "|reason=PAGE_FOUR_PENDING|cursor=4",
             "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=HUMAN_CONFIRMED",
             "MANGAALL_CI_WEBVIEW|work=unknown|api=VALID_JSON|candidates=1",
             "MANGAALL_CI_CHAPTER|work=punpun|phase=API|signedUrl=OBSERVED" +
