@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# NONSHIPPING: exact single-work Android Host/QuickJS Binder live source probe.
+# NONSHIPPING: two exact-HID Android Host/QuickJS Binder live source probes (Bleach, Raeliana).
 # No signing, publishing, editorial binding or Reader pixels.
 set -euo pipefail
 umask 077
@@ -46,4 +46,4 @@ if [[ "$status" -ne 0 ]] ||
 fi
 # All chapter-count/cursor/ID assertions are inside the single exact Android
 # instrumentation test. Its full successful completion is the pass criterion.
-echo 'MANGAALL_DUAL_ANDROID_LIVE|outcome=PASS|scope=SOURCE_HID_ONLY|nativeSnapshot=TESTED|multipage=TESTED|terminal=TESTED|chapterOne=TESTED|canonical=NOT_TESTED|reader=NOT_TESTED|signed=NO|mangafire=NOT_CALLED' | tee "$out/verdict.txt"
+echo 'MANGAALL_DUAL_ANDROID_LIVE|outcome=PASS|works=BLEACH_RAELIANA|scope=SOURCE_HID_ONLY|nativeSnapshot=TESTED|multipage=TESTED|terminal=TESTED|chapterOne=TESTED|canonical=NOT_TESTED|reader=NOT_TESTED|signed=NO|mangafire=NOT_CALLED' | tee "$out/verdict.txt"
