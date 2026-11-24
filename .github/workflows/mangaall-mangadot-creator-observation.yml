@@ -141,6 +141,29 @@ jobs:
                       roles=exact_catalog[0].get("personRoles") or []
                       names=[str((p.get("person") or {}).get("name") or "")[:128] for p in roles if isinstance(p,dict) and any("Story" in x or "Art" in x for x in p.get("rolesEn") or [])]
                       print("SHIKI_PUBLIC_CREDITS|index="+str(index)+"|names="+json.dumps(names[:12],ensure_ascii=True))
+                  # Independent MangaUpdates detail credits and author IDs, for diagnosis only.
+                  # Bounded search; never interpret first-page observations as a unique catalog proof.
+                  mu_data=dict(search=works[index-1],page=1,perpage=25,type=["Manhwa"],filter_types=["drama cd","novel"])
+                  mu_headers={"Content-Type":"application/json","Accept":"application/json","User-Agent":"Tsuzuki-CI-catalog-contract-observation"}
+                  mu_request=urllib.request.Request("https://api.mangaupdates.com/v1/series/search",data=json.dumps(mu_data).encode(),headers=mu_headers,method="POST")
+                  with urllib.request.urlopen(mu_request,timeout=15) as resp:
+                      mu_raw=resp.read(512*1024+1)
+                  if len(mu_raw)>512*1024:
+                      raise ValueError("MU search bound")
+                  mu_rows=json.loads(mu_raw).get("results",[])
+                  mu_exact=[r.get("record",{}) for r in mu_rows if isinstance(r,dict) and normalized(r.get("record",{}).get("title"))==normalized(works[index-1])]
+                  if len(mu_exact)==1:
+                      mu_id=mu_exact[0].get("series_id")
+                      if type(mu_id) is int and mu_id>0:
+                          req=urllib.request.Request("https://api.mangaupdates.com/v1/series/"+str(mu_id),headers=mu_headers)
+                          with urllib.request.urlopen(req,timeout=15) as resp:
+                              mu_detail_raw=resp.read(512*1024+1)
+                          if len(mu_detail_raw)>512*1024:
+                              raise ValueError("MU detail bound")
+                          mu_detail=json.loads(mu_detail_raw)
+                          if mu_detail.get("series_id")==mu_id and normalized(mu_detail.get("title"))==normalized(works[index-1]):
+                              mu_credits=[{"name":str(a.get("name") or "")[:128],"role":str(a.get("type") or "")[:40],"hasAuthorId":type(a.get("author_id")) is int} for a in mu_detail.get("authors",[]) if isinstance(a,dict)]
+                              print("MU_PUBLIC_CREDITS|index="+str(index)+"|credits="+json.dumps(mu_credits[:12],ensure_ascii=True))
 
                   url_exact=sum(exact_url(o.get("url")) for o in credited)
                   id_exact=sum(exact_url(o.get("@id")) for o in credited)
