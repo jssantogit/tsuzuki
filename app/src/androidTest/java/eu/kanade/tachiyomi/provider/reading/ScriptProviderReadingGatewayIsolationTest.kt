@@ -3999,6 +3999,117 @@ class ScriptProviderReadingGatewayIsolationTest {
         }
     }
 
+
+    /**
+     * Exact development MangaBall archive; all HTTP is intercepted before
+     * network. This does not install or trust a production provider.
+     */
+    @Test
+    fun mangaBallDevelopmentArchive_executesOfflineLookupAndChapters() = runBlocking {
+        val instrument = InstrumentationRegistry.getInstrumentation()
+        assertEquals("app.tsuzuki.dev", instrument.targetContext.packageName)
+        val packageBytes = instrument.context.assets.open("mangaball/development-unsigned.tsz")
+            .use { it.readBytes() }
+        val parsed = ProviderPackageParser().parse(packageBytes)
+        val provider = ProviderId("app.tsuzuki.mangaall.mangaball")
+        assertEquals(provider.value, parsed.manifest.id)
+        assertEquals("0.1.0-dev", parsed.manifest.version.name)
+        assertEquals(1L, parsed.manifest.version.code)
+        val origins = parsed.manifest.permissions.network!!.origins
+        assertEquals(setOf("https://mangaball.com"), origins)
+        assertTrue(parsed.manifest.permissions.browser?.origins.orEmpty().isEmpty())
+
+        val titles = listOf("Oyasumi Punpun", "Akame ga Kill!", "Koe no Katachi")
+        for ((index, title) in titles.withIndex()) {
+            val workId = "fixture-${index + 1}"
+            val chapterId = "chapter-${index + 1}"
+            val requests = AtomicInteger(0)
+            val client = OkHttpClient.Builder().addInterceptor { chain ->
+                val request = chain.request()
+                assertEquals("https", request.url.scheme)
+                assertEquals("mangaball.com", request.url.host)
+                val body = when (requests.incrementAndGet()) {
+                    1 -> {
+                        assertEquals("GET", request.method)
+                        assertEquals("/api/v1/title/search-advanced", request.url.encodedPath)
+                        assertEquals(title, request.url.queryParameter("keyword"))
+                        JSONObject().put("code", 200)
+                            .put("data", JSONArray().put(JSONObject().put("id", workId).put("name", title)))
+                            .put("pagination", JSONObject().put("page", 1).put("total_pages", 1))
+                            .toString()
+                    }
+                    2 -> {
+                        assertEquals("POST", request.method)
+                        assertEquals("/api/v1/chapter/chapter-listing-by-title-id", request.url.encodedPath)
+                        val buffer = Buffer()
+                        requireNotNull(request.body).writeTo(buffer)
+                        assertEquals(workId, JSONObject(buffer.readUtf8()).getString("title_id"))
+                        JSONObject().put("code", 200)
+                            .put(
+                                "data",
+                                JSONArray().put(
+                                    JSONObject().put("id", chapterId).put("number", 1).put("language", "en"),
+                                ),
+                            ).toString()
+                    }
+                    else -> error("Unexpected offline fixture request")
+                }
+                Response.Builder()
+                    .request(request)
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("Synthetic offline MangaBall fixture")
+                    .body(body.toResponseBody())
+                    .build()
+            }.build()
+            val gateway = gateway(
+                main = "",
+                providerId = provider,
+                networkOrigins = origins,
+                localNetwork = false,
+                includePages = false,
+                packageBytesOverride = packageBytes,
+                baseHttpClient = client,
+                packageVersionName = "0.1.0-dev",
+                packageVersionCode = 1L,
+            )
+            val lookup = gateway.lookup(provider, ProviderReadingLookupRequest(listOf(title)))
+            assertTrue(lookup is ProviderCallResult.Success)
+            val candidate = (lookup as ProviderCallResult.Success).value.items.single()
+            assertEquals("mangaball:$workId", candidate.externalWorkId)
+            assertEquals(title, candidate.title)
+            val binding = ProviderBindingRef(provider, "en", candidate.externalWorkId)
+            val chapters = gateway.chapters(provider, ProviderReadingChaptersRequest(binding))
+            assertTrue(chapters is ProviderCallResult.Success)
+            assertEquals("mangaball:$chapterId", (chapters as ProviderCallResult.Success).value.items.single().providerChapterId)
+            assertEquals(2, requests.get())
+        }
+        // Separate negative case: HTTP denial must not produce a candidate.
+        val deniedCalls = AtomicInteger(0)
+        val denied = OkHttpClient.Builder().addInterceptor { chain ->
+            deniedCalls.incrementAndGet()
+            Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(403)
+                .message("Synthetic denied")
+                .body("denied".toResponseBody())
+                .build()
+        }.build()
+        val deniedGateway = gateway(
+            main = "",
+            providerId = provider,
+            networkOrigins = origins,
+            localNetwork = false,
+            includePages = false,
+            packageBytesOverride = packageBytes,
+            baseHttpClient = denied,
+            packageVersionName = "0.1.0-dev",
+        )
+        assertTrue(deniedGateway.lookup(provider, ProviderReadingLookupRequest(listOf(titles.first()))) is ProviderCallResult.Failure)
+        assertEquals(1, deniedCalls.get())
+    }
+
     private fun gateway(
         main: String,
         providerId: ProviderId = PROVIDER_ID,
