@@ -340,27 +340,7 @@ class ShikimoriApi(
     // regular catalog details. Only credits nested under the exact manga ID
     // are eligible, and every alias belongs to the same published person ID.
     override suspend fun getVerifiedCreatorAliases(id: Int): List<CatalogCreatorAliasEvidence> = withIOContext {
-        require(id > 0)
-        val query = $"""
-        |query($id: String) {
-            |mangas(ids: $id, limit: 1, kind:"!light_novel,!novel") {
-                |id
-                |personRoles {
-                    |person {
-                        |id
-                        |name
-                        |japanese
-                        |russian
-                    |}
-                    |rolesEn
-                |}
-            |}
-        |}
-        """.trimMargin()
-        val payload = buildJsonObject {
-            put("query", query)
-            putJsonObject("variables") { put("id", id.toString()) }
-        }
+        val payload = creatorAliasPayload(id)
         with(json) {
             publicClient.newCall(
                 POST(GRAPHQL_API_URL, body = payload.toString().toRequestBody(jsonMime)),
@@ -476,6 +456,30 @@ class ShikimoriApi(
         private const val GRAPHQL_API_URL = "$BASE_URL/api/graphql"
         private const val OAUTH_URL = "$BASE_URL/oauth/token"
         private const val LOGIN_URL = "$BASE_URL/oauth/authorize"
+
+        internal fun creatorAliasPayload(id: Int): JsonObject {
+            require(id > 0)
+            val query = $"""
+            |query($id: String) {
+                |mangas(ids: $id, limit: 1, kind:"!light_novel,!novel") {
+                    |id
+                    |personRoles {
+                        |person {
+                            |id
+                            |name
+                            |japanese
+                            |russian
+                        |}
+                        |rolesEn
+                    |}
+                |}
+            |}
+            """.trimMargin()
+            return buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") { put("id", id.toString()) }
+            }
+        }
 
         internal fun userAgent(): String =
             "Tsuzuki v${BuildConfig.VERSION_NAME} (${BuildConfig.APPLICATION_ID})"

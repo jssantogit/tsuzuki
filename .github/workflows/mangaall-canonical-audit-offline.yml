@@ -8,6 +8,8 @@ on:
       - '.github/workflows/mangaall-canonical-audit-offline.yml'
       - '.github/scripts/mangaall_mangadot_creator_evidence.mjs'
       - '.github/scripts/test_mangaall_mangadot_creator_evidence.mjs'
+      - 'app/src/main/java/eu/kanade/tachiyomi/data/track/shikimori/ShikimoriApi.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/data/track/shikimori/ShikimoriApiTest.kt'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/provider/reading/**'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/reader/**'
       - 'domain/src/test/java/tachiyomi/domain/tsuzuki/provider/reading/**'

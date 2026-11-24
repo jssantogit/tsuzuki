@@ -4,6 +4,8 @@ import eu.kanade.tachiyomi.data.track.shikimori.dto.SMCreatorResponse
 import eu.kanade.tachiyomi.data.track.shikimori.dto.SMManga
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.jupiter.api.Test
@@ -54,6 +56,18 @@ class ShikimoriApiTest {
     fun `omitted alternate fields never fabricate aliases`() {
         val manga = SMManga(42, "Primary", 0, null, "", null, null, null, null, "manhwa", null)
         manga.toTrack(1).alternate_titles shouldBe emptyList()
+    }
+
+    @Test
+    fun `creator alias GraphQL variables remain literal in the query for every work ID`() {
+        val first = ShikimoriApi.creatorAliasPayload(42)
+        val second = ShikimoriApi.creatorAliasPayload(9876)
+        val query = first.getValue("query").jsonPrimitive.content
+        query shouldBe second.getValue("query").jsonPrimitive.content
+        query.contains("query(\$id: String)") shouldBe true
+        query.contains("mangas(ids: \$id,") shouldBe true
+        first.getValue("variables").jsonObject.getValue("id").jsonPrimitive.content shouldBe "42"
+        second.getValue("variables").jsonObject.getValue("id").jsonPrimitive.content shouldBe "9876"
     }
 
     @Test
