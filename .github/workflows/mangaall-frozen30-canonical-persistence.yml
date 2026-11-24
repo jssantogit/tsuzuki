@@ -9,6 +9,7 @@ permissions:
   contents: read
 
 env:
+  READER_PROBE: ${{ contains(github.event.head_commit.message, 'RESTORED_FIRST_PAGE') && '--reader' || '' }}
   CATALOG_SCOPE: ${{ contains(github.event.head_commit.message, 'CATALOG_EXPLICIT_PLAN') && 'explicit_plan' || contains(github.event.head_commit.message, 'CATALOG_SHIKIMORI') && 'shikimori' || 'mangaupdates' }}
 
 concurrency:
@@ -24,7 +25,7 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
-      - name: Validate locked cohort, adversarial restart and restored Reader verdicts without live traffic
+      - name: Validate locked cohort, restored Reader verdicts and numeric source diagnostics
         run: |
           set -euo pipefail
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-frozen30-canonical-persistence.yml'
@@ -152,7 +153,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --catalog "$CATALOG_SCOPE" --shard ${{ matrix.shard }}
+          script: python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --catalog "$CATALOG_SCOPE" $READER_PROBE --shard ${{ matrix.shard }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -184,6 +185,6 @@ jobs:
               mv "$root/frozen30-canonical-shard-$shard" "$root/shard-$shard"
             fi
           done
-          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --catalog "$CATALOG_SCOPE" --aggregate
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --catalog "$CATALOG_SCOPE" $READER_PROBE --aggregate
           test '${{ needs.build-once.result }}' = 'success'
           test '${{ needs.canonical-restart.result }}' = 'success'
