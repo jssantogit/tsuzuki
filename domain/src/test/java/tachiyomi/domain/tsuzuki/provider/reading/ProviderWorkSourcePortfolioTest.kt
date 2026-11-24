@@ -86,6 +86,47 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
+    fun `explicit bilingual creator credits compare whole spellings without granting editorial authority`() {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val observed = original.copy(
+            externalWorkId = "mangadex:11111111-2222-4333-8444-555555555555",
+            title = "Unrelated Fictional Work",
+        )
+        fun assess(credit: String, source: String): ProviderWorkSourceAssessment =
+            ProviderWorkSourcePortfolio.assess(
+                mangaAll,
+                "en",
+                observed.title,
+                setOf(credit),
+                listOf(observed.copy(authors = listOf(source))),
+            ).single()
+        for ((credit, source) in listOf(
+            "Seo Min-Jun" to "SEO Min Jun (서민준)",
+            "Moonrise" to "Moonrise (문라이즈)",
+            "별빛작가" to "Starlight (별빛작가)",
+            "Kim Haejin (김해진)" to "Hae-Jin Kim",
+            "Mira Han" to "Han Mira (한미라)",
+        )) {
+            val result = assess(credit, source)
+            result.workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
+            result.canCollectProvisionalChapters shouldBe true
+            result.canPromoteChapters shouldBe false
+            result.canOpenReader shouldBe false
+        }
+        for ((credit, source) in listOf(
+            "Han" to "Han Mira (한미라)",
+            "Moonrise" to "Moonrise (other creator)",
+            "Moonrise" to "Moonrise (문라이즈) Studio",
+            "Moonrise" to "Another Moonrise (문라이즈)",
+            "Mira Han" to "Han Yuna (한유나)",
+            "Moonrise" to "Moonrise (A문라이즈)",
+            "Moonrise" to "Moonrise (문)",
+        )) {
+            assess(credit, source).workVerification shouldBe ProviderWorkVerification.AUTHOR_CONFLICT
+        }
+    }
+
+    @Test
     fun `typographic apostrophes do not reject exact titles but suffix differences remain distinct`() {
         val observed = original.copy(
             title = "An Author’s Work",

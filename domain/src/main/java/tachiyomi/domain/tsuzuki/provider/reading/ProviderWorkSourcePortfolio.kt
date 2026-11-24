@@ -122,15 +122,28 @@ object ProviderWorkSourcePortfolio {
 
     private fun creatorKeys(name: String): Set<String> = buildSet {
         val normalized = Normalizer.normalize(name, Normalizer.Form.NFC)
-        normalizeCreator(normalized)?.let(::add)
-        // Romanized full names may spell one explicitly hyphenated token
-        // with or without a hyphen. Do not concatenate independent words,
-        // infer a missing surname or alter single-token pseudonyms.
-        if (normalized.trim().split(WHITESPACE).size >= 2) {
-            val joined = EXPLICIT_NAME_HYPHEN.replace(normalized) {
-                it.groupValues[1] + it.groupValues[2]
+        // A public creator credit may explicitly publish the Latin spelling
+        // followed by its Hangul spelling in parentheses. Treat each complete
+        // spelling as independently usable, not a concatenation of both.
+        // Never split arbitrary Latin parentheticals, labels or partial names.
+        val spellings = buildSet {
+            add(normalized)
+            BILINGUAL_KOREAN_CREDIT.matchEntire(normalized.trim())?.let {
+                add(it.groupValues[1])
+                add(it.groupValues[2])
             }
-            if (joined != normalized) normalizeCreator(joined)?.let(::add)
+        }
+        for (spelling in spellings) {
+            normalizeCreator(spelling)?.let(::add)
+            // Romanized full names may spell one explicitly hyphenated token
+            // with or without a hyphen. Do not concatenate independent words,
+            // infer a missing surname or alter single-token pseudonyms.
+            if (spelling.trim().split(WHITESPACE).size >= 2) {
+                val joined = EXPLICIT_NAME_HYPHEN.replace(spelling) {
+                    it.groupValues[1] + it.groupValues[2]
+                }
+                if (joined != spelling) normalizeCreator(joined)?.let(::add)
+            }
         }
     }
 
@@ -235,6 +248,9 @@ object ProviderWorkSourcePortfolio {
     private val WHITESPACE = Regex("\\s+")
     private val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
     private val CREATOR_COMBINING_MARKS = Regex("\\p{M}+")
+    private val BILINGUAL_KOREAN_CREDIT = Regex(
+        """([\p{IsLatin}][\p{IsLatin}\p{M} ,.'’\-‐‑]{0,127}?)\s*\(([가-힣]{2,32}(?: [가-힣]{1,32})?)\)""",
+    )
     private val EXPLICIT_NAME_HYPHEN = Regex("([A-Za-z])[-‐‑]([A-Za-z])")
     private val JAPANESE_LONG_YO = Regex("(?:ry|ky|gy|sh|ch|j|ny|hy|by|py|my)ou")
     private val EDITION_MARKERS = listOf(
