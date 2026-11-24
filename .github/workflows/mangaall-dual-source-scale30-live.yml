@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
           python3 .github/scripts/mangaall_dual_source_30_aggregate.py --self-test
           python3 - <<'PY'
-          import json, subprocess
+          import json, subprocess, hashlib
           from pathlib import Path
           files=[p for p in subprocess.check_output(
               ['git','diff-tree','--no-commit-id','--name-only','-r','HEAD'],
@@ -52,6 +52,10 @@ jobs:
           assert lock['format']=='manhwa'
           assert lock['freezeUntil']=='THIRTY_OF_THIRTY_VERIFIED_AND_EXPLICITLY_APPROVED'
           assert data['works']==lock['works'], 'FROZEN_30_MANHWA_CORPUS_VIOLATED'
+          cohort_sha=hashlib.sha256(json.dumps(
+              data['works'], ensure_ascii=False, separators=(',',':')
+          ).encode('utf-8')).hexdigest()
+          assert cohort_sha=='19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1', 'PINNED_30_MANHWA_HASH_MISMATCH'
           print('MANGAALL_DUAL30_AUTH|works=30|cohort=MANHWA_FIXED|format=manhwa|sources=MANGADEX_MANGADOT|provider=IMMUTABLE_CODE10_MODULES|live=AUTHORIZED')
           PY
 
