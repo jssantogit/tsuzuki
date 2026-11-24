@@ -31,11 +31,13 @@ import tachiyomi.domain.tsuzuki.catalog.interactor.toCanonicalReadingMetadata
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.MetadataProvider
 import tachiyomi.domain.tsuzuki.integration.RatingsProvider
 import tachiyomi.domain.tsuzuki.integration.SearchProvider
 import tachiyomi.domain.tsuzuki.integration.TrackingProvider
+import tachiyomi.domain.tsuzuki.integration.resolveVerifiedCreatorAliases
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
@@ -70,8 +72,8 @@ class MangaAllMangaDotCorroborationInstrumentedTest {
         val instrument = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
         assertEquals("I_ACCEPT_MANGADOT_CORROBORATION_RESEARCH", args.getString("mangaDotCorroborationOptIn"))
-        val catalogName = requireNotNull(args.getString("mangaAllLiveCatalogSource"))
-        require(catalogName in setOf("mangaupdates", "shikimori"))
+        val catalogScope = requireNotNull(args.getString("mangaAllLiveCatalogSource"))
+        require(catalogScope in setOf("mangaupdates", "shikimori", "explicit_controls"))
         val context = instrument.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)
         assertTrue(
@@ -138,30 +140,40 @@ class MangaAllMangaDotCorroborationInstrumentedTest {
             limits = ProviderRuntimeLimitsDto(wallClockTimeoutMs = 30_000L, jsExecutionTimeoutMs = 15_000L),
         )
         val app = context.applicationContext as App
-        val catalog: SearchProvider = when (catalogName) {
-            "mangaupdates" -> MangaUpdatesIntegrationProvider(app.graph.trackerManager)
-            "shikimori" -> ShikimoriIntegrationProvider(app.graph.trackerManager, ShikimoriRequestGate())
-            else -> error("Unknown catalog scope")
+        val catalogs = mapOf<String, SearchProvider>(
+            "mangaupdates" to MangaUpdatesIntegrationProvider(app.graph.trackerManager),
+            "shikimori" to ShikimoriIntegrationProvider(app.graph.trackerManager, ShikimoriRequestGate()),
+        )
+        fun catalogFor(index: Int): String = if (catalogScope == "explicit_controls") {
+            if (index == 12) "shikimori" else "mangaupdates"
+        } else {
+            catalogScope
         }
-        val metadataCatalog = catalog as MetadataProvider
-        val catalogRegistry = object : IntegrationRegistry {
-            override fun searchProviders(): List<SearchProvider> = listOf(catalog)
-            override fun metadataProviders(): List<MetadataProvider> = listOf(metadataCatalog)
-            override fun discoveryProviders(): List<DiscoveryProvider> = emptyList()
-            override fun chapterEvidenceProviders(): List<ChapterEvidenceProvider> = emptyList()
-            override fun ratingsProviders(): List<RatingsProvider> = emptyList()
-            override fun trackingProviders(): List<TrackingProvider> = emptyList()
-        }
-        val bootstrap = ResolveMangaAllIndependentCatalogIdentity(catalogRegistry)
 
-        suspend fun check(title: String): String {
-            val identity = bootstrap.execute(title, CatalogItemFormat.MANHWA)
+        suspend fun check(index: Int, title: String, catalogName: String): String {
+            val catalog = catalogs.getValue(catalogName)
+            val metadataCatalog = catalog as MetadataProvider
+            val catalogRegistry = object : IntegrationRegistry {
+                override fun searchProviders(): List<SearchProvider> = listOf(catalog)
+                override fun metadataProviders(): List<MetadataProvider> = listOf(metadataCatalog)
+                override fun discoveryProviders(): List<DiscoveryProvider> = emptyList()
+                override fun chapterEvidenceProviders(): List<ChapterEvidenceProvider> = emptyList()
+                override fun ratingsProviders(): List<RatingsProvider> = emptyList()
+                override fun trackingProviders(): List<TrackingProvider> = emptyList()
+            }
+            val bootstrap = ResolveMangaAllIndependentCatalogIdentity(catalogRegistry)
+            val nativeHint = if (catalogName == "mangaupdates" && index == 10) "더 복서" else null
+            val identity = bootstrap.execute(title, CatalogItemFormat.MANHWA, searchTitle = nativeHint)
             if (identity.status != MangaAllCatalogIdentityStatus.RESOLVED) return identity.status.name
             val metadata = identity.toCanonicalReadingMetadata() ?: return "CATALOG_PROVENANCE_MISSING"
-            val creators = metadata.authors?.value.orEmpty() + metadata.artists?.value.orEmpty()
-            if (!identity.creatorsAttested || creators.isEmpty() || identity.identity?.provider != catalogName) {
+            val owner = requireNotNull(identity.identity)
+            val directCredits = metadata.authors?.value.orEmpty() + metadata.artists?.value.orEmpty()
+            if (!identity.creatorsAttested || directCredits.isEmpty() || owner.provider != catalogName) {
                 return "CATALOG_PROVENANCE_MISSING"
             }
+            val verifiedIds = mapOf(IntegrationId(owner.provider) to owner.providerId)
+            val aliases = resolveVerifiedCreatorAliases(metadata, verifiedIds, listOf(metadataCatalog))
+            val creators = directCredits + aliases
             val lookup = gateway.lookup(id, ProviderReadingLookupRequest(listOf(title), requestedLanguage = "en"))
             val page = (lookup as? ProviderCallResult.Success)?.value ?: return "SOURCE_LOOKUP_FAILED"
             val candidate = page.items.filter {
@@ -205,8 +217,9 @@ class MangaAllMangaDotCorroborationInstrumentedTest {
         var passed = 0
         try {
             for (index in listOf(1, 3, 10, 12)) {
+                val catalogName = catalogFor(index)
                 val outcome = try {
-                    check(works[index - 1].jsonPrimitive.content)
+                    check(index, works[index - 1].jsonPrimitive.content, catalogName)
                 } catch (error: CancellationException) {
                     throw error
                 } catch (_: Exception) {
