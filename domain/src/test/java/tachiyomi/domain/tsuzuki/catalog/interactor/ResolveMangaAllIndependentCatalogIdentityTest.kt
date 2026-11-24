@@ -253,13 +253,15 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
             CatalogPage(listOf(searchItem.copy(title = nativeTitle)), false)
         }, detail = { error("Native hint alone cannot authorize the requested title") })
         ResolveMangaAllIndependentCatalogIdentity(registry(wrong))
-            .execute("Requested Work", searchTitle = nativeTitle).status shouldBe MangaAllCatalogIdentityStatus.CATALOG_NOT_FOUND
+            .execute("Requested Work", searchTitle = nativeTitle).status shouldBe
+            MangaAllCatalogIdentityStatus.CATALOG_NOT_FOUND
 
         val noNative = source("mangaupdates", search = {
             CatalogPage(listOf(searchItem), false)
         }, detail = { searchItem })
         ResolveMangaAllIndependentCatalogIdentity(registry(noNative))
-            .execute("Requested Work", searchTitle = nativeTitle).status shouldBe MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+            .execute("Requested Work", searchTitle = nativeTitle).status shouldBe
+            MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
     }
 
     @Test
