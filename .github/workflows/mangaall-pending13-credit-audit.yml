@@ -175,3 +175,6 @@ jobs:
           retention-days: 2
 
 # Lookup-only public credits; not a persistence/Reader acceptance gate.
+
+# Explicit public-credit-only follow-up to CI 45481218104: exclude the recovered Wind Breaker.
+# No canonical inventory, chapter pages, image transfer or cohort acceptance.
