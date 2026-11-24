@@ -111,6 +111,10 @@ class MangaUpdatesIntegrationProvider private constructor(
             .toIntegrationCatalogItem(integrationId.value)
     }
 
+    override suspend fun creatorAliases(externalId: String) = capture {
+        api.getVerifiedCreatorAliases(externalId.requireMangaUpdatesId())
+    }
+
     override suspend fun ratings(externalId: String): Result<List<ExternalRating>> = capture {
         listOfNotNull(
             api.getMangaDetails(externalId.requireMangaUpdatesId())
