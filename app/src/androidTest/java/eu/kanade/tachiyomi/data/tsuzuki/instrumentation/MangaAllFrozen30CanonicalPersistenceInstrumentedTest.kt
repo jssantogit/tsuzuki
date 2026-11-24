@@ -439,7 +439,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 // user data, canonical writes, chapter inventory or Reader calls.
                 fun publicCredits(names: Collection<String>) = JsonArray(
                     names.asSequence().map(String::trim)
-                        .filter { it.length in 1..128 && it.matches(Regex("[\\\\p{L}\\\\p{M}\\\\p{N} .,'’·_()\\\\-]+")) }
+                        .filter { it.length in 1..128 && it.matches(Regex("""[\p{L}\p{M}\p{N} .,'’·_()\-]+""")) }
                         .distinct().take(32).map(::JsonPrimitive).toList(),
                 )
                 val published = provenance.authors?.value.orEmpty() + provenance.artists?.value.orEmpty()
@@ -458,7 +458,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 ).map { it.value }
                 val queries = (listOf(works[index - 1]) + names).map(String::trim)
                     .filter { it.isNotBlank() && it.length <= 1024 }
-                    .distinctBy { it.lowercase().replace(Regex("\\\\s+"), " ") }.take(3)
+                    .distinctBy { it.lowercase().replace(Regex("""\s+"""), " ") }.take(3)
                 val observations = mutableListOf<JsonObject>()
                 val sourceStates = mutableMapOf<String, String>()
                 for (source in listOf("mangadex", "mangadot")) {
@@ -472,12 +472,15 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                             for (query in queries) {
                                 val cursor = cursors[query] ?: continue
                                 val result = withTimeoutOrNull(6_000L) {
-                                    gateway.lookup(id, ProviderReadingLookupRequest(
-                                        titles = listOf(query),
-                                        cursor = cursor,
-                                        coverageEvidenceVersion = 1,
-                                        requestedLanguage = "en",
-                                    ))
+                                    gateway.lookup(
+                                        id,
+                                        ProviderReadingLookupRequest(
+                                            titles = listOf(query),
+                                            cursor = cursor,
+                                            coverageEvidenceVersion = 1,
+                                            requestedLanguage = "en",
+                                        ),
+                                    )
                                 }
                                 val page = (result as? ProviderCallResult.Success)?.value
                                 if (page == null || page.items.any { !it.externalWorkId.startsWith("$source:") }) {
@@ -487,11 +490,20 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                                 }
                                 for (candidate in page.items) {
                                     val assessment = ProviderWorkSourcePortfolio.assess(
-                                        id, "en", query, verifiedNames, listOf(candidate),
+                                        id,
+                                        "en",
+                                        query,
+                                        verifiedNames,
+                                        listOf(candidate),
                                     ).single()
                                     if (assessment.workVerification == ProviderWorkVerification.TITLE_UNVERIFIED) continue
-                                    val key = candidate.externalWorkId + candidate.authors.joinToString("|") +
-                                        candidate.detailOutcome + candidate.coverageOutcome
+                                    val key = listOf(
+                                        candidate.externalWorkId,
+                                        candidate.authors.joinToString("|"),
+                                        candidate.detailOutcome?.name.orEmpty(),
+                                        candidate.coverageOutcome?.name.orEmpty(),
+                                        assessment.editionQualification.name,
+                                    ).joinToString("\u0000")
                                     if (!seenCandidates.add(key) || observations.size >= 24) continue
                                     observations += JsonObject(
                                         mapOf(
@@ -537,9 +549,12 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 ).toString()
                 check(report.encodeToByteArray().size <= 48 * 1024)
                 val encoded = report.encodeToByteArray().joinToString("") { "%02x".format(it.toInt() and 0xff) }
-                instrument.sendStatus(1, Bundle().apply {
-                    putString("stream", "MANGAALL_PUBLIC_CREDIT_AUDIT|index=$index|payload=$encoded")
-                })
+                instrument.sendStatus(
+                    1,
+                    Bundle().apply {
+                        putString("stream", "MANGAALL_PUBLIC_CREDIT_AUDIT|index=$index|payload=$encoded")
+                    },
+                )
                 return "IDENTITY_AUDITED"
             }
             val now = System.currentTimeMillis()
