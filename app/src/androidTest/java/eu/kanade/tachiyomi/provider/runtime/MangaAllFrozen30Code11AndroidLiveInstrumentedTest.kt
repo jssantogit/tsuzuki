@@ -86,9 +86,11 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
         assertEquals("app.tsuzuki.mangaall", manifest.id)
         assertEquals(11L, manifest.version.code)
         assertEquals(2, manifest.minHostApi)
-        assertFalse(manifest.permissions.network?.origins.orEmpty().any {
-            it.contains("mangafire", ignoreCase = true) || it.contains("mfcdn", ignoreCase = true)
-        })
+        assertFalse(
+            manifest.permissions.network?.origins.orEmpty().any {
+                it.contains("mangafire", ignoreCase = true) || it.contains("mfcdn", ignoreCase = true)
+            },
+        )
         val context: Context = instrumentation.targetContext
         val root = File(context.cacheDir, "mangaall-frozen30-real-shard-$shard").apply {
             deleteRecursively()
@@ -146,7 +148,10 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                         )
                         if (cursor != null) queryInput["cursor"] = JsonPrimitive(cursor)
                         val response = invoke("reading.lookup", JsonObject(queryInput))
-                        assertNull("Android source lookup failed for locked index ${index + 1} page $page", response.failure)
+                        assertNull(
+                            "Android source lookup failed for locked index ${index + 1} page $page",
+                            response.failure,
+                        )
                         val body = Json.parseToJsonElement(requireNotNull(response.value)).jsonObject
                         val items = requireNotNull(body["items"]).jsonArray
                         for (item in items) {
@@ -154,9 +159,11 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                             val id = obj["externalWorkId"]?.jsonPrimitive?.content ?: continue
                             if (!workHid.matches(id)) continue
                             val names = listOfNotNull(obj["title"]?.jsonPrimitive?.content) +
-                                ((obj["aliases"] as? JsonArray)?.mapNotNull {
-                                    (it as? JsonPrimitive)?.content
-                                } ?: emptyList())
+                                (
+                                    (obj["aliases"] as? JsonArray)?.mapNotNull {
+                                        (it as? JsonPrimitive)?.content
+                                    } ?: emptyList()
+                                    )
                             if (names.any { normalizeTitle(it) in permittedTitles }) {
                                 candidates[id] = id.substringBefore(':')
                             }
@@ -164,8 +171,10 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                         val next = body["nextCursor"] ?: JsonNull
                         cursor = if (next == JsonNull) null else next.jsonPrimitive.content
                         if (cursor == null) break
-                        assertTrue("Android lookup cursor loop at locked index ${index + 1}",
-                            seenCursors.add(cursor))
+                        assertTrue(
+                            "Android lookup cursor loop at locked index ${index + 1}",
+                            seenCursors.add(cursor),
+                        )
                         // Source lookup discovery is limited to 12 pages per alias.
                         // This is NOT equivalent to the independent 80-page Node source audit.
                         // Prefer inspecting a valid HID over broad irrelevant search pages.
@@ -188,11 +197,13 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                     if (it.second == "mangadot") 0 else 1
                 }.take(6)) {
                     attempts++
-                    val binding = JsonObject(mapOf(
-                        "providerId" to JsonPrimitive("app.tsuzuki.mangaall"),
-                        "externalWorkId" to JsonPrimitive(hid),
-                        "facetId" to JsonPrimitive("en"),
-                    ))
+                    val binding = JsonObject(
+                        mapOf(
+                            "providerId" to JsonPrimitive("app.tsuzuki.mangaall"),
+                            "externalWorkId" to JsonPrimitive(hid),
+                            "facetId" to JsonPrimitive("en"),
+                        ),
+                    )
                     val ids = mutableSetOf<String>()
                     val seenChapterCursors = mutableSetOf<String>()
                     var chapterCursor: String? = null
@@ -209,8 +220,10 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                             break
                         }
                         val raw = requireNotNull(reply.value)
-                        assertTrue("Host output exceeds 48KiB at work ${index + 1}",
-                            raw.toByteArray(Charsets.UTF_8).size <= 48 * 1024)
+                        assertTrue(
+                            "Host output exceeds 48KiB at work ${index + 1}",
+                            raw.toByteArray(Charsets.UTF_8).size <= 48 * 1024,
+                        )
                         val result = Json.parseToJsonElement(raw).jsonObject
                         val chapters = requireNotNull(result["items"]).jsonArray
                         assertTrue("Host chapter page exceeds 256 rows", chapters.size <= 256)
@@ -233,8 +246,10 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                             terminal = true
                             break
                         }
-                        assertTrue("Repeated chapter cursor for frozen index ${index + 1}",
-                            seenChapterCursors.add(chapterCursor))
+                        assertTrue(
+                            "Repeated chapter cursor for frozen index ${index + 1}",
+                            seenChapterCursors.add(chapterCursor),
+                        )
                     }
                     if (!failure && terminal && chapterOne && ids.isNotEmpty()) {
                         provedChapterOne = true
