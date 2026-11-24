@@ -290,7 +290,9 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             val owner = requireNotNull(identity.identity)
             val provenance = identity.toCanonicalReadingMetadata()
                 ?: return "CATALOG_PROVENANCE_MISSING"
-            if (owner.provider != catalogName || owner.format != CatalogItemFormat.MANHWA || !identity.creatorsAttested) {
+            if (owner.provider != catalogName || owner.format != CatalogItemFormat.MANHWA ||
+                !identity.creatorsAttested
+            ) {
                 return "CATALOG_FORMAT_OR_CREATOR_UNVERIFIED"
             }
             val now = System.currentTimeMillis()
