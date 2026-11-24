@@ -206,9 +206,11 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                         "page_list" -> {
                             val pages = body.getValue("pages").jsonArray
                             check(pages.isNotEmpty() && pages.size <= 5000)
-                            check(pages.all {
-                                it.jsonObject["url"]?.jsonPrimitive?.content?.startsWith("https://") == true
-                            })
+                            check(
+                                pages.all {
+                                    it.jsonObject["url"]?.jsonPrimitive?.content?.startsWith("https://") == true
+                                },
+                            )
                             facts.pageLists++
                         }
                         "page_failure" -> {
