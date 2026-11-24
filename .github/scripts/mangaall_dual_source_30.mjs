@@ -25,7 +25,19 @@ assert.equal(raw.acknowledge, ACK);
 assert.ok(Array.isArray(raw.works) && raw.works.length === 30);
 assert.ok(raw.works.every(v => typeof v === 'string' &&
   v.length > 0 && v.length <= 180 && !/https?:\/\/|[\r\n\x00-\x1f]/i.test(v)));
-const formatted = raw.works.map(v => 'manga :: ' + v).join('\n');
+// User-approved fixed manhwa corpus: editing the request does not unlock this
+// cohort. This exact list remains frozen even across provider fixes/retries.
+const cohort = JSON.parse(readFileSync(
+  '.github/mangaall-dual-source-30-cohort-lock.json', 'utf8'));
+assert.deepEqual(Object.keys(cohort).sort(),
+  ['cohort', 'format', 'freezeUntil', 'works']);
+assert.equal(cohort.cohort, 'MANHWA_30_FIXED_20261123');
+assert.equal(cohort.format, 'manhwa');
+assert.equal(cohort.freezeUntil,
+  'THIRTY_OF_THIRTY_VERIFIED_AND_EXPLICITLY_APPROVED');
+assert.deepEqual(raw.works, cohort.works,
+  'MangaALL cohort is frozen until 30/30 validated; never rotate failing works');
+const formatted = raw.works.map(v => 'manhwa :: ' + v).join('\n');
 const providerRoot = path.resolve('signed-code10');
 const sourceRoot = path.join(providerRoot, 'providers/mangaall');
 const importFromProvider = async p => import(pathToFileURL(path.join(providerRoot, p)).href);
@@ -616,7 +628,7 @@ for (const [index, work] of assigned.entries()) {
   const verdict = failure ? 'INTERNAL_ERROR' : journeyVerdict(probe);
   const record = {
     id: work.id, title: work.names[0], position: works.findIndex(x => x.id === work.id),
-    format: 'manga', verdict, failure, lookup: probe.lookup,
+    format: 'manhwa', verdict, failure, lookup: probe.lookup,
     // Preserve only the journey's closed error category. Never log raw upstream
     // messages, cookies, URLs, response bodies or an unverified failure claim.
     lookupError: typeof probe.lookupError === 'string' &&
@@ -654,6 +666,7 @@ assert.equal(results.length, 10);
 assert.equal(prohibitedCalls, 0, 'An attempt to access a prohibited third provider occurred');
 const report = {
   schema: 1, kind: 'MANGAALL_TWO_SOURCE_UNSIGNED_CI_PREVIEW',
+  cohort: cohort.cohort, format: cohort.format,
   hostRepository: 'jssantogit/tsuzuki', sourceRepositoryCommit: PROVIDER_SHA,
   originalCode10SignedPackageChanged: false, adapterRouterModification: 'SOURCE_IDS_ONLY_IN_MEMORY',
   chapterAdaptation: 'MANGADOT_IN_MEMORY_48K_200_NO_RELEASE',
