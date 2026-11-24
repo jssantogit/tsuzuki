@@ -238,6 +238,23 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
     }
 
     @Test
+    fun `catalog published alias must also be corroborated by the owning detail`() = runTest {
+        val searchItem = item("shikimori", "42", "Primary")
+            .copy(titles = mapOf("alternate" to "Requested Alias"))
+        val verified = source("shikimori", search = {
+            CatalogPage(listOf(searchItem), false)
+        }, detail = { searchItem.copy(authors = listOf("Verified Creator")) })
+        val unverified = source("shikimori", search = {
+            CatalogPage(listOf(searchItem), false)
+        }, detail = { searchItem.copy(titles = emptyMap()) })
+
+        ResolveMangaAllIndependentCatalogIdentity(registry(verified))
+            .execute("Requested Alias").status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+        ResolveMangaAllIndependentCatalogIdentity(registry(unverified))
+            .execute("Requested Alias").status shouldBe MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+    }
+
+    @Test
     fun `no exact title or supplied alias match is not found when all catalogs complete`() = runTest {
         val mal = source("mal", search = {
             CatalogPage(listOf(item("mal", "42", "Different Work")), false)
