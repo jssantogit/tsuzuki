@@ -80,7 +80,7 @@ run_case() {
 # no source/CDN traffic, no frozen cohort. Each test starts with clean app data.
 if [ "${MANGAALL_SELECTOR_OFFLINE_ONLY:-0}" = "1" ]; then
   run_case 'MANGAALL_DUAL_SOURCE_ROW_TAP' 'eu.kanade.presentation.reader.MangaAllReaderSourceCardInstrumentedTest#tappingMangaDotKeepsExactChapterAndFacetInsteadOfMangaDex' 'mangaAllSourceRowOptIn'
-  run_case 'MANGAALL_CONTINUOUS_READER_TAP_RETRY_PIXELS' "$continuous_case" 'androidSourceSwitchOptIn'
+  run_case 'MANGADOT_CONTINUOUS_READER_TAP_RETRY_PIXELS' 'eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllSyntheticMangaDotSourceTapFailureAndRetryPublishesDecodedReaderPixels' 'androidSourceSwitchOptIn'
   run_case 'READER_UI_SOURCE_SWITCH_PIXELS' "$ui_case" 'androidSourceSwitchOptIn'
   run_case 'READER_ACTIVITY_RECREATION' 'eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#activityRecreationRestoresObservedCanonicalPosition' 'androidSourceSwitchOptIn'
   run_case 'READER_HISTORY_IDEMPOTENCE' 'eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#repeatedSourceSwitchKeepsPreferenceAndSingleHistoryEntry' 'androidSourceSwitchOptIn'

@@ -96,6 +96,7 @@ internal class MangaAllReaderJourneyFixture(
     private val originalCode9Package: Boolean = false,
     private val originalCode10Package: Boolean = false,
     private val liveTarget: MangaAllLiveReaderTarget? = null,
+    private val syntheticMangaDot: Boolean = false,
 ) : AutoCloseable {
     init {
         val originalPackageFlags = listOf(
@@ -107,16 +108,21 @@ internal class MangaAllReaderJourneyFixture(
         require(originalPackageFlags.count { it } <= 1) {
             "Select at most one original MangaAll package"
         }
+        require(!syntheticMangaDot || (liveTarget == null && originalPackageFlags.none { it })) {
+            "Synthetic MangaDot must not alter an original Provider package"
+        }
         require(liveTarget == null || originalCode8Package || originalCode9Package || originalCode10Package) {
             "Live Reader requires an original published package"
         }
     }
     private val providerId = ProviderId("app.tsuzuki.mangaall")
-    private val workId = liveTarget?.workId ?: "mangafire:zk12"
+    private val workId = liveTarget?.workId ?: if (syntheticMangaDot) "mangadot:131" else "mangafire:zk12"
     private val sourceChapterId = liveTarget?.chapterId ?: if (
         originalCode7Package || originalCode8Package || originalCode9Package || originalCode10Package
     ) {
         "mangafire:punpun-fixture-ch1"
+    } else if (syntheticMangaDot) {
+        "mangadot:chapters:13101"
     } else {
         "mangafire:chapter-one"
     }
@@ -147,7 +153,7 @@ internal class MangaAllReaderJourneyFixture(
                     .body(
                         """
                         {
-                          "items":[{"providerChapterId":"mangafire:chapter-one","rawLabel":"Chapter 1",
+                          "items":[{"providerChapterId":"$sourceChapterId","rawLabel":"Chapter 1",
                           "rawNumber":1.0,"language":"en"}],
                           "nextCursor":null
                         }
@@ -264,8 +270,8 @@ internal class MangaAllReaderJourneyFixture(
         val registry = DefaultProviderRegistry(registrations = { listOf(registration) })
         val script = """
             const origin = "$origin";
-            const workId = "mangafire:zk12";
-            const chapterId = "mangafire:chapter-one";
+            const workId = "$workId";
+            const chapterId = "$sourceChapterId";
             export default {
               reading: {
                 lookup: async () => ({items:[],nextCursor:null}),
