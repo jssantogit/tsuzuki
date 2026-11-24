@@ -2,10 +2,10 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import android.content.Context
 import android.graphics.BitmapFactory
-import eu.kanade.tachiyomi.source.model.Page
-import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageLoader
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageLoader
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -367,7 +367,10 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                             }
                             val sampled = BitmapFactory.Options().apply { inSampleSize = 8 }
                             val bitmap = BitmapFactory.decodeByteArray(
-                                downloaded, 0, downloaded.size, sampled,
+                                downloaded,
+                                0,
+                                downloaded.size,
+                                sampled,
                             )
                             assertTrue(
                                 "App Reader cached bitmap decode failed for frozen index ${index + 1}",
