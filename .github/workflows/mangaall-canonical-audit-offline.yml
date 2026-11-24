@@ -6,6 +6,9 @@ on:
     branches: ['probe/mangaall-dual-source-scale30-*']
     paths:
       - '.github/workflows/mangaall-canonical-audit-offline.yml'
+      - '.github/scripts/mangaall_code11_dual_source_unsigned.py'
+      - '.github/scripts/mangaall_mangadot_search_policy.mjs'
+      - '.github/scripts/test_mangaall_mangadot_search_policy.mjs'
       - '.github/scripts/mangaall_mangadot_creator_evidence.mjs'
       - '.github/scripts/test_mangaall_mangadot_creator_evidence.mjs'
       - 'app/src/main/java/eu/kanade/tachiyomi/data/track/shikimori/ShikimoriApi.kt'
@@ -41,6 +44,7 @@ jobs:
           set -euo pipefail
           node --check .github/scripts/mangaall_mangadot_creator_evidence.mjs
           node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
+          node .github/scripts/test_mangaall_mangadot_search_policy.mjs
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
           python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
           python3 .github/scripts/verify_mangaall_frozen30_mangadex_audit.py --selftest

@@ -122,31 +122,27 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False,
             b'if (item?.type !== "manga" || !ID_PATTERN.test(item.id || "") || item?.attributes?.originalLanguage !== "ko" || seen.has(item.id)) continue;',
             "MANHWA_MANGADEX_ORIGINAL_KO",
         )
+        # Retrieval-only normalization for short article-prefixed searches.
+        # The original exact title remains the identity/enrichment predicate.
+        # A uniform source cursor ceiling never changes the Host's per-call
+        # page, time or result budgets; exhaustion is not COMPLETE.
+        policy = Path(__file__).with_name("mangaall_mangadot_search_policy.mjs")
+        files["modules/sources/mangadot/modules/search-policy.js"] = policy.read_bytes()
+        files[dot_name] = (
+            b'import { mangaDotRetrievalQuery, mangaDotResearchPageLimit } from "./search-policy.js";\n'
+            + files[dot_name]
+        )
         files[dot_name] = change_one(
             files[dot_name],
             b'["search", title], ["page", page], ["limit", 56],',
-            b'["search", ({"The Boxer":"Boxer","The Horizon":"Horizon","The Breaker":"Breaker"}[title] || title)], ["page", page], ["limit", 56],',
-            "MANHWA_MANGADOT_SCOPED_SEARCH",
-        )
-        # No false complete state: a source may advertise 48/43/74 broad
-        # search pages. Only these three titles get a larger source bound.
-        files[dot_name] = change_one(
-            files[dot_name],
-            b'function pageNumber(cursor) {',
-            b'function pageNumber(cursor, requestedTitle) {',
-            "MANHWA_DOT_SOURCE_PAGE_CONTEXT",
+            b'["search", mangaDotRetrievalQuery(title)], ["page", page], ["limit", 56],',
+            "MANHWA_MANGADOT_GENERIC_QUERY",
         )
         files[dot_name] = change_one(
             files[dot_name],
             b'if (n > 32) throw new Error("MangaAll bounded source search exhausted");',
-            b'if (n > (["Weak Hero","The World After the Fall","Cheese in the Trap"].includes(requestedTitle) ? 80 : 32)) throw new Error("MangaAll bounded source search exhausted");',
-            "MANHWA_DOT_SCOPED_80",
-        )
-        files[dot_name] = change_one(
-            files[dot_name],
-            b'const page = pageNumber(input?.cursor);',
-            b'const page = pageNumber(input?.cursor, title);',
-            "MANHWA_DOT_BIND_PAGE_TITLE",
+            b'if (n > mangaDotResearchPageLimit()) throw new Error("MangaAll bounded source search exhausted");',
+            "MANHWA_DOT_UNIFORM_CURSOR_BOUND",
         )
     if mangadot_creators:
         # Separate opt-in; the five previous source-only live probes keep
