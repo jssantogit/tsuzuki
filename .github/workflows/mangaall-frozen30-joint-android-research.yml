@@ -87,7 +87,7 @@ jobs:
           done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: joint-unsigned-apks
+          name: mangaall-joint-unsigned-apks
           path: app/build/outputs/apk/
           if-no-files-found: error
           retention-days: 1
@@ -121,7 +121,7 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: joint-unsigned-apks
+          name: mangaall-joint-unsigned-apks
           path: app/build/outputs/apk/
       - name: Enable KVM
         run: |
@@ -162,7 +162,7 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: joint-unsigned-apks
+          name: mangaall-joint-unsigned-apks
           path: app/build/outputs/apk/
       - name: Enable KVM
         run: |
@@ -198,39 +198,45 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         continue-on-error: true
         with:
-          pattern: joint-{catalog,dex,canonical}-*
+          pattern: joint-*
           path: joint-reports
       - name: Report independent catalog, MangaDex coverage and canonical restart separately
         run: |
           set -uo pipefail
-          python3 - <<'PY'
+          dex_status=0
+          python3 - <<'PY' || dex_status=$?
           import json, shutil
           from collections import Counter
           from pathlib import Path
           scopes={"catalog":"mangaall-frozen30-catalog-plan","dex":"mangaall-frozen30-mangadex-audit","canonical":"mangaall-frozen30-canonical-persistence"}
           dex=[]
+          dex_valid=True
           for kind,folder in scopes.items():
               for shard in range(3):
                   base=Path(f"joint-reports/joint-{kind}-{shard}")
                   candidates=list(base.rglob("verdict.json")) if base.is_dir() else []
                   if len(candidates)!=1:
                       print(f"JOINT_REPORT|scope={kind}|shard={shard}|outcome=MISSING_OR_AMBIGUOUS")
+                      if kind=="dex": dex_valid=False
                       continue
                   dest=Path(".github/results")/folder/f"shard-{shard}"
                   dest.mkdir(parents=True,exist_ok=True)
                   shutil.copyfile(candidates[0],dest/"verdict.json")
                   if kind=="dex":
                       report=json.loads(candidates[0].read_text())
-                      dex.extend(report.get("works",[]))
+                      rows=report.get("works",[])
+                      dex_valid &= (report.get("scope")=="MANGADEX_EN_ONLY" and report.get("shard")==shard and report.get("corpusSha256")=="19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1" and report.get("integrity") is True and report.get("completeReport") is True and [r.get("index") for r in rows]==list(range(shard*10+1,shard*10+11)))
+                      dex.extend(rows)
           for outcome,count in sorted(Counter(r.get("outcome","UNKNOWN") for r in dex).items()):
               print(f"JOINT_DEX|outcome={outcome}|works={count}")
           print(f"JOINT_DEX|observed={len(dex)}|expected=30|canonical=NOT_TESTED")
+          assert dex_valid and [r.get("index") for r in dex]==list(range(1,31)), "Incomplete independent MangaDex reports"
           PY
           catalog_status=0
           canonical_status=0
           python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --aggregate || catalog_status=$?
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --catalog explicit_plan --aggregate || canonical_status=$?
-          test "$catalog_status" -eq 0 && test "$canonical_status" -eq 0 &&
+          test "$dex_status" -eq 0 && test "$catalog_status" -eq 0 && test "$canonical_status" -eq 0 &&
             test '${{ needs.build-once.result }}' = 'success' &&
             test '${{ needs.independent-tests.result }}' = 'success' &&
             test '${{ needs.canonical-restart.result }}' = 'success'
