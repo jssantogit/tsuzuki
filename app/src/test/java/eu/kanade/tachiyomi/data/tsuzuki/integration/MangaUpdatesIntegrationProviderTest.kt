@@ -175,13 +175,18 @@ class MangaUpdatesIntegrationProviderTest {
 
     @Test
     fun `catalog search uses upstream pagination and total instead of truncated tracker search`() = runTest {
-        val calls = mutableListOf<Triple<String, Int, Int>>()
+        val calls = mutableListOf<List<Any?>>()
         val api = object : MangaUpdatesIntegrationApi {
             override suspend fun search(query: String): List<TrackSearch> = error("Legacy search must not run")
 
-            override suspend fun searchWindow(query: String, offset: Int, limit: Int): MangaUpdatesSearchWindow {
-                calls += Triple(query, offset, limit)
-                val rows = (1L..51L).map { track(it, "Title $it", 8.0) }
+            override suspend fun searchWindow(
+                query: String,
+                offset: Int,
+                limit: Int,
+                type: String?,
+            ): MangaUpdatesSearchWindow {
+                calls += listOf(query, offset, limit, type)
+                val rows = (1L..51L).map { track(it, "Title $it", 8.0).apply { publishing_type = "Manhwa" } }
                 return MangaUpdatesSearchWindow(rows.drop(offset).take(limit), rows.size)
             }
 
@@ -189,14 +194,18 @@ class MangaUpdatesIntegrationProviderTest {
             override suspend fun getMangaDetails(id: Long): TrackSearch = error("Not needed")
         }
         val provider = MangaUpdatesIntegrationProvider.forTest(api)
-        val second = provider.search(CatalogQuery(query = "Title", offset = 25, limit = 25)).getOrThrow()
+        val second = provider.search(
+            CatalogQuery(query = "Title", format = CatalogItemFormat.MANHWA, offset = 25, limit = 25),
+        ).getOrThrow()
         second.items.map { it.providerId } shouldBe (26..50).map(Int::toString)
         second.hasNextPage shouldBe true
         second.totalCount shouldBe 51
-        val last = provider.search(CatalogQuery(query = "Title", offset = 50, limit = 25)).getOrThrow()
+        val last = provider.search(
+            CatalogQuery(query = "Title", format = CatalogItemFormat.MANHWA, offset = 50, limit = 25),
+        ).getOrThrow()
         last.items.single().providerId shouldBe "51"
         last.hasNextPage shouldBe false
-        calls shouldBe listOf(Triple("Title", 25, 25), Triple("Title", 50, 25))
+        calls shouldBe listOf(listOf("Title", 25, 25, "Manhwa"), listOf("Title", 50, 25, "Manhwa"))
     }
 
     private class FakeMangaUpdatesUserLibraryApi(
