@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strict, nonshipping independent MangaUpdates catalog gate on the fixed corpus."""
+"""Strict, nonshipping single-catalog gate on the fixed corpus."""
 import argparse
 import base64
 import hashlib
@@ -47,13 +47,15 @@ def case_id(title):
     return "user-" + digest(name)[:12]
 
 
-def classify(record):
+def classify(record, catalog="mangaupdates"):
+    if catalog not in ("mangaupdates", "shikimori"):
+        raise ValueError("Unknown independent catalog scope")
     status = record.get("status")
     if status not in STATUSES:
         return "INVALID_ATTESTATION", None
     if (record.get("schemaVersion") != 1
             or record.get("mode") != "DIRECT_LIVE_ANDROID_CATALOG_ONLY"
-            or record.get("catalogSource") != "mangaupdates"
+            or record.get("catalogSource") != catalog
             or record.get("canonical") != "NOT_EXECUTED_HOST"):
         return "INVALID_ATTESTATION", None
     if status != "RESOLVED":
@@ -61,7 +63,7 @@ def classify(record):
     owner = record.get("provider")
     owner_id = record.get("providerId")
     external = record.get("externalIds")
-    if (owner != "mangaupdates" or not isinstance(owner_id, str)
+    if (owner != catalog or not isinstance(owner_id, str)
             or not re.fullmatch(r"[1-9][0-9]*", owner_id)
             or not isinstance(external, dict) or (owner in external and external[owner] != owner_id)
             or record.get("catalogsQueried") != 1 or record.get("catalogsFailed") != 0):
@@ -81,7 +83,7 @@ def classify(record):
     return "CATALOG_IDENTITY_ATTESTED", digest(owner + ":" + owner_id)
 
 
-def evaluate(works, shard, log, instrument_ok):
+def evaluate(works, shard, log, instrument_ok, catalog="mangaupdates"):
     selected = works[shard * 10:(shard + 1) * 10]
     records = {}
     invalid = 0
@@ -97,13 +99,13 @@ def evaluate(works, shard, log, instrument_ok):
             invalid += 1
     results = []
     for offset, title in enumerate(selected):
-        status, identity = classify(records[title]) if title in records else ("NOT_OBSERVED", None)
+        status, identity = classify(records[title], catalog) if title in records else ("NOT_OBSERVED", None)
         results.append({"index": shard * 10 + offset + 1, "status": status, "identityDigest": identity})
     ok = (instrument_ok and invalid == 0 and len(records) == 10
           and all(r["status"] == "CATALOG_IDENTITY_ATTESTED" for r in results)
           and len({r["identityDigest"] for r in results}) == 10)
     return {"schemaVersion": 1, "corpusSha256": DIGEST, "shard": shard,
-            "instrumentationPassed": instrument_ok, "invalidAttestations": invalid,
+            "catalogSource": catalog, "instrumentationPassed": instrument_ok, "invalidAttestations": invalid,
             "outcome": "PASS" if ok else "RED", "works": results,
             "scope": "INDEPENDENT_CATALOG_ONLY", "sourceBinding": "NOT_TESTED",
             "sqlite": "NOT_TESTED", "readerUI": "NOT_TESTED", "signed": "NO"}
@@ -114,8 +116,12 @@ def adb(*args, timeout=120, check=True):
                           stderr=subprocess.STDOUT, timeout=timeout, check=check)
 
 
-def shard_run(works, shard):
-    output = OUT / f"shard-{shard}"
+def result_root(catalog):
+    return OUT if catalog == "mangaupdates" else OUT.with_name(OUT.name + "-" + catalog)
+
+
+def shard_run(works, shard, catalog="mangaupdates"):
+    output = result_root(catalog) / f"shard-{shard}"
     output.mkdir(parents=True, exist_ok=True)
     if adb("shell", "getprop", "ro.kernel.qemu").stdout.strip() != "1":
         raise SystemExit("EMULATOR_REQUIRED")
@@ -136,6 +142,7 @@ def shard_run(works, shard):
         payload = base64.b64encode("\n".join("manhwa::" + title for title in selected).encode()).decode()
         result = adb("shell", "am", "instrument", "-w", "-r",
                      "-e", "mangaAllLiveCatalogOptIn", "true",
+                     "-e", "mangaAllLiveCatalogSource", catalog,
                      "-e", "worksBase64", payload, "-e", "shardIndex", "0",
                      "-e", "shardCount", "1", "-e", "class", TEST, RUNNER,
                      timeout=950, check=False)
@@ -149,7 +156,8 @@ def shard_run(works, shard):
         adb("shell", "am", "force-stop", APP, check=False)
         adb("shell", "pm", "clear", APP, check=False)
     diagnostic_pattern = (
-        r"MANGAALL_CATALOG_DIAGNOSTIC\|index=(\d+)\|offset=(\d+)\|MU_SEARCH_CONTRACT"
+        r"MANGAALL_CATALOG_DIAGNOSTIC\|index=(\d+)\|offset=(\d+)\|"
+        + ("MU_SEARCH_CONTRACT" if catalog == "mangaupdates" else "SHIKI_SEARCH_CONTRACT") +
         r"\|reason=(FIRST_GEOMETRY|PAGE_GEOMETRY|ROW_COUNT|INVALID_OR_REPEATED_ID|OTHER_FAILURE|OK)"
         r"(?:\|page=-?\d+\|size=-?\d+\|total=-?\d+\|rows=\d+|\|total=-?\d+\|rows=\d+)?"
     )
@@ -162,7 +170,7 @@ def shard_run(works, shard):
         diagnostics.append(line)
         print(line)
     (output / "pagination-diagnostics.txt").write_text("\n".join(diagnostics[:80]) + "\n")
-    report = evaluate(works, shard, log, instrument_ok)
+    report = evaluate(works, shard, log, instrument_ok, catalog)
     (output / "verdict.json").write_text(json.dumps(report, indent=2) + "\n")
     for row in report["works"]:
         print(f"MANGAALL_CATALOG|index={row['index']}|outcome={row['status']}")
@@ -170,11 +178,11 @@ def shard_run(works, shard):
     return report["outcome"] == "PASS"
 
 
-def aggregate():
+def aggregate(catalog="mangaupdates"):
     rows = []
     all_shards = True
     for shard in range(3):
-        path = OUT / f"shard-{shard}" / "verdict.json"
+        path = result_root(catalog) / f"shard-{shard}" / "verdict.json"
         if not path.is_file():
             all_shards = False
             continue
@@ -182,6 +190,7 @@ def aggregate():
         expected_indices = list(range(shard * 10 + 1, shard * 10 + 11))
         actual = report.get("works", [])
         if (report.get("schemaVersion") != 1 or report.get("corpusSha256") != DIGEST
+                or report.get("catalogSource") != catalog
                 or report.get("shard") != shard
                 or report.get("scope") != "INDEPENDENT_CATALOG_ONLY"
                 or [r.get("index") for r in actual] != expected_indices
@@ -203,6 +212,7 @@ def aggregate():
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--catalog", choices=("mangaupdates", "shikimori"), default="mangaupdates")
     parser.add_argument("--shard", type=int, choices=range(3))
     parser.add_argument("--aggregate", action="store_true")
     parser.add_argument("--check-lock", action="store_true")
@@ -213,7 +223,7 @@ def main():
     if args.check_lock:
         print("MANGAALL_CATALOG|cohort=LOCKED|works=30")
         return
-    raise SystemExit(0 if (aggregate() if args.aggregate else shard_run(works, args.shard)) else 1)
+    raise SystemExit(0 if (aggregate(args.catalog) if args.aggregate else shard_run(works, args.shard, args.catalog)) else 1)
 
 
 if __name__ == "__main__":
