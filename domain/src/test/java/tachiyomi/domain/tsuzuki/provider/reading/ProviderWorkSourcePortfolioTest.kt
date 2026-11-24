@@ -185,8 +185,18 @@ class ProviderWorkSourcePortfolioTest {
             .workVerification shouldBe ProviderWorkVerification.TITLE_UNVERIFIED
         assess(setOf("강 지훈"), "Ji-Hun Kang", item.copy(detailOutcome = ProviderWorkDetailOutcome.DETAIL_FAILED))
             .workVerification shouldBe ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED
-        assess(setOf("강 지훈"), "Ji-Hun Kang", item.copy(coverageOutcome = ProviderCoverageOutcome.EMPTY))
-            .canCollectProvisionalChapters shouldBe false
+        val emptyCoverage = item.copy(
+            coverageOutcome = ProviderCoverageOutcome.EMPTY,
+            coverageObservedCount = 0,
+            coverageMinMilli = null,
+            coverageMaxMilli = null,
+            coverageHasMore = false,
+        )
+        val emptyAssessment = assess(setOf("강 지훈"), "Ji-Hun Kang", emptyCoverage)
+        emptyAssessment.workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
+        emptyAssessment.canCollectProvisionalChapters shouldBe false
+        emptyAssessment.canPromoteChapters shouldBe false
+        emptyAssessment.canOpenReader shouldBe false
     }
 
     @Test
