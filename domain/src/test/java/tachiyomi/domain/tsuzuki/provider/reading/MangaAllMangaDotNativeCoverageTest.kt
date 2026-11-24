@@ -39,7 +39,8 @@ class MangaAllMangaDotNativeCoverageTest {
         observed?.coverageHasMore shouldBe true
         observed?.authors shouldBe candidate.authors
         // The source portfolio is intentionally not enabled by this helper.
-        ProviderWorkSourcePortfolio.trustedCandidates(provider, "en", listOf(requireNotNull(observed))) shouldBe emptyList()
+        val trusted = ProviderWorkSourcePortfolio.trustedCandidates(provider, "en", listOf(requireNotNull(observed)))
+        trusted shouldBe emptyList()
     }
 
     @Test
