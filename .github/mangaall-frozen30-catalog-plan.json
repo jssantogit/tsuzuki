@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "scope": "RESEARCH_EXPLICIT_OWNERS_NO_FALLBACK",
+  "corpusSha256": "19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1",
+  "works": [
+    {
+      "index": 1,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 2,
+      "catalog": "mangaupdates",
+      "searchTitle": "전지적 독자 시점"
+    },
+    {
+      "index": 3,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 4,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 5,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 6,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 7,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 8,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 9,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 10,
+      "catalog": "mangaupdates",
+      "searchTitle": "더 복서"
+    },
+    {
+      "index": 11,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 12,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 13,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 14,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 15,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 16,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 17,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 18,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 19,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 20,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 21,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 22,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 23,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 24,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 25,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 26,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 27,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 28,
+      "catalog": "mangaupdates",
+      "searchTitle": "그녀가 공작저로 가야 했던 사정"
+    },
+    {
+      "index": 29,
+      "catalog": "mangaupdates",
+      "searchTitle": "치즈인더트랩"
+    },
+    {
+      "index": 30,
+      "catalog": "shikimori"
+    }
+  ]
+}
