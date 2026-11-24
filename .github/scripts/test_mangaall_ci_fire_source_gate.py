@@ -139,4 +139,17 @@ budget.extend([
     "MANGAALL_CI_LOOKUP_BLOCKER|work=koe|source=MANGADOT|reason=PAGE_FOUR_PENDING",
 ])
 assert evaluate(budget)[1] == "MANGADOT_PAGE_FOUR_PENDING"
-print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=35|live=NOT_STARTED|unified=NOT_PROVEN")
+native = [
+    line.replace("attempts=0|outcome=NOT_USED", "attempts=1|outcome=SUCCEEDED")
+    .replace("http=200|transport=HTTP", "http=NONE|transport=BROWSER")
+    for line in good
+]
+native += [
+    f"MANGAALL_CI_NATIVE|work={work}|search=1|chapterReads=2|rejected=NO" for work in WORKS
+]
+assert evaluate(native)[0] is True
+assert evaluate(native[:-1])[1] == "NATIVE_TRANSPORT_NOT_EXCLUSIVE" or evaluate(native[:-1])[1] == "NATIVE_BROWSER_NOT_PROVEN"
+assert evaluate(native + native[-1:])[1] == "DUPLICATE_NATIVE_PROOF"
+assert evaluate([line.replace("chapterReads=2", "chapterReads=0") for line in native])[1] == "NATIVE_BROWSER_NOT_PROVEN"
+assert evaluate([line.replace("rejected=NO", "rejected=YES") for line in native])[1] == "NATIVE_BROWSER_NOT_PROVEN"
+print("MANGAALL_CI_FIRE_SOURCE_CONTRACT|result=PASS|checks=40|live=NOT_STARTED|unified=NOT_PROVEN")

@@ -59,6 +59,10 @@ LOOKUP = re.compile(
     r"MANGAALL_CI_CHAPTER\|work=(punpun|koe|akame)\|phase=LOOKUP"
     r"\|outcome=([A-Z_]+)\|pages=([0-8])\|candidates=([0-9]{1,2})"
 )
+NATIVE = re.compile(
+    r"MANGAALL_CI_NATIVE\|work=(punpun|koe|akame)"
+    r"\|search=([0-9]{1,2})\|chapterReads=([0-9]{1,2})\|rejected=(YES|NO)"
+)
 SUMMARY = (
     "MANGAALL_CI_FIRE_SOURCE|outcome=SOURCE_CHAPTERS_ACCEPTED"
     "|ready=3|works=3|canonical=NOT_TESTED|unified=NOT_PROVEN"
@@ -74,6 +78,7 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
     browser: dict[str, tuple[int, str]] = {}
     budget: set[str] = set()
     challenge403: dict[str, str] = {}
+    native: dict[str, tuple[int, int, str]] = {}
     records = [s.strip() for s in lines if s.strip()]
     for item in records:
         if match := SCOPE.fullmatch(item):
@@ -87,6 +92,11 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
             if work in proven:
                 return False, "DUPLICATE_FIRE_PROOF"
             proven[work] = tuple(data)
+        elif match := NATIVE.fullmatch(item):
+            work, searches, reads, rejected = match.groups()
+            if work in native:
+                return False, "DUPLICATE_NATIVE_PROOF"
+            native[work] = (int(searches), int(reads), rejected)
         elif match := API.fullmatch(item):
             work, *data = match.groups()
             if work in api:
@@ -183,8 +193,16 @@ def evaluate(lines: list[str]) -> tuple[bool, str]:
             not (http == "200" and transport == "HTTP") and transport != "BROWSER"
         ):
             return False, "SOURCE_JSON_NOT_PROVEN"
-        if transport == "BROWSER" and http not in ("403", "200", "OTHER"):
+        if transport == "BROWSER" and http == "NONE":
+            # Direct native transport has no observed HTTP status. Require
+            # actual native search and chapter reads, never a synthetic 200.
+            n = native.get(work)
+            if n is None or n[0] < 1 or n[1] < 1 or n[2] != "NO":
+                return False, "NATIVE_BROWSER_NOT_PROVEN"
+        elif transport == "BROWSER" and http not in ("403", "200", "OTHER"):
             return False, "SOURCE_TRANSPORT_INCONSISTENT"
+        if native and (http != "NONE" or transport != "BROWSER" or work not in native):
+            return False, "NATIVE_TRANSPORT_NOT_EXCLUSIVE"
         outcome, pages, count, chapter_one, _ = chapter[work]
         if outcome not in ("READY", "INCONCLUSIVE") or int(pages) < 1 or (
             int(count) < 1 or chapter_one != "YES"
