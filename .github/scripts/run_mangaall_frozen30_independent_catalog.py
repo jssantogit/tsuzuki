@@ -148,6 +148,20 @@ def shard_run(works, shard):
     finally:
         adb("shell", "am", "force-stop", APP, check=False)
         adb("shell", "pm", "clear", APP, check=False)
+    diagnostic_pattern = (
+        r"MANGAALL_CATALOG_DIAGNOSTIC\|index=(\d+)\|offset=(\d+)\|MU_SEARCH_CONTRACT"
+        r"\|reason=(FIRST_GEOMETRY|PAGE_GEOMETRY|ROW_COUNT|INVALID_OR_REPEATED_ID|OTHER_FAILURE|OK)"
+        r"(?:\|page=-?\d+\|size=-?\d+\|total=-?\d+\|rows=\d+|\|total=-?\d+\|rows=\d+)?"
+    )
+    diagnostics = []
+    for match in re.finditer(diagnostic_pattern, log):
+        index = int(match.group(1))
+        if not 0 <= index < 10:
+            continue
+        line = match.group(0).replace(f"index={index}|", f"index={shard * 10 + index + 1}|", 1)
+        diagnostics.append(line)
+        print(line)
+    (output / "pagination-diagnostics.txt").write_text("\n".join(diagnostics[:80]) + "\n")
     report = evaluate(works, shard, log, instrument_ok)
     (output / "verdict.json").write_text(json.dumps(report, indent=2) + "\n")
     for row in report["works"]:
