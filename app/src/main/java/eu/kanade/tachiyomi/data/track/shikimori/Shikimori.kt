@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.data.track.userOwnedCredentialSessionActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.serialization.json.Json
+import tachiyomi.domain.tsuzuki.integration.CatalogCreatorAliasEvidence
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.injectLazy
 import tachiyomi.domain.track.model.Track as DomainTrack
@@ -250,8 +251,7 @@ interface ShikimoriIntegrationApi {
 
     suspend fun getMangaDetailsPublic(id: Int): TrackSearch?
 
-    suspend fun getVerifiedCreatorAliases(id: Int): List<tachiyomi.domain.tsuzuki.integration.CatalogCreatorAliasEvidence> =
-        emptyList()
+    suspend fun getVerifiedCreatorAliases(id: Int): List<CatalogCreatorAliasEvidence> = emptyList()
 
     suspend fun lookupGenres(): List<Pair<String, String>> = emptyList()
 
