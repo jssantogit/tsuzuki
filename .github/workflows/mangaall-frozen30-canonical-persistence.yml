@@ -1,0 +1,174 @@
+name: MangaALL — frozen 30 canonical persistence and restart (OPT-IN)
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/workflows/mangaall-frozen30-canonical-persistence.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-frozen30-canonical-persistence
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Validate locked cohort and adversarial restart verdicts without live traffic
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-frozen30-canonical-persistence.yml'
+          python3 -m py_compile .github/scripts/run_mangaall_frozen30_canonical_persistence.py
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
+
+  build-once:
+    needs: preflight
+    if: contains(github.event.head_commit.message, 'RUN_FROZEN30_CANONICAL_LIVE')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: future-code11-source
+          persist-credentials: false
+      - name: Stage exact immutable lock
+        run: |
+          mkdir -p app/src/androidTest/assets
+          cp .github/mangaall-dual-source-30-cohort-lock.json app/src/androidTest/assets/
+      - name: Stage pinned, NONSHIPPING code11 ZIP and exact lock into test assets
+        run: |
+          set -euo pipefail
+          test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
+          python3 .github/scripts/mangaall_code11_dual_source_unsigned.py \
+            --source future-code11-source --manhwa-only \
+            --output app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          test -s app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          ! git ls-files --error-unmatch app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          python3 - <<'PY'
+          import json
+          import zipfile
+          from pathlib import Path
+          package = Path("app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip")
+          with zipfile.ZipFile(package) as zf:
+              manifest = json.loads(zf.read("manifest.json"))
+              dot = zf.read("modules/sources/mangadot/modules/mangadot.js").decode()
+              dex = zf.read("modules/sources/mangadex/modules/mangadex.js").decode()
+          assert manifest["id"] == "app.tsuzuki.mangaall"
+          assert manifest["version"]["code"] == 11
+          assert "mangafire" not in str(manifest).lower()
+          assert manifest["name"] == "MangaAll — frozen 30 manhwa source research"
+          assert 'originalLanguage !== "ko"' in dex
+          assert '"The Boxer":"Boxer"' in dot
+          assert '"The Horizon":"Horizon"' in dot
+          assert '"The Breaker":"Breaker"' in dot
+          assert '["Weak Hero","The World After the Fall","Cheese in the Trap"]' in dot
+          assert 'pageNumber(input?.cursor, title)' in dot
+          assert not any("mangafire" in member.lower() for member in manifest["permissions"]["network"]["origins"])
+          print("MANGAALL_FROZEN30_ANDROID|nativeSource=MANHWA_ONLY_KO|scopedQueries=VERIFIED|canonical=NOT_TESTED")
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Build exact shared unsigned Android APK pair
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          for attempt in 1 2 3; do
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+              cat "$log"
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log" || [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: frozen30-canonical-unsigned-apks
+          path: app/build/outputs/apk/
+          if-no-files-found: error
+          retention-days: 1
+
+  canonical-restart:
+    needs: build-once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: frozen30-canonical-unsigned-apks
+          path: app/build/outputs/apk/
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Real canonical collector then force-stop and verify SQLite after process restart
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --shard ${{ matrix.shard }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: frozen30-canonical-shard-${{ matrix.shard }}
+          path: .github/results/mangaall-frozen30-canonical-persistence/shard-${{ matrix.shard }}/
+          if-no-files-found: ignore
+          retention-days: 2
+
+  aggregate:
+    if: always() && contains(github.event.head_commit.message, 'RUN_FROZEN30_CANONICAL_LIVE')
+    needs: [build-once, canonical-restart]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          pattern: frozen30-canonical-shard-*
+          path: .github/results/mangaall-frozen30-canonical-persistence
+      - name: Require exact 30 collected and restored works
+        run: |
+          set -euo pipefail
+          root=.github/results/mangaall-frozen30-canonical-persistence
+          for shard in 0 1 2; do
+            if [[ -d "$root/frozen30-canonical-shard-$shard" ]]; then
+              mv "$root/frozen30-canonical-shard-$shard" "$root/shard-$shard"
+            fi
+          done
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --aggregate
+          test '${{ needs.build-once.result }}' = 'success'
+          test '${{ needs.canonical-restart.result }}' = 'success'
