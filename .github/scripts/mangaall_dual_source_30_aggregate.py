@@ -16,6 +16,8 @@ ACK = "I_ACCEPT_MANGAALL_TWO_SOURCE_30_LIVE"
 ORIGIN_SHA = "195502f981bd776a68feebde3efc6d20f55cca65"
 SOURCE_IDS = {"mangadex", "mangadot"}
 KIND = "MANGAALL_TWO_SOURCE_UNSIGNED_CI_PREVIEW"
+COHORT = "MANHWA_30_FIXED_20261123"
+COHORT_LOCK = Path(".github/mangaall-dual-source-30-cohort-lock.json")
 SINGLE = 10
 VALID_AUDITS = {
     "COMPLETE", "COMPLETE_EMPTY", "SOURCE_ERROR", "INVALID_PAGE_CONTRACT",
@@ -89,6 +91,13 @@ def verify_works(request):
         for title in works
     ) or len({title_id(title) for title in works}) != 30:
         raise ValueError("INVALID_30_WORK_VECTOR")
+    lock = json.loads(COHORT_LOCK.read_text(encoding="utf-8"))
+    if not isinstance(lock, dict) or set(lock) != {
+        "cohort", "format", "freezeUntil", "works"
+    } or lock.get("cohort") != COHORT or lock.get("format") != "manhwa" or (
+        lock.get("freezeUntil") != "THIRTY_OF_THIRTY_VERIFIED_AND_EXPLICITLY_APPROVED"
+    ) or works != lock.get("works"):
+        raise ValueError("MANHWA_COHORT_LOCK_MISMATCH")
     return works
 
 
@@ -101,6 +110,8 @@ def check_shard(payload, index, works):
     require(isinstance(payload, dict) and
             payload.get("schema") == 1 and payload.get("kind") == KIND,
             "PROVENANCE_MISSING")
+    require(payload.get("cohort") == COHORT and
+            payload.get("format") == "manhwa", "MANHWA_COHORT_PROVENANCE_MISSING")
     require(payload.get("hostRepository") == "jssantogit/tsuzuki" and
             payload.get("sourceRepositoryCommit") == ORIGIN_SHA,
             "SOURCE_COMMIT_MISMATCH")
@@ -133,6 +144,7 @@ def check_shard(payload, index, works):
     for row, position in zip(rows, expected):
         require(row.get("id") == title_id(works[position]) and
                 row.get("title") == works[position], "WORK_IDENTITY_MISMATCH")
+        require(row.get("format") == "manhwa", "MANHWA_SOURCE_FORMAT_NOT_RETAINED")
         require(row.get("canonicalBinding") == "NOT_AUTHORIZED" and
                 row.get("readerPixels") == "NOT_TESTED",
                 "UNAUTHORIZED_CANONICAL_PROMOTION")
@@ -213,6 +225,8 @@ def aggregate(works, payloads):
     records.sort(key=lambda row: row["position"])
     output = {
         "schema": 1, "mode": "MANGAALL_DUAL_SOURCE_30_CI",
+        "cohort": COHORT, "format": "manhwa",
+        "cohortLockedUntil": "THIRTY_OF_THIRTY_VERIFIED_AND_EXPLICITLY_APPROVED",
         "sourceEvidence": "REAL_PUBLIC_API_ON_GITHUB_ACTIONS",
         "sources": ["MANGADEX", "MANGADOT"],
         "mangaFire": "EXCLUDED_NOT_TESTED",
@@ -342,6 +356,7 @@ def aggregate(works, payloads):
             issues.append("NO_SOURCE_CHAPTER_ONE_ATTESTED")
         output["works"].append({
             "position": row["position"] + 1, "title": row["title"],
+            "format": "manhwa", "cohort": COHORT,
             "lookupComplete": bool(row.get("lookupComplete")),
             "lookupState": row.get("lookup"),
             "lookupError": row.get("lookupError"),
@@ -374,6 +389,7 @@ def fixture(works):
         for i in range(shard, 30, 3):
             rows.append({
                 "position": i, "id": title_id(works[i]), "title": works[i],
+                "format": "manhwa",
                 "lookupComplete": True, "lookupPages": 1, "candidateCount": 1,
                 "candidates": [{"source": "mangadex", "workId": "mangadex:valid"}],
                 "granularChapterPagination": "UNSIGNED_CI_EPHEMERAL_CACHE_48K_200",
@@ -391,7 +407,8 @@ def fixture(works):
                 },
             })
         payloads.append({
-            "schema": 1, "kind": KIND, "hostRepository": "jssantogit/tsuzuki",
+            "schema": 1, "kind": KIND, "cohort": COHORT, "format": "manhwa",
+            "hostRepository": "jssantogit/tsuzuki",
             "sourceRepositoryCommit": ORIGIN_SHA, "originalCode10SignedPackageChanged": False,
             "adapterRouterModification": "SOURCE_IDS_ONLY_IN_MEMORY",
             "chapterAdaptation": "MANGADOT_IN_MEMORY_48K_200_NO_RELEASE",
