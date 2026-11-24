@@ -1099,6 +1099,7 @@ class CollectProviderReadingEvidence private constructor(
      * result provisional. The ordinary injected app collector stays closed.
      */
     private suspend fun observeNativeMangaDotPreviews(
+        canonicalTitleId: String,
         target: ReadingTarget,
         queryTitle: String,
         canonicalCreators: Set<String>?,
@@ -1127,21 +1128,44 @@ class CollectProviderReadingEvidence private constructor(
             ) {
                 continue
             }
-            val page = when (
-                val result = gateway.chapters(
-                    descriptor.id,
-                    ProviderReadingChaptersRequest(assessment.ref),
-                )
-            ) {
-                is ProviderCallResult.Success -> result.value
-                is ProviderCallResult.Failure -> continue
+            // A native snapshot has exactly one generation per provider.
+            // Starting a new preview destroys a valid saved continuation,
+            // even if the same work is requested. Validate the saved page
+            // first, keeping chapter collection on that exact generation.
+            val saved = provisionalCursorRepository?.get(
+                canonicalTitleId,
+                assessment.ref,
+                descriptor.version.code,
+                target.registration.configurationFingerprint,
+            )
+            val initial = gateway.chapters(
+                descriptor.id,
+                ProviderReadingChaptersRequest(assessment.ref, cursor = saved?.nextCursor),
+            )
+            val restart = saved != null && initial is ProviderCallResult.Failure &&
+                initial.error.code == ProviderErrorCode.SOURCE_READ_ERROR &&
+                initial.error.httpStatus == null && initial.error.sourceFailureCode == null
+            val result = if (restart) {
+                // Exact same author-corroborated work; the old snapshot may
+                // have expired or been replaced. Only one fresh start, not
+                // an arbitrary retry or an authoritative inventory.
+                gateway.chapters(descriptor.id, ProviderReadingChaptersRequest(assessment.ref))
+            } else {
+                initial
             }
-            MangaAllMangaDotNativeCoverage.fromFirstPage(
+            val page = (result as? ProviderCallResult.Success)?.value ?: continue
+            val preview = MangaAllMangaDotNativeCoverage.fromObservedPage(
                 descriptor.version.code,
                 assessment.ref,
                 candidate,
                 page,
-            )?.let(previews::add)
+            ) ?: continue
+            if (restart && saved != null) {
+                // Clearing an unusable operational hint never advances past
+                // unwritten evidence. CAS protects a concurrently newer cursor.
+                provisionalCursorRepository?.discard(saved, clock())
+            }
+            previews += preview
         }
         return previews
     }
@@ -1162,7 +1186,7 @@ class CollectProviderReadingEvidence private constructor(
             providerId = target.registration.descriptor.id,
             facetId = target.facetId,
             candidates = matches,
-        ) + observeNativeMangaDotPreviews(target, queryTitle, canonicalCreators, matches)
+        ) + observeNativeMangaDotPreviews(canonicalTitleId, target, queryTitle, canonicalCreators, matches)
         if (trusted.isEmpty()) return emptyList()
         val assessed = ProviderWorkSourcePortfolio.assess(
             providerId = target.registration.descriptor.id,

@@ -4,7 +4,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Projects a genuinely observed first chapter page from the experimental
+ * Projects a genuinely observed chapter page from the experimental
  * code11 MangaDot native snapshot into bounded work-level coverage evidence.
  *
  * The caller MUST supply the result of the exact [binding] chapter request,
@@ -13,6 +13,14 @@ import kotlin.math.roundToInt
  */
 object MangaAllMangaDotNativeCoverage {
     fun fromFirstPage(
+        artifactVersionCode: Long,
+        binding: ProviderBindingRef,
+        candidate: ProviderWorkCandidate,
+        page: ProviderPage<ProviderChapterObservation>,
+    ): ProviderWorkCandidate? = fromObservedPage(artifactVersionCode, binding, candidate, page)
+
+    /** A resumed page is equally valid work-level numeric coverage, not a total. */
+    fun fromObservedPage(
         artifactVersionCode: Long,
         binding: ProviderBindingRef,
         candidate: ProviderWorkCandidate,
