@@ -94,8 +94,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val instrument = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
         assertEquals("I_ACCEPT_FROZEN30_CANONICAL_RESEARCH", args.getString("mangaAllCanonicalOptIn"))
-        val catalogName = args.getString("mangaAllCanonicalCatalog") ?: "mangaupdates"
-        require(catalogName in setOf("mangaupdates", "shikimori"))
+        val catalogScope = args.getString("mangaAllCanonicalCatalog") ?: "mangaupdates"
+        require(catalogScope in setOf("mangaupdates", "shikimori", "explicit_plan"))
         val phase = requireNotNull(args.getString("mangaAllCanonicalPhase"))
         require(phase in setOf("COLLECT", "RESTORE"))
         val shard = requireNotNull(args.getString("mangaAllFrozen30Shard")).toInt()
@@ -115,6 +115,29 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         assertEquals(30, works.size)
         assertEquals(30, works.toSet().size)
         assertEquals(CORPUS_SHA, hash(JsonArray(works.map { JsonPrimitive(it) }).toString()))
+        val plan = if (catalogScope == "explicit_plan") {
+            val doc = instrument.context.assets.open("mangaall-frozen30-catalog-plan.json")
+                .bufferedReader().use { Json.parseToJsonElement(it.readText()).jsonObject }
+            assertEquals(CORPUS_SHA, doc.getValue("corpusSha256").jsonPrimitive.content)
+            assertEquals("RESEARCH_EXPLICIT_OWNERS_NO_FALLBACK", doc.getValue("scope").jsonPrimitive.content)
+            val rows = doc.getValue("works").jsonArray.map { it.jsonObject }
+            assertEquals((1..30).toList(), rows.map { it.getValue("index").jsonPrimitive.content.toInt() })
+            rows
+        } else {
+            emptyList()
+        }
+
+        fun ownerScope(index: Int): String = if (catalogScope == "explicit_plan") {
+            plan[index - 1].getValue("catalog").jsonPrimitive.content.also {
+                require(it in setOf("mangaupdates", "shikimori"))
+            }
+        } else {
+            catalogScope
+        }
+
+        fun nativeTitle(index: Int): String? = plan.getOrNull(index - 1)
+            ?.get("searchTitle")?.jsonPrimitive?.content
+
         val bytes = instrument.context.assets.open("mangaall-dual-source-code11-unsigned-research.zip")
             .use { it.readBytes() }
         val parsed = ProviderPackageParser().parse(bytes)
@@ -173,21 +196,22 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val associations = ProviderWorkSourceAssociationRepositoryImpl(database)
         val cursors = ProviderProvisionalCursorRepositoryImpl(database)
         val selections = MangaAllSourceSelectionRepositoryImpl(database)
-        val catalog: SearchProvider = when (catalogName) {
-            "mangaupdates" -> MangaUpdatesIntegrationProvider(app.graph.trackerManager)
-            "shikimori" -> ShikimoriIntegrationProvider(app.graph.trackerManager, ShikimoriRequestGate())
-            else -> error("Unknown independent catalog scope")
+        val catalogs = mapOf<String, SearchProvider>(
+            "mangaupdates" to MangaUpdatesIntegrationProvider(app.graph.trackerManager),
+            "shikimori" to ShikimoriIntegrationProvider(app.graph.trackerManager, ShikimoriRequestGate()),
+        )
+        fun catalogRegistry(names: Set<String>): IntegrationRegistry {
+            val selectedCatalogs = names.map(catalogs::getValue)
+            return object : IntegrationRegistry {
+                override fun searchProviders(): List<SearchProvider> = selectedCatalogs
+                override fun metadataProviders(): List<MetadataProvider> = selectedCatalogs.map { it as MetadataProvider }
+                override fun discoveryProviders(): List<DiscoveryProvider> = emptyList()
+                override fun chapterEvidenceProviders(): List<ChapterEvidenceProvider> = emptyList()
+                override fun ratingsProviders(): List<RatingsProvider> = emptyList()
+                override fun trackingProviders(): List<TrackingProvider> = emptyList()
+            }
         }
-        val metadataCatalog = catalog as MetadataProvider
-        val catalogRegistry = object : IntegrationRegistry {
-            override fun searchProviders(): List<SearchProvider> = listOf(catalog)
-            override fun metadataProviders(): List<MetadataProvider> = listOf(metadataCatalog)
-            override fun discoveryProviders(): List<DiscoveryProvider> = emptyList()
-            override fun chapterEvidenceProviders(): List<ChapterEvidenceProvider> = emptyList()
-            override fun ratingsProviders(): List<RatingsProvider> = emptyList()
-            override fun trackingProviders(): List<TrackingProvider> = emptyList()
-        }
-        val bootstrap = ResolveMangaAllIndependentCatalogIdentity(catalogRegistry)
+        val metadataRegistry = catalogRegistry(catalogs.keys)
         val collector = CollectProviderReadingEvidence(
             canonicalTitleRepository = titles,
             providerRegistry = registry,
@@ -196,11 +220,13 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
             clock = System::currentTimeMillis,
             canonicalMetadataSnapshotRepository = metadata,
+            integrationRegistry = metadataRegistry,
             workSourceAssociationRepository = associations,
             provisionalCursorRepository = cursors,
+            nativeMangaDotPortfolioResearch = catalogScope == "explicit_plan",
         )
         val refresh = RefreshChapterEvidence(
-            registry = catalogRegistry,
+            registry = metadataRegistry,
             reconcileChapterEvidence = ReconcileChapterEvidence(ParseCanonicalChapterLabel(), chapters, evidence),
             providerReadingEvidence = collector,
         )
@@ -218,9 +244,9 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             ResolveMangaAllSelectedReadingOption(selections),
         )
         val select = SelectMangaAllSource(associations, selections)
-        val receipts = File(context.filesDir, "mangaall-frozen30-canonical-receipts-$catalogName").apply { mkdirs() }
+        val receipts = File(context.filesDir, "mangaall-frozen30-canonical-receipts-$catalogScope").apply { mkdirs() }
 
-        suspend fun fingerprint(titleId: String): String? {
+        suspend fun fingerprint(titleId: String, catalogName: String): String? {
             val title = titles.getById(titleId) ?: return null
             val snapshot = metadata.get(titleId) ?: return null
             val identities = titles.getExternalIdentities(titleId)
@@ -285,7 +311,13 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
 
         suspend fun collect(index: Int, titleId: String): String {
             if (titles.getById(titleId) != null) return "DIRTY_DATABASE"
-            val identity = bootstrap.execute(works[index - 1], CatalogItemFormat.MANHWA)
+            val catalogName = ownerScope(index)
+            val bootstrap = ResolveMangaAllIndependentCatalogIdentity(catalogRegistry(setOf(catalogName)))
+            val identity = bootstrap.execute(
+                works[index - 1],
+                CatalogItemFormat.MANHWA,
+                searchTitle = nativeTitle(index),
+            )
             if (identity.status != MangaAllCatalogIdentityStatus.RESOLVED) return identity.status.name
             val owner = requireNotNull(identity.identity)
             val provenance = identity.toCanonicalReadingMetadata()
@@ -297,7 +329,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             }
             val now = System.currentTimeMillis()
             val canonical = titles.getOrCreateByExternalIdentity(
-                CanonicalTitle(titleId, owner.title, CanonicalIdentityState.RESOLVED, now, now),
+                CanonicalTitle(titleId, works[index - 1], CanonicalIdentityState.RESOLVED, now, now),
                 ExternalIdentity(titleId, owner.provider, owner.providerId, verified = true, createdAt = now),
             )
             if (canonical.id != titleId) return "DUPLICATE_CATALOG_OWNER"
@@ -320,7 +352,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             if (select.select(titleId, option.bindingRef(), now) != MangaAllSourceSelectionResult.SELECTED) {
                 return "SOURCE_SELECTION_FAILED"
             }
-            val receipt = fingerprint(titleId) ?: return "SQLITE_INVARIANT_FAILED"
+            val receipt = fingerprint(titleId, catalogName) ?: return "SQLITE_INVARIANT_FAILED"
             File(receipts, "$index.sha256").writeText(receipt)
             return "COLLECTED"
         }
@@ -341,7 +373,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     val receipt = File(receipts, "$index.sha256")
                     if (!receipt.isFile) {
                         "NO_COLLECTED_RECEIPT"
-                    } else if (fingerprint(titleId) != receipt.readText()) {
+                    } else if (fingerprint(titleId, ownerScope(index)) != receipt.readText()) {
                         "SQLITE_RESTORE_MISMATCH"
                     } else {
                         "RESTORED"
