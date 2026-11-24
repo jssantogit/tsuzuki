@@ -53,6 +53,22 @@ const assigned = shardWorks(works, shard, count);
 assert.equal(assigned.length, 10);
 assert.deepEqual(assigned.map(x => x.id),
   works.filter((_, i) => i % 3 === shard).map(x => x.id));
+// Independent, cross-referenced names for the SAME three locked Korean works.
+// These are extra read-only lookup terms, not replaced works, source HIDs,
+// automatic binding rules, chapter fabrication, or an expanded shipping API.
+const verifiedAliasQueries = Object.freeze({
+  'SSS-Class Revival Hunter': Object.freeze(['SSS-Class Suicide Hunter']),
+  'Return of the Blossoming Blade': Object.freeze(['Return of the Mount Hua Sect']),
+  "The Reason Why Raeliana Ended Up at the Duke's Mansion":
+    Object.freeze(["Why Raeliana Ended Up at the Duke's Mansion"]),
+});
+assert.ok(Object.entries(verifiedAliasQueries).every(([main, aliases]) =>
+  cohort.works.includes(main) && aliases.length >= 1 && aliases.length <= 2 &&
+  aliases.every(alias => typeof alias === 'string' && alias.length <= 180 &&
+    alias !== main && !cohort.works.includes(alias))));
+function workQueryNames(work) {
+  return [...work.names, ...(verifiedAliasQueries[work.names[0]] || [])];
+}
 
 const routerFile = path.join(sourceRoot, 'modules/router.js');
 const original = readFileSync(routerFile, 'utf8');
@@ -403,6 +419,9 @@ async function offlineContracts() {
   // works even when the translated English title is identical.
   assert.ok(experimentalDexCode.includes('originalLanguage !== "ko"'));
   assert.ok(!originalDexSource.includes('originalLanguage !== "ko"'));
+  assert.deepEqual(workQueryNames({names:['SSS-Class Revival Hunter']}),
+    ['SSS-Class Revival Hunter', 'SSS-Class Suicide Hunter']);
+  assert.deepEqual(workQueryNames({names:['Wind Breaker']}), ['Wind Breaker']);
   const called = [];
   const candidate = (source, id) => ({
     externalWorkId: source + ':' + id, title: 'Akame ga Kill!',
@@ -601,7 +620,8 @@ for (const [index, work] of assigned.entries()) {
   const beforeSourceFailure = sourceLookupFailures.length;
   let probe, failure = null;
   try {
-    probe = await probeJourney(dualReading, work, grants, {
+    probe = await probeJourney(dualReading,
+      {...work, names: workQueryNames(work)}, grants, {
       lookupContract: 'v1', lookupPageLimit: 32, chapterPageLimit: 8,
       includeCandidates: true, includeCandidateCoverage: true,
       candidatePreviewLimit: 3, candidateChapterPageLimit: 2,
@@ -642,7 +662,8 @@ for (const [index, work] of assigned.entries()) {
   const verdict = failure ? 'INTERNAL_ERROR' : journeyVerdict(probe);
   const record = {
     id: work.id, title: work.names[0], position: works.findIndex(x => x.id === work.id),
-    format: 'manhwa', verdict, failure, lookup: probe.lookup,
+    format: 'manhwa', queryTitleCount: workQueryNames(work).length,
+    verdict, failure, lookup: probe.lookup,
     // Preserve only the journey's closed error category. Never log raw upstream
     // messages, cookies, URLs, response bodies or an unverified failure claim.
     lookupError: typeof probe.lookupError === 'string' &&
