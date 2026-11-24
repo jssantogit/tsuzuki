@@ -82,7 +82,9 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 val result = catalog.search(query)
                 val error = result.exceptionOrNull()
                 val contract = error?.message?.let {
-                    Regex("""MU_SEARCH_CONTRACT\|reason=(FIRST_GEOMETRY|PAGE_GEOMETRY|ROW_COUNT|INVALID_OR_REPEATED_ID)\|page=-?\d+\|size=-?\d+\|total=-?\d+\|rows=\d+""")
+                    Regex(
+                        """MU_SEARCH_CONTRACT\|reason=(FIRST_GEOMETRY|PAGE_GEOMETRY|ROW_COUNT|INVALID_OR_REPEATED_ID)\|page=-?\d+\|size=-?\d+\|total=-?\d+\|rows=\d+""",
+                    )
                         .matchEntire(it)?.value
                 }
                 val facts = if (error != null) {
@@ -94,7 +96,10 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 instrument.sendStatus(
                     1,
                     Bundle().apply {
-                        putString("stream", "MANGAALL_CATALOG_DIAGNOSTIC|index=$activeIndex|offset=${query.offset}|$facts")
+                        putString(
+                            "stream",
+                            "MANGAALL_CATALOG_DIAGNOSTIC|index=$activeIndex|offset=${query.offset}|$facts",
+                        )
                     },
                 )
                 return result
