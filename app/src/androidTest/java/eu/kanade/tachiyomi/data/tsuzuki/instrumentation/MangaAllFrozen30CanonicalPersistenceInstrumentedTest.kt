@@ -116,6 +116,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         require(phase in setOf("COLLECT", "RESTORE"))
         val shard = requireNotNull(args.getString("mangaAllFrozen30Shard")).toInt()
         require(shard in 0..2)
+        val pendingMode = args.getString("mangaAllCanonicalPending14") ?: "0"
+        require(pendingMode in setOf("0", "1"))
+        require(pendingMode == "0" || catalogScope == "explicit_plan")
+        val pending14 = setOf(5, 6, 8, 11, 15, 16, 19, 20, 21, 23, 25, 27, 28, 29)
+        val indices = (shard * 10 + 1..shard * 10 + 10).filter { pendingMode == "0" || it in pending14 }
         val context = instrument.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)
         assertTrue(
@@ -567,7 +572,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             },
         )
         var passed = 0
-        for (index in (shard * 10 + 1)..(shard * 10 + 10)) {
+        for (index in indices) {
             val titleId = "mangaall-frozen30-canonical-$index"
             acquisitionFacts.clear()
             val result = try {
@@ -640,7 +645,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             Bundle().apply {
                 putString(
                     "stream",
-                    "MANGAALL_CANONICAL_PERSISTENCE|phase=$phase|shard=$shard|passed=$passed|expected=10",
+                    "MANGAALL_CANONICAL_PERSISTENCE|phase=$phase|shard=$shard|passed=$passed|expected=${indices.size}",
                 )
             },
         )
