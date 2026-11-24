@@ -18,6 +18,14 @@ assert.equal(parse({...series, "@id":url+"#../43"}), null);
 assert.equal(parse({...series, url:url+"0", "@id":url+"#comicseries"}), null);
 assert.equal(parse({...series, "@id":"#comicseries"}), null);
 assert.equal(parse({...series, name:"Unrelated"}), null);
+assert.deepEqual(parse({...series, name:"Original Work", alternateName:[series.name]}), ["Example Creator"]);
+assert.equal(parse({...series, name:"Unrelated", alternateName:["Other"]}), null);
+assert.equal(parse({...series, name:"Original", alternateName:series.name, url:url+"0"}), null);
+assert.deepEqual(parse({...series, "@type":["CreativeWork","ComicSeries"],
+  author:{"@type":["Person"],name:"Kim Yong-Hwan",alternateName:"김용환"}}),
+  ["Kim Yong-Hwan","김용환"]);
+assert.equal(parse({...series,author:{"@type":["Person","Organization"],name:"Company"}}), null);
+assert.equal(parse({...series,author:{...series.author,alternateName:"x".repeat(129)}}), null);
 assert.equal(parse({...series, "@type":"WebPage"}), null);
 assert.equal(parse({...series, author:{ "@type":"Organization", name:"Publisher"}}), null);
 assert.equal(parse({...series, author: { "@type":"Person", name:" "}}), null);
@@ -51,4 +59,11 @@ assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",tit
 const wrongWork = {http:host.http, dom:{selectText:async()=>raw({...series, url:url+"0"})}};
 assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",title:series.name}, wrongWork),
   {detailOutcome:"IDENTITY_MISMATCH"});
+const aliasHost = {http:host.http,dom:{selectText:async()=>raw({...series,name:"Native Title",
+  alternateName:[series.name],author:{...series.author,alternateName:"Original Creator"}})}};
+assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",title:series.name},aliasHost),
+  {detailOutcome:"VERIFIED_WITH_ALIASES",authors:["Example Creator","Original Creator"],aliases:["Native Title"]});
+const noAuthor = {http:host.http,dom:{selectText:async()=>raw({...series,author:null})}};
+assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",title:series.name},noAuthor),
+  {detailOutcome:"VERIFIED_NO_ALIASES",authors:[]});
 console.log("MANGAALL_DOT_CREATOR|strictParser=PASS|opaqueHandle=PASS|canonical=NOT_TESTED");

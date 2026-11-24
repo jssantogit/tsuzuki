@@ -12,7 +12,16 @@ const sameDocumentId = (value, url) => {
   return parts.length === 2 && exactUrl(parts[0], url) && /^[A-Za-z0-9_-]{1,64}$/.test(parts[1]);
 };
 
-export function extractMangaDotCreators(raw, id, title) {
+const namedType = (value, type) => value === type ||
+  (Array.isArray(value) && value.length <= 8 && value.includes(type));
+function declaredNames(value, maxCount, maxLength) {
+  const list = value == null ? [] : Array.isArray(value) ? value : [value];
+  if (list.length > maxCount || list.some(name => typeof name !== "string" ||
+      !name.trim() || name.trim().length > maxLength || /[\u0000-\u001f]/.test(name))) return null;
+  return [...new Set(list.map(name => name.trim()))];
+}
+
+function extractMangaDotWork(raw, id, title) {
   if (!validId(id) || !exactName(title) || typeof raw !== "string" ||
       raw.length > MAX_JSON_CHARS) return null;
   let doc;
@@ -24,9 +33,10 @@ export function extractMangaDotCreators(raw, id, title) {
     const [node, depth] = stack.pop();
     if (node === null || typeof node !== "object") continue;
     if (++visited > 2048 || depth > 12) return null;
-    if (!Array.isArray(node) && node["@type"] === "ComicSeries") {
+    if (!Array.isArray(node) && namedType(node["@type"], "ComicSeries")) {
       // A competing ComicSeries object about the same title/HID is ambiguous.
-      if (exactName(node.name) === exactName(title) ||
+      const names = declaredNames(node.alternateName, 32, 1024) || [];
+      if ([node.name, ...names].some(name => exactName(name) === exactName(title)) ||
           exactUrl(node.url, url) || sameDocumentId(node["@id"], url)) matches.push(node);
     }
     for (const value of Object.values(node)) {
@@ -35,23 +45,37 @@ export function extractMangaDotCreators(raw, id, title) {
   }
   if (matches.length !== 1) return null;
   const work = matches[0];
-  if (exactName(work.name) !== exactName(title) ||
+  const primary = declaredNames(work.name, 1, 1024);
+  const alternate = declaredNames(work.alternateName, 32, 1024);
+  if (!primary || primary.length !== 1 || !alternate ||
+      ![...primary, ...alternate].some(name => exactName(name) === exactName(title)) ||
       !(exactUrl(work.url, url) || sameDocumentId(work["@id"], url))) return null;
+  const aliases = [...primary, ...alternate].filter(name => exactName(name) !== exactName(title));
+  if (aliases.length > 32) return null;
   // Any supplied explicit URL must agree, not merely one of the two.
   if (work.url != null && !exactUrl(work.url, url)) return null;
   // JSON-LD entity identifiers may have a fragment on the exact work page.
   // Never accept a different origin/path, query, or unrelated object.
   if (work["@id"] != null && !sameDocumentId(work["@id"], url)) return null;
-  const authors = Array.isArray(work.author) ? work.author : [work.author];
-  if (authors.length === 0 || authors.length > 8) return null;
+  const authors = work.author == null ? [] : Array.isArray(work.author) ? work.author : [work.author];
+  if (authors.length > 8) return null;
   const names = [];
   for (const person of authors) {
-    if (person?.["@type"] !== "Person" || typeof person.name !== "string") return null;
-    const name = person.name.trim();
-    if (!name || name.length > 128 || /[\u0000-\u001f]/.test(name)) return null;
-    if (!names.some(old => exactName(old) === exactName(name))) names.push(name);
+    if (!namedType(person?.["@type"], "Person") || namedType(person?.["@type"], "Organization")) return null;
+    const primaryNames = declaredNames(person.name, 1, 128);
+    const alternateNames = declaredNames(person.alternateName, 8, 128);
+    if (!primaryNames || primaryNames.length !== 1 || !alternateNames) return null;
+    for (const name of [...primaryNames, ...alternateNames]) {
+      if (!names.some(old => exactName(old) === exactName(name))) names.push(name);
+    }
+    if (names.length > 8) return null;
   }
-  return names.length ? names : null;
+  return {authors:names, aliases};
+}
+
+export function extractMangaDotCreators(raw, id, title) {
+  const record = extractMangaDotWork(raw, id, title);
+  return record?.authors.length ? record.authors : null;
 }
 
 export async function observeMangaDotCreators(candidate, host = globalThis.tsuzuki) {
@@ -70,9 +94,12 @@ export async function observeMangaDotCreators(candidate, host = globalThis.tsuzu
   } catch {
     return { detailOutcome: "INVALID_RESPONSE" };
   }
-  const authors = extractMangaDotCreators(raw, match[1], candidate.title);
-  return authors ? { detailOutcome: "VERIFIED_NO_ALIASES", authors } :
-    { detailOutcome: "IDENTITY_MISMATCH" };
+  const record = extractMangaDotWork(raw, match[1], candidate.title);
+  if (!record) return { detailOutcome: "IDENTITY_MISMATCH" };
+  // Verified work identity without a published person is distinct from
+  // mismatch. It supplies no author authority and cannot pass the portfolio.
+  return {detailOutcome: record.aliases.length ? "VERIFIED_WITH_ALIASES" : "VERIFIED_NO_ALIASES",
+    authors:record.authors, ...(record.aliases.length ? {aliases:record.aliases} : {})};
 }
 export function mangaDotExactTitle(candidate, title) {
   return !!exactName(title) && exactName(candidate?.title) === exactName(title);
