@@ -92,6 +92,7 @@ jobs:
           with zipfile.ZipFile(package) as zf:
               manifest = json.loads(zf.read("manifest.json"))
               dot = zf.read("modules/sources/mangadot/modules/mangadot.js").decode()
+              policy = zf.read("modules/sources/mangadot/modules/search-policy.js")
               dex = zf.read("modules/sources/mangadex/modules/mangadex.js").decode()
           assert manifest["id"] == "app.tsuzuki.mangaall"
           assert manifest["version"]["code"] == 11
@@ -99,13 +100,13 @@ jobs:
           assert manifest["name"] == "MangaAll — frozen 30 manhwa source research"
           assert 'originalLanguage !== "ko"' in dex
           assert '["originalLanguage[]", "ko"]' in dex
-          assert '"The Boxer":"Boxer"' in dot
-          assert '"The Horizon":"Horizon"' in dot
-          assert '"The Breaker":"Breaker"' in dot
-          assert '["Weak Hero","The World After the Fall","Cheese in the Trap"]' in dot
-          assert 'pageNumber(input?.cursor, title)' in dot
+          assert '["search", mangaDotRetrievalQuery(title)]' in dot
+          assert 'n > mangaDotResearchPageLimit()' in dot
+          assert policy == Path(".github/scripts/mangaall_mangadot_search_policy.mjs").read_bytes()
+          assert '"The Boxer":"Boxer"' not in dot
+          assert '"Weak Hero","The World After the Fall","Cheese in the Trap"' not in dot
           assert not any("mangafire" in member.lower() for member in manifest["permissions"]["network"]["origins"])
-          print("MANGAALL_FROZEN30_ANDROID|nativeSource=MANHWA_ONLY_KO|scopedQueries=VERIFIED|canonical=NOT_TESTED")
+          print("MANGAALL_FROZEN30_ANDROID|nativeSource=MANHWA_ONLY_KO|genericQueryPolicy=VERIFIED|canonical=NOT_TESTED")
           PY
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
