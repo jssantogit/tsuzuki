@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.network.PUT
 import eu.kanade.tachiyomi.network.await
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.parseAs
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -524,18 +525,26 @@ class MangaUpdatesApi(
         }
         val ids = credits.mapNotNull { it.authorId }.distinct()
         if (ids.size > 8 || credits.size > 32) return@withIOContext emptyList()
-        val people = ids.associateWith { id ->
-            val person = with(json) {
-                client.newCall(GET("$BASE_URL/v1/authors/$id"))
-                    .awaitSuccess()
-                    .parseAs<MUAuthorDetail>()
+        val people = mutableMapOf<Long, MUAuthorDetail>()
+        for (id in ids) {
+            val person = try {
+                with(json) {
+                    client.newCall(GET("$BASE_URL/v1/authors/$id"))
+                        .awaitSuccess()
+                        .parseAs<MUAuthorDetail>()
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // An unavailable author must not invalidate another verified
+                // work-linked creator or manufacture an alias.
+                continue
             }
-            check(person.authorId == id)
-            person
+            if (person.confirmsId(id)) people[id] = person
         }
         credits.mapNotNull { credit ->
             val id = requireNotNull(credit.authorId)
-            val person = requireNotNull(people[id])
+            val person = people[id] ?: return@mapNotNull null
             val aliases = person.associated.map { it.name.trim() }.filter(String::isNotBlank).distinct()
             val primary = person.name.trim()
             if (aliases.size > 32 || primary.isBlank() || primary.length > 128 ||
