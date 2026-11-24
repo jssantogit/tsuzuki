@@ -38,6 +38,7 @@ jobs:
           fi
           python3 -m py_compile .github/scripts/run_mangaall_frozen30_canonical_persistence.py
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
+          node .github/scripts/test_mangaall_mangadot_search_policy.mjs
           python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
           bash -n .github/scripts/run_mangaall_frozen30_mangadex_audit.sh
           python3 -m py_compile .github/scripts/verify_mangaall_frozen30_mangadex_audit.py
@@ -207,3 +208,5 @@ jobs:
 
 # Re-evaluate the exact pending14 cohort after independently attested bilingual credits,
 # literal GraphQL variables and Hangul spacing regressions. Include Wind Breaker as a control.
+
+# Generic retrieval policy; actual source-mapped ranges now reported separately from acceptance.
