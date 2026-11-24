@@ -397,6 +397,7 @@ class CollectProviderReadingEvidence private constructor(
                 append(target.facetId.orEmpty())
                 append(':')
                 append(target.registration.configurationFingerprint)
+                target.researchSource?.let { append(":research:").append(it) }
             }
         }
     }
@@ -437,6 +438,17 @@ class CollectProviderReadingEvidence private constructor(
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
     ): ProviderReadingEvidenceCollection {
         return try {
+            if (target.researchSource != null) {
+                return collectResearchSource(
+                    canonicalTitleId = canonicalTitleId,
+                    titles = titles,
+                    target = target,
+                    canonicalCreators = canonicalCreators,
+                    onStageChanged = onStageChanged,
+                    onPageCollected = onPageCollected,
+                    onProvisionalCursorReady = onProvisionalCursorReady,
+                )
+            }
             val existing = bindingRepository.get(
                 canonicalTitleId = canonicalTitleId,
                 providerId = target.registration.descriptor.id,
@@ -598,6 +610,96 @@ class CollectProviderReadingEvidence private constructor(
             trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.THREW)
             ProviderReadingEvidenceCollection(complete = false)
         }
+    }
+
+    /**
+     * Unsigned code11 research only. Separate internal-source lanes prevent
+     * broad/slow lookups from consuming the other source's chapter budget.
+     * A scoped lookup never establishes a complete Provider edition search.
+     */
+    private suspend fun collectResearchSource(
+        canonicalTitleId: String,
+        titles: List<String>,
+        target: ReadingTarget,
+        canonicalCreators: Set<String>?,
+        onStageChanged: (DiagnosticStage) -> Unit,
+        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
+        onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
+    ): ProviderReadingEvidenceCollection {
+        val source = requireNotNull(target.researchSource)
+        if (canonicalCreators.isNullOrEmpty()) return ProviderReadingEvidenceCollection(complete = false)
+        val descriptor = target.registration.descriptor
+        val discovered = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssessment>()
+        val initialCursor = ProviderCursor("""{"v":1,"remaining":{"$source":{"c":null,"o":0}}}""")
+        // Leave time for native chapter collection within the unchanged 20 s
+        // outer per-lane deadline. An incomplete search cannot auto-bind.
+        withTimeoutOrNull(MAX_RESEARCH_LOOKUP_MILLIS) {
+            for ((queryIndex, title) in titles.withIndex()) {
+                val seen = mutableSetOf<ProviderWorkCandidate>()
+                suspend fun inspect(candidates: List<ProviderWorkCandidate>): Boolean {
+                    val exact = exactFacetMatches(title, target.facetId, candidates).filter(seen::add)
+                    if (exact.isNotEmpty()) {
+                        observeSourcePortfolio(canonicalTitleId, title, target, canonicalCreators, exact)
+                            .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
+                            .forEach { discovered[it.ref] = it }
+                    }
+                    return discovered.isNotEmpty()
+                }
+                traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
+                val result = withTimeoutOrNull(MAX_RESEARCH_QUERY_MILLIS) {
+                    collectLookup(
+                        providerId = descriptor.id,
+                        title = title,
+                        requestedLanguage = target.facetId,
+                        startingCursor = initialCursor,
+                        expectedSourcePrefix = "$source:",
+                        stopWhen = { inspect(it) },
+                    )
+                }
+                when (result) {
+                    is ProviderCallResult.Success -> {
+                        // The terminal page does not run stopWhen. Validate it too.
+                        inspect(result.value.items)
+                        traceLookupAttempt(
+                            canonicalTitleId,
+                            target,
+                            queryIndex,
+                            title,
+                            if (result.value.complete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
+                            candidateCount = result.value.items.size,
+                        )
+                    }
+                    is ProviderCallResult.Failure -> traceLookupAttempt(
+                        canonicalTitleId,
+                        target,
+                        queryIndex,
+                        title,
+                        DiagnosticOutcome.FAILED,
+                        errorCode = result.error.code,
+                        sourceFailureCode = result.error.sourceFailureCode,
+                        malformedStage = result.error.malformedStage,
+                        httpStatus = result.error.httpStatus,
+                    )
+                    null -> traceLookupAttempt(
+                        canonicalTitleId,
+                        target,
+                        queryIndex,
+                        title,
+                        DiagnosticOutcome.TIMEOUT,
+                    )
+                }
+                if (discovered.isNotEmpty()) break
+            }
+        }
+        if (discovered.isEmpty()) return ProviderReadingEvidenceCollection(complete = false)
+        onStageChanged(DiagnosticStage.READ)
+        return collectUnresolvedWorkSources(
+            canonicalTitleId = canonicalTitleId,
+            target = target,
+            sources = discovered.values.take(MAX_COVERAGE_CONTENDERS),
+            onPageCollected = onPageCollected,
+            onProvisionalCursorReady = onProvisionalCursorReady,
+        )
     }
 
     private suspend fun discoverBinding(
@@ -1375,11 +1477,14 @@ class CollectProviderReadingEvidence private constructor(
         title: String,
         requestedLanguage: String?,
         maxPages: Int = MAX_LOOKUP_PAGES,
-        stopWhen: ((List<ProviderWorkCandidate>) -> Boolean)? = null,
+        stopWhen: (suspend (List<ProviderWorkCandidate>) -> Boolean)? = null,
+        startingCursor: ProviderCursor? = null,
+        expectedSourcePrefix: String? = null,
     ): ProviderCallResult<LookupSnapshot> {
         val items = mutableListOf<ProviderWorkCandidate>()
         val seenCursors = mutableSetOf<String>()
-        var cursor: ProviderCursor? = null
+        startingCursor?.let { seenCursors.add(it.value) }
+        var cursor: ProviderCursor? = startingCursor
         var pageCount = 0
         while (true) {
             if (++pageCount > maxPages) {
@@ -1426,6 +1531,9 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 is ProviderCallResult.Success -> result.value
             }
+            if (expectedSourcePrefix != null && page.items.any { !it.externalWorkId.startsWith(expectedSourcePrefix) }) {
+                return malformed()
+            }
             items += page.items
             if (items.size > MAX_LOOKUP_ITEMS) {
                 return if (providerId.value == "app.tsuzuki.mangaall") {
@@ -1455,7 +1563,17 @@ class CollectProviderReadingEvidence private constructor(
         .filter { registration -> REQUIRED_CAPABILITIES.all { it in registration.enabledCapabilities } }
         .flatMap { registration ->
             val facets = registration.facets.map { it.facetId }.ifEmpty { listOf(null) }
-            facets.asSequence().map { facetId -> ReadingTarget(registration, facetId) }
+            facets.asSequence().flatMap { facetId ->
+                if (nativeMangaDotPortfolioResearch &&
+                    registration.descriptor.id.value == "app.tsuzuki.mangaall" &&
+                    registration.descriptor.version.code == 11L &&
+                    facetId in setOf("en", "pt-br")
+                ) {
+                    sequenceOf("mangadex", "mangadot").map { ReadingTarget(registration, facetId, it) }
+                } else {
+                    sequenceOf(ReadingTarget(registration, facetId))
+                }
+            }
         }
         .sortedWith(
             compareBy<ReadingTarget>(
@@ -2003,6 +2121,7 @@ class CollectProviderReadingEvidence private constructor(
     private data class ReadingTarget(
         val registration: ProviderRegistration,
         val facetId: String?,
+        val researchSource: String? = null,
     )
 
     private companion object {
@@ -2024,6 +2143,8 @@ class CollectProviderReadingEvidence private constructor(
         const val MAX_WORK_SOURCE_COLLECTION_MILLIS = 5_800L
         const val MAX_CONCURRENT_PROVIDERS = 4
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
+        const val MAX_RESEARCH_LOOKUP_MILLIS = 12_000L
+        const val MAX_RESEARCH_QUERY_MILLIS = 6_000L
 
         // A missing catalog snapshot gets one bounded independent identity
         // fetch before source lookup, not an unbounded provider discovery.
