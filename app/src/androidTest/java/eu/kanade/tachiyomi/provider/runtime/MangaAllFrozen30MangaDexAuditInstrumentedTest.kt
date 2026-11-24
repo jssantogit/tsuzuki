@@ -1,8 +1,11 @@
 package eu.kanade.tachiyomi.provider.runtime
 
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageLoader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -23,6 +26,8 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
+import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
@@ -40,6 +45,9 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
         val instrument = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
         assertEquals("I_ACCEPT_FROZEN30_MANGADEX_AUDIT", args.getString("mangaDexAuditOptIn"))
+        val pixelMode = args.getString("mangaDexAuditPixels") ?: "0"
+        require(pixelMode in setOf("0", "1"))
+        val pixelProbe = pixelMode == "1"
         val shard = requireNotNull(args.getString("mangaAllFrozen30Shard")).toInt()
         require(shard in 0..2)
         val context = instrument.targetContext
@@ -88,6 +96,47 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                 input.toString(),
                 policy,
             )
+        }
+
+        suspend fun decodeFirstPage(page: JsonObject): Boolean {
+            val cache = File(root, "dex-reader-preview")
+            cache.deleteRecursively()
+            val request = PreparedHttpPage(
+                url = page.getValue("url").jsonPrimitive.content,
+                headers = (page["headers"] as? JsonObject).orEmpty().mapValues { it.value.jsonPrimitive.content },
+                allowedOrigins = manifest.permissions.network?.origins.orEmpty().toSet(),
+                allowLocalNetwork = false,
+            )
+            val loader = ProviderHttpPageLoader(requests = listOf(request), cacheRoot = cache)
+            try {
+                val loaded = loader.getPages().single()
+                loader.loadPage(loaded)
+                if (loaded.status != Page.State.Ready) return false
+                val stream = loaded.stream ?: return false
+                val output = ByteArrayOutputStream()
+                stream.invoke().use { input ->
+                    val buffer = ByteArray(16 * 1024)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        if (output.size() + count > 16 * 1024 * 1024) return false
+                        output.write(buffer, 0, count)
+                    }
+                }
+                val bytes = output.toByteArray()
+                val options = BitmapFactory.Options().apply { inSampleSize = 8 }
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return false
+                try {
+                    if (bitmap.width <= 0 || bitmap.height <= 0) return false
+                    bitmap.getPixel(0, 0)
+                    return true
+                } finally {
+                    bitmap.recycle()
+                }
+            } finally {
+                loader.recycle()
+                cache.deleteRecursively()
+            }
         }
 
         suspend fun inspect(title: String, facts: Facts) {
@@ -188,6 +237,7 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                 if (ids.isEmpty()) facts.emptyInventories++
                 facts.chapterOne += one.size
                 if (one.size > 8) facts.truncatedChapterOne = true
+                var pixelAttempted = false
                 for (chapterId in one.take(8)) {
                     val request = JsonObject(
                         mapOf(
@@ -212,6 +262,21 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                                 },
                             )
                             facts.pageLists++
+                            if (!pixelAttempted) {
+                                pixelAttempted = true
+                                facts.readableHids++
+                                if (pixelProbe) {
+                                    facts.pixelAttempts++
+                                    val decoded = try {
+                                        decodeFirstPage(pages.first().jsonObject)
+                                    } catch (error: CancellationException) {
+                                        throw error
+                                    } catch (_: Exception) {
+                                        false
+                                    }
+                                    if (decoded) facts.pixelDecoded++ else facts.pixelFailures++
+                                }
+                            }
                         }
                         "page_failure" -> {
                             if (body["pageFailureStage"]?.jsonPrimitive?.content == "EXTERNAL_CHAPTER") {
@@ -238,7 +303,7 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                 }
                 instrument.sendStatus(
                     1,
-                    Bundle().apply { putString("stream", facts.report(index + 1)) },
+                    Bundle().apply { putString("stream", facts.report(index + 1, pixelProbe)) },
                 )
             }
         } finally {
@@ -267,11 +332,15 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
         var externalChapters: Int = 0,
         var pageLists: Int = 0,
         var pageFailures: Int = 0,
+        var readableHids: Int = 0,
+        var pixelAttempts: Int = 0,
+        var pixelDecoded: Int = 0,
+        var pixelFailures: Int = 0,
         var truncatedCandidates: Boolean = false,
         var truncatedChapterOne: Boolean = false,
         var contractFailure: Boolean = false,
     ) {
-        fun report(index: Int): String {
+        fun report(index: Int, pixelProbe: Boolean): String {
             val outcome = when {
                 contractFailure -> "CONTRACT_FAILED"
                 incompleteLookup > 0 || truncatedCandidates || truncatedChapterOne || incompleteInventories > 0 ->
@@ -286,7 +355,9 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
             return "MANGAALL_DEX_AUDIT|index=$index|outcome=$outcome|candidates=$candidates|credited=$credited" +
                 "|lookupIncomplete=$incompleteLookup|terminal=$terminalInventories|empty=$emptyInventories" +
                 "|inventoryIncomplete=$incompleteInventories|chapterOne=$chapterOne|external=$externalChapters" +
-                "|pageLists=$pageLists|pageFailures=$pageFailures|canonical=NOT_TESTED"
+                "|pageLists=$pageLists|pageFailures=$pageFailures|canonical=NOT_TESTED" +
+                "|readableHids=$readableHids|pixelAttempts=$pixelAttempts|pixelDecoded=$pixelDecoded" +
+                "|pixelFailures=$pixelFailures|pixelMode=${if (pixelProbe) 1 else 0}"
         }
     }
 
