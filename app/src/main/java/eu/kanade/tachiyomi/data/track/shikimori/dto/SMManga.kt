@@ -27,11 +27,19 @@ data class SMManga(
     val description: String?,
     val kind: String?,
     val personRoles: List<SMPersonRole>?,
+    val english: String? = null,
+    val japanese: String? = null,
+    val synonyms: List<String>? = null,
 ) {
     fun toTrack(trackerId: Long): TrackSearch {
         return TrackSearch.create(trackerId).apply {
             remote_id = this@SMManga.id
             title = name
+            alternate_titles = (listOfNotNull(english, japanese) + synonyms.orEmpty())
+                .map(String::trim)
+                .filter(String::isNotBlank)
+                .filterNot { it == name }
+                .distinct()
             total_chapters = chapters
             cover_url = poster?.mainUrl.orEmpty()
             summary = description.orEmpty()
