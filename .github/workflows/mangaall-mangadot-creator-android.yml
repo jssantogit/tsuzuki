@@ -52,14 +52,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
         with:
           cache-read-only: true
-      - name: Test DOM resource boundaries and build Android APKs
+      - name: Run discoverable JUnit DOM regressions and build Android APKs
         run: |
           set -euo pipefail
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
           for attempt in 1 2 3; do
-            if ./gradlew :core:common:spotlessKotlinCheck :app:spotlessKotlinCheck :core:common:testDebugUnitTest --tests '*ProviderHostTransformServicesTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :core:common:spotlessKotlinCheck :app:spotlessKotlinCheck :core:common:testDebugUnitTest --tests 'tachiyomi.core.provider.runtime.ProviderHostTransformServicesTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
+              python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          p=Path("core/common/build/test-results/testDebugUnitTest/TEST-tachiyomi.core.provider.runtime.ProviderHostTransformServicesTest.xml")
+          root=ET.parse(p).getroot()
+          assert int(root.attrib["tests"]) >= 6
+          assert all(int(root.attrib.get(k, "0")) == 0 for k in ("failures", "errors", "skipped"))
+          print("MANGAALL_DOT_CREATOR|domTests="+root.attrib["tests"]+"|outcome=PASS")
+          PY
               exit 0
             fi
             if ! grep -Eq 'Received status code 429|Too Many Requests' "$log" || [[ "$attempt" -eq 3 ]]; then
