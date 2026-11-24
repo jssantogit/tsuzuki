@@ -476,7 +476,23 @@ def test_self():
     source_report = aggregate(works, source_error)
     assert "MANGADOT_LOOKUP_SOURCE_PAGINATION_INVALID" in source_report["works"][0]["issues"]
 
+    # A successful upstream search may contain nonmatching titles. It is
+    # incorrect to report this as an empty source catalog; it is evidence that
+    # the router did not observe an exact title/alias in those returned pages.
+    raw_search = copy.deepcopy(data)
+    missing = raw_search[0]["results"][0]
+    missing["candidateCount"] = 0
+    missing["candidates"] = []
+    missing["httpBySource"]["mangadot"]["searchPagesObserved"] = 1
+    missing["httpBySource"]["mangadot"]["searchRowsObserved"] = 5
+    raw_search_report = aggregate(works, raw_search)
+    assert raw_search_report["counts"]["noCandidateDespiteUpstreamSearchRows"] == 1
+    assert raw_search_report["counts"]["sourceSearchRowsObserved"] == 5
+    assert "UPSTREAM_SEARCH_ROWS_WITHOUT_EXACT_MATCH" in raw_search_report["works"][0]["issues"]
+
     cases = [
+        ("OVERFLOW_RAW_ROW_COUNT", lambda p: p[0]["results"][0]["httpBySource"]["mangadot"].update(
+            searchPagesObserved=1, searchRowsObserved=101)),
         ("FOREIGN_SOURCE", lambda p: p[0].update(sourceSet=["mangadex", "mangafire"])),
         ("FAKE_LARGE_INPUT_PROOF", lambda p: p[0].update(acquisitionAdaptation="SIGNED_HOST_8M")),
         ("FALSE_HOST_LOOKUP_BUDGET", lambda p: p[0].update(probeBudget="HOST_LOOKUP32_VERIFIED")),
