@@ -3590,6 +3590,21 @@ class CollectProviderReadingEvidenceTest {
 
     @Test
     fun `native preview resumes saved cursor without recreating the snapshot`() = runTest {
+        verifyNativePreview("resume")
+    }
+
+    @Test
+    fun `native preview restarts expired generation only after verifying fresh same work coverage`() = runTest {
+        verifyNativePreview("expired")
+    }
+
+    @Test
+    fun `native preview does not restart after malformed cursor response or challenge`() = runTest {
+        verifyNativePreview("malformed")
+        verifyNativePreview("challenge")
+    }
+
+    private suspend fun verifyNativePreview(mode: String) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
         val metadata = mockk<CanonicalMetadataSnapshotRepository>()
@@ -3605,15 +3620,24 @@ class CollectProviderReadingEvidenceTest {
         val ref = ProviderBindingRef(mangaAll, "en", "mangadot:317")
         val cursor = ProviderCursor("m1:317:en:aaaaaaaaaaaaaaaa:200")
         val cursors = mockk<ProviderProvisionalCursorRepository>(relaxed = true)
+        var discarded = false
         coEvery { cursors.get(canonicalTitle.id, ref, 11, any()) } answers {
-            ProviderProvisionalCursorCheckpoint(
-                canonicalTitle.id,
-                ref,
-                11L,
-                arg<String>(3),
-                cursor,
-                1,
-            )
+            if (discarded) {
+                null
+            } else {
+                ProviderProvisionalCursorCheckpoint(
+                    canonicalTitle.id,
+                    ref,
+                    11L,
+                    arg<String>(3),
+                    cursor,
+                    1,
+                )
+            }
+        }
+        coEvery { cursors.discard(any(), any()) } answers {
+            arg<ProviderProvisionalCursorCheckpoint>(0).nextCursor shouldBe cursor
+            discarded = true
         }
         val reads = mutableListOf<ProviderCursor?>()
         val collector = CollectProviderReadingEvidence(
@@ -3642,20 +3666,38 @@ class CollectProviderReadingEvidenceTest {
                 },
                 chaptersHandler = { request ->
                     reads += request.cursor
-                    request.cursor shouldBe cursor
-                    ProviderCallResult.Success(
-                        ProviderPage(
-                            listOf(
-                                ProviderChapterObservation(
-                                    providerChapterId = "mangadot:chapters:201",
-                                    rawLabel = "Chapter 1",
-                                    rawNumber = 1.0,
-                                    language = "en",
-                                ),
+                    if (request.cursor == cursor && mode != "resume") {
+                        ProviderCallResult.Failure(
+                            ProviderError(
+                                code = if (mode == "malformed") {
+                                    ProviderErrorCode.MALFORMED_RESULT
+                                } else {
+                                    ProviderErrorCode.SOURCE_READ_ERROR
+                                },
+                                retryable = false,
+                                sourceFailureCode = if (mode == "challenge") {
+                                    ProviderLookupFailureCode.CHALLENGE_BLOCKED
+                                } else {
+                                    null
+                                },
+                                httpStatus = if (mode == "challenge") 403 else null,
                             ),
-                            nextCursor = null,
-                        ),
-                    )
+                        )
+                    } else {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                listOf(
+                                    ProviderChapterObservation(
+                                        providerChapterId = "mangadot:chapters:201",
+                                        rawLabel = "Chapter 1",
+                                        rawNumber = 1.0,
+                                        language = "en",
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    }
                 },
                 expectedProviderId = mangaAll,
             ),
@@ -3668,11 +3710,21 @@ class CollectProviderReadingEvidenceTest {
             nativeMangaDotPortfolioResearch = true,
         )
         val result = collector.execute(canonicalTitle.id)
-        reads shouldBe listOf(cursor, cursor)
-        result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:201"
-        result.cursorProgress.single().expectedCursor shouldBe cursor
-        result.cursorProgress.single().nextCursor shouldBe null
-        coVerify(exactly = 0) { cursors.discard(any(), any()) }
+        if (mode == "resume") {
+            reads shouldBe listOf(cursor, cursor)
+            result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:201"
+            result.cursorProgress.single().expectedCursor shouldBe cursor
+            result.cursorProgress.single().nextCursor shouldBe null
+        } else if (mode == "expired") {
+            reads shouldBe listOf(cursor, null, null)
+            result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:201"
+            result.cursorProgress.single().expectedCursor shouldBe null
+        } else {
+            reads shouldBe listOf(cursor)
+            result.partialEvidence shouldBe emptyList()
+            result.cursorProgress shouldBe emptyList()
+        }
+        coVerify(exactly = if (mode == "expired") 1 else 0) { cursors.discard(any(), any()) }
     }
 
     @Test
