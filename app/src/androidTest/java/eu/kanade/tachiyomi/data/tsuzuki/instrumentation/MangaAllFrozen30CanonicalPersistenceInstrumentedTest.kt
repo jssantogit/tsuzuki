@@ -369,13 +369,28 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 if (key.isBlank() || key.length > 128 || value.isBlank() || value.length > 1024) continue
                 titleNames.upsert(TitleNameObservation(titleId, owner.provider, key, value, now))
             }
-            if (refresh.execute(titleId, forceRefresh = true).isFailure) return "REFRESH_FAILED"
-            val chapterRows = chapters.getByCanonicalTitleId(titleId)
-            val chapterOnes = chapterRows.filter {
+            // Exercise normal incremental refresh/cursor persistence, not a
+            // larger per-invocation deadline or a synthetic chapter insertion.
+            // A partial first refresh must not end the live test before a
+            // bounded follow-up has had a chance to collect missing evidence.
+            suspend fun exactChapterOnes() = chapters.getByCanonicalTitleId(titleId).filter {
                 it.type == CanonicalChapterType.REGULAR && it.displayNumber == "1" &&
                     it.baseNumber == 1 && it.part == null && it.alphaSuffix == null &&
                     it.decimalFraction == null && it.confirmation != CanonicalChapterConfirmation.CONFLICTED
             }
+            if (refresh.execute(titleId, forceRefresh = true).isFailure) return "REFRESH_FAILED"
+            if (catalogScope == "explicit_plan") {
+                repeat(2) {
+                    val observed = exactChapterOnes()
+                    // Multiple canonical chapter identities or release choices
+                    // are not transport gaps; do not retry to hide ambiguity.
+                    if (observed.size > 1) return@repeat
+                    if (observed.singleOrNull()?.let { resolver.options(it.id).isNotEmpty() } == true) return@repeat
+                    if (refresh.execute(titleId, forceRefresh = true).isFailure) return "REFRESH_FAILED"
+                }
+            }
+            val chapterRows = chapters.getByCanonicalTitleId(titleId)
+            val chapterOnes = exactChapterOnes()
             val one = chapterOnes.singleOrNull()
             val options = if (one == null) emptyList() else resolver.options(one.id)
             val sourceRows = associations.getByTitle(titleId)
