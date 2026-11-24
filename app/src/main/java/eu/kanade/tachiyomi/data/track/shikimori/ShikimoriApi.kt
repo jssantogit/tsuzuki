@@ -459,7 +459,7 @@ class ShikimoriApi(
 
         internal fun creatorAliasPayload(id: Int): JsonObject {
             require(id > 0)
-            val query = $"""
+            val query = $$"""
             |query($id: String) {
                 |mangas(ids: $id, limit: 1, kind:"!light_novel,!novel") {
                     |id
