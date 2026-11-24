@@ -56,7 +56,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: true
-      - name: Compile and regress exact title and native query hint contract (format retry)
+      - name: Compile and regress exact title and native query hint contract (import-order retry)
         run: |
           set -euo pipefail
           log="$(mktemp)"
