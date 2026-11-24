@@ -112,6 +112,29 @@ def collect_diagnostics(log, shard):
     return [rows[i] for i in sorted(rows)]
 
 
+def collect_acquisition(log, shard):
+    # Closed codes and bounded counts only; never forward raw instrumentation.
+    pattern = (
+        r"MANGAALL_CANONICAL_ACQUISITION\|index=(\d+)\|source=(MANGADEX|MANGADOT|UNKNOWN)"
+        r"\|event=(PROVIDER_READING_(?:LOOKUP_ATTEMPT|CANDIDATE|SOURCE_ASSOCIATION|CHAPTER_ATTEMPT))"
+        r"\|outcome=([A-Z_]{1,48})\|reason=([A-Z_]{1,64})"
+        r"\|candidates=(\d{1,6})\|count=(\d{1,4})(?=\s|$)"
+    )
+    rows = []
+    seen = set()
+    for match in re.finditer(pattern, log):
+        index, source, event, outcome, reason, candidates, count = match.groups()
+        index, candidates, count = int(index), int(candidates), int(count)
+        key = (index, source, event, outcome, reason, candidates)
+        if (not shard * 10 < index <= (shard + 1) * 10 or
+                not 0 < count <= 2048 or key in seen or len(rows) >= 2048):
+            return []
+        seen.add(key)
+        rows.append(dict(index=index, source=source, event=event, outcome=outcome,
+                         reason=reason, candidates=candidates, count=count))
+    return rows
+
+
 def scope(catalog):
     if catalog!="explicit_plan":
         return None, None
@@ -140,6 +163,7 @@ def invoke(shard, phase, catalog, reader=False):
     parsed = parse_phase(log,shard,phase,ok,catalog,owners)
     if phase == "COLLECT":
         parsed["diagnostics"] = collect_diagnostics(log, shard)
+        parsed["acquisition"] = collect_acquisition(log, shard)
     if reader and phase == "RESTORE":
         parsed["reader"] = parse_reader(log, shard, parsed, ok, catalog, owners)
     return parsed
@@ -192,6 +216,8 @@ def run(shard, catalog, reader=False):
                 print(f"MANGAALL_CANONICAL_PERSISTENCE|phase={phase.upper()}|index={row['index']}|outcome={row['status']}")
         for row in report["collect"].get("diagnostics", []):
             print("MANGAALL_CANONICAL_DIAGNOSTIC|" + "|".join(f"{key}={value}" for key, value in row.items()))
+        for row in report["collect"].get("acquisition", []):
+            print("MANGAALL_CANONICAL_ACQUISITION|" + "|".join(f"{key}={value}" for key, value in row.items()))
         if reader:
             for row in report["restore"]["reader"]["works"]:
                 print(f"MANGAALL_CANONICAL_READER|index={row['index']}|outcome={row['status']}|ui=NOT_TESTED")
@@ -273,6 +299,13 @@ def selftest():
     assert collect_diagnostics(diagnostic, 0)[0]["rivalReleaseRefs"] == 1
     assert collect_diagnostics(diagnostic+"\n"+diagnostic, 0) == []
     assert collect_diagnostics(diagnostic, 1) == []
+    acquisition = ("MANGAALL_CANONICAL_ACQUISITION|index=1|source=MANGADOT"
+                   "|event=PROVIDER_READING_SOURCE_ASSOCIATION|outcome=CANDIDATES"
+                   "|reason=AUTHOR_CONFLICT|candidates=0|count=2")
+    assert collect_acquisition(acquisition, 0)[0]["reason"] == "AUTHOR_CONFLICT"
+    assert collect_acquisition(acquisition, 1) == []
+    assert collect_acquisition(acquisition + "\n" + acquisition, 0) == []
+    assert collect_acquisition(acquisition + "|url=https://example.com", 0) == []
     print("MANGAALL_CANONICAL_PERSISTENCE|selftest=PASS")
 
 
