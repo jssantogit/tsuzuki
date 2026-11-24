@@ -30,9 +30,12 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
 import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.interactor.ResolveCanonicalMetadata
+import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshotRepository
+import tachiyomi.domain.tsuzuki.integration.resolveVerifiedCreatorAliases
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -235,7 +238,30 @@ class CollectProviderReadingEvidence private constructor(
                     verifiedArtists.isNotEmpty() -> DiagnosticProviderCanonicalCreditBasis.ARTIST_ONLY
                     else -> DiagnosticProviderCanonicalCreditBasis.NONE
                 }
-                (verifiedAuthors + verifiedArtists).takeIf { it.isNotEmpty() }
+                val original = verifiedAuthors + verifiedArtists
+                val aliases = if (original.isNotEmpty() &&
+                    targets.any { it.registration.descriptor.id.value == "app.tsuzuki.mangaall" }
+                ) {
+                    try {
+                        val providers = integrationRegistry?.metadataProviders(IntegrationCapability.METADATA_STAFF)
+                            .orEmpty()
+                        val verifiedIds = canonicalTitleRepository.getExternalIdentities(canonicalTitleId)
+                            .filter { it.verified }
+                            .groupBy { IntegrationId(it.provider) }
+                            .mapNotNull { (provider, entries) ->
+                                entries.map { it.externalId }.distinct().singleOrNull()?.let { provider to it }
+                            }.toMap()
+                        resolveVerifiedCreatorAliases(resolved, verifiedIds, providers)
+                            .mapNotNull(::normalizedCreator)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                } else {
+                    emptyList()
+                }
+                (original + aliases).takeIf { it.isNotEmpty() }
             }?.also {
                 canonicalAuthorState = if (cached != null) {
                     DiagnosticProviderCanonicalAuthorState.VERIFIED_CACHED
