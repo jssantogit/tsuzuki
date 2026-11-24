@@ -42,7 +42,10 @@ jobs:
           assert "I_ACCEPT_MANGAALL_TWO_SOURCE_CODE11_ANDROID_LIVE" in script
           assert "MangaAllFutureRealDualSourceCode11LiveInstrumentedTest" in script
           assert "airplane-mode disable" in script
-          assert "on:\n  push:" in workflow and "workflow_dispatch:" not in workflow
+          import re
+          assert re.search(r"(?m)^on:$", workflow)
+          assert re.search(r"(?m)^  push:$", workflow)
+          assert not re.search(r"(?m)^  workflow_dispatch:", workflow)
           assert "actions/upload-artifact@" in workflow
           print("MANGAALL_DUAL_ANDROID_LIVE|optIn=EXACT_COMMIT|source=UNSIGNED_CODE11|emulator=REQUIRED|signed=UNCHANGED")
           PY
