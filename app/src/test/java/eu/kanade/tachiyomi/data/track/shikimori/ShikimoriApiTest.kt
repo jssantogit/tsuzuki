@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.data.track.shikimori
 
+import eu.kanade.tachiyomi.data.track.shikimori.dto.SMCreatorResponse
 import eu.kanade.tachiyomi.data.track.shikimori.dto.SMManga
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
@@ -53,6 +54,24 @@ class ShikimoriApiTest {
     fun `omitted alternate fields never fabricate aliases`() {
         val manga = SMManga(42, "Primary", 0, null, "", null, null, null, null, "manhwa", null)
         manga.toTrack(1).alternate_titles shouldBe emptyList()
+    }
+
+    @Test
+    fun `aliases are tied to exact work person and role`() {
+        val response = Json.decodeFromString<SMCreatorResponse>(
+            """
+            {"data":{"mangas":[{"id":"42","personRoles":[
+                {"person":{"id":"7","name":"Mun, Baek-Gyeong","japanese":"문백경","russian":null},
+                 "rolesEn":["Story"]},
+                {"person":{"name":"Unverified","japanese":"Fake"},"rolesEn":["Art"]}
+            ]}]}}
+            """.trimIndent(),
+        )
+        val aliases = response.verifiedAliases(42)
+        aliases.size shouldBe 1
+        aliases.single().creatorExternalId shouldBe "7"
+        aliases.single().aliases shouldBe listOf("문백경")
+        response.verifiedAliases(43) shouldBe emptyList()
     }
 
     private fun FormBody.formValue(name: String): String =

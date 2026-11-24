@@ -15,6 +15,7 @@ import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.collections.execution.PageCatalogFetcher
 import tachiyomi.domain.tsuzuki.collections.execution.PageIndexOrigin
 import tachiyomi.domain.tsuzuki.collections.execution.PageOffsetNormalizer
+import tachiyomi.domain.tsuzuki.integration.CreatorAliasProvider
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.MetadataProvider
 import tachiyomi.domain.tsuzuki.integration.RatingsProvider
@@ -31,7 +32,7 @@ import kotlin.coroutines.cancellation.CancellationException
 class ShikimoriIntegrationProvider private constructor(
     private val api: ShikimoriIntegrationApi,
     private val requestGate: ShikimoriRequestGate,
-) : SearchProvider, MetadataProvider, RatingsProvider {
+) : SearchProvider, CreatorAliasProvider, RatingsProvider {
 
     @Inject
     constructor(
@@ -87,6 +88,10 @@ class ShikimoriIntegrationProvider private constructor(
             api.getMangaDetailsPublic(externalId.requireShikimoriId())
         } ?: error("Shikimori title not found: $externalId")
         details.toIntegrationCatalogItem(integrationId.value)
+    }
+
+    override suspend fun creatorAliases(externalId: String) = capture {
+        requestGate.withPermit { api.getVerifiedCreatorAliases(externalId.requireShikimoriId()) }
     }
 
     override suspend fun ratings(externalId: String): Result<List<ExternalRating>> = capture {

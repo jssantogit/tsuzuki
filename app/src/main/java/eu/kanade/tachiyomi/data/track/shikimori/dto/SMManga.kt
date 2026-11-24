@@ -3,6 +3,8 @@ package eu.kanade.tachiyomi.data.track.shikimori.dto
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import tachiyomi.domain.tsuzuki.integration.CatalogCreatorAliasEvidence
+import tachiyomi.domain.tsuzuki.integration.CreatorCreditRole
 
 @Serializable
 data class SMSearchResult(
@@ -78,4 +80,49 @@ data class SMPersonRole(
 @Serializable
 data class SMPerson(
     val name: String,
+    val id: String? = null,
+    val japanese: String? = null,
+    val russian: String? = null,
 )
+
+@Serializable
+data class SMCreatorResponse(
+    val data: SMCreatorResults,
+) {
+    fun verifiedAliases(workId: Long): List<CatalogCreatorAliasEvidence> {
+        val work = data.mangas.singleOrNull()?.takeIf { it.id == workId.toString() } ?: return emptyList()
+        val credits = work.personRoles.orEmpty()
+        if (credits.size > 32) return emptyList()
+        return credits.flatMap { credit ->
+            val person = credit.person
+            val id = person.id?.takeIf { it.toLongOrNull()?.let { value -> value > 0 } == true }
+                ?: return@flatMap emptyList()
+            val name = person.name.trim()
+            if (name.isBlank() || name.length > 128) return@flatMap emptyList()
+            val aliases = listOfNotNull(person.japanese, person.russian)
+                .map(String::trim)
+                .filter { it.isNotBlank() && it.length <= 128 && it != name }
+                .distinct()
+            val roles = buildList {
+                if (credit.roles.any { "Story" in it }) add(CreatorCreditRole.AUTHOR)
+                if (credit.roles.any { "Art" in it }) add(CreatorCreditRole.ARTIST)
+            }
+            roles.map { role ->
+                CatalogCreatorAliasEvidence(
+                    workExternalId = workId.toString(),
+                    creatorExternalId = id,
+                    role = role,
+                    creditedName = name,
+                    primaryName = name,
+                    aliases = aliases,
+                )
+            }
+        }.takeIf { it.size <= 32 }.orEmpty()
+    }
+}
+
+@Serializable
+data class SMCreatorResults(val mangas: List<SMCreatorWork>)
+
+@Serializable
+data class SMCreatorWork(val id: String, val personRoles: List<SMPersonRole>?)

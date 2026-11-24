@@ -250,6 +250,9 @@ interface ShikimoriIntegrationApi {
 
     suspend fun getMangaDetailsPublic(id: Int): TrackSearch?
 
+    suspend fun getVerifiedCreatorAliases(id: Int): List<tachiyomi.domain.tsuzuki.integration.CatalogCreatorAliasEvidence> =
+        emptyList()
+
     suspend fun lookupGenres(): List<Pair<String, String>> = emptyList()
 
     suspend fun lookupPublishers(): List<Pair<String, String>> = emptyList()

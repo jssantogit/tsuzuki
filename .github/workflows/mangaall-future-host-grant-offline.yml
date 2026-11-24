@@ -63,6 +63,7 @@ jobs:
                 'app/src/main/java/eu/kanade/tachiyomi/data/track/mangaupdates/MangaUpdates.kt' \
                 'app/src/main/java/eu/kanade/tachiyomi/data/track/mangaupdates/MangaUpdatesApi.kt' \
                 'app/src/main/java/eu/kanade/tachiyomi/data/track/mangaupdates/dto/MUAuthor.kt' \
+                'app/src/main/java/eu/kanade/tachiyomi/data/track/shikimori/Shikimori.kt' \
                 'app/src/main/java/eu/kanade/tachiyomi/data/track/shikimori/ShikimoriApi.kt' \
                 'app/src/main/java/eu/kanade/tachiyomi/data/track/shikimori/dto/SMManga.kt' \
                 'app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/integration/MangaUpdatesIntegrationProvider.kt' \
