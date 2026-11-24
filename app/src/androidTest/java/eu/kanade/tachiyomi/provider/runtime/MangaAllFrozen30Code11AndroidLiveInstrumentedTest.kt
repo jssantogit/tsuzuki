@@ -64,6 +64,7 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
             args.getString("mangaAllDualCode11LiveOptIn"),
         )
         val shard = requireNotNull(args.getString("mangaAllFrozen30Shard")).toInt()
+        val readerProbe = args.getString("mangaAllReaderPagesProbe") == "1"
         assertTrue("Only three fixed 10-work shards are permitted", shard in 0..2)
         val cohort = instrumentation.context.assets.open(
             "mangaall-dual-source-30-cohort-lock.json",
@@ -192,6 +193,8 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                 var provedChapters = 0
                 var provedPages = 0
                 var verifiedSource = ""
+                var sourceBindingForReader: JsonObject? = null
+                var chapterOneIdForReader: String? = null
                 var attempts = 0
                 for ((hid, source) in candidates.toList().sortedBy {
                     if (it.second == "mangadot") 0 else 1
@@ -208,6 +211,7 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                     val seenChapterCursors = mutableSetOf<String>()
                     var chapterCursor: String? = null
                     var chapterOne = false
+                    var chapterOneId: String? = null
                     var terminal = false
                     var pages = 0
                     var failure = false
@@ -237,6 +241,7 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                             assertTrue("Repeated chapter HID for frozen index ${index + 1}", ids.add(id))
                             if (obj["rawNumber"]?.jsonPrimitive?.content?.toDoubleOrNull() == 1.0) {
                                 chapterOne = true
+                                if (chapterOneId == null) chapterOneId = id
                             }
                         }
                         pages++
@@ -256,6 +261,8 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                         provedChapters = ids.size
                         provedPages = pages
                         verifiedSource = source
+                        sourceBindingForReader = binding
+                        chapterOneIdForReader = requireNotNull(chapterOneId)
                         break
                     }
                 }
@@ -263,6 +270,49 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                     "No terminal source-HID chapter-one proof for locked work ${index + 1}; inspected=$attempts",
                     provedChapterOne,
                 )
+                if (readerProbe) {
+                    // Metadata-only Reader probe on exactly the successful
+                    // chapter-one source HID. It is NOT pixel delivery or
+                    // editorial canonical authority. No alternate chapters
+                    // are silently substituted after a Reader failure.
+                    val readerInput = JsonObject(
+                        mapOf(
+                            "binding" to requireNotNull(sourceBindingForReader),
+                            "providerChapterId" to JsonPrimitive(requireNotNull(chapterOneIdForReader)),
+                            "diagnosticsVersion" to JsonPrimitive(2),
+                        ),
+                    )
+                    val readerResponse = invoke("reading.pages", readerInput)
+                    assertNull(
+                        "Reader metadata Host failure for frozen index ${index + 1}",
+                        readerResponse.failure,
+                    )
+                    val readerJson = Json.parseToJsonElement(
+                        requireNotNull(readerResponse.value),
+                    ).jsonObject
+                    assertEquals(
+                        "Reader source pages not available for frozen index ${index + 1}",
+                        "page_list",
+                        readerJson["type"]?.jsonPrimitive?.content,
+                    )
+                    val readerPages = requireNotNull(readerJson["pages"]).jsonArray
+                    assertTrue(
+                        "Reader metadata pages empty for frozen index ${index + 1}",
+                        readerPages.isNotEmpty() && readerPages.size <= 5000,
+                    )
+                    for (readerPage in readerPages) {
+                        val imageUrl = readerPage.jsonObject["url"]?.jsonPrimitive?.content
+                        assertTrue(
+                            "Reader image URL not HTTPS at frozen index ${index + 1}",
+                            imageUrl?.startsWith("https://") == true,
+                        )
+                    }
+                    println(
+                        "MANGAALL_FROZEN30_READER|index=${index + 1}|shard=$shard" +
+                            "|pages=${readerPages.size}|metadata=PASS|pixels=NOT_TESTED" +
+                            "|canonical=NOT_TESTED|signed=NO",
+                    )
+                }
                 println(
                     "MANGAALL_FROZEN30_ANDROID|index=${index + 1}|shard=$shard|source=$verifiedSource" +
                         "|chapters=$provedChapters|pages=$provedPages|chapterOne=YES|terminal=YES" +
