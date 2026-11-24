@@ -970,10 +970,10 @@ class CollectProviderReadingEvidence private constructor(
         matches: List<ProviderWorkCandidate>,
     ): List<ProviderWorkSourceAssessment> {
         val repository = workSourceAssociationRepository ?: return emptyList()
-        // Preserve the established MangaFire source-detail trust boundary.
-        // MangaAll is a single Provider, but only its internal MangaFire adapter
-        // currently supplies the verified authors/coverage needed for a
-        // provisional source portfolio. Do not promote MangaDex/MangaDot by title.
+        // Keep source-specific trust. MangaDex requires explicit details and
+        // numeric facet coverage; MangaDot is only admitted to the nonshipping
+        // research preview below after an exact native chapter request.
+        // A title match alone never qualifies an internal source.
         val trusted = ProviderWorkSourcePortfolio.trustedCandidates(
             providerId = target.registration.descriptor.id,
             facetId = target.facetId,
