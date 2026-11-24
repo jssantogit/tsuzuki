@@ -7,7 +7,7 @@ permissions:
   contents: read
 concurrency:
   group: mangaall-frozen30-joint-android-research
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   build-once:
     runs-on: ubuntu-24.04
