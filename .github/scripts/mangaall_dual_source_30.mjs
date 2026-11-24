@@ -37,6 +37,11 @@ assert.equal(cohort.freezeUntil,
   'THIRTY_OF_THIRTY_VERIFIED_AND_EXPLICITLY_APPROVED');
 assert.deepEqual(raw.works, cohort.works,
   'MangaALL cohort is frozen until 30/30 validated; never rotate failing works');
+const EXPECTED_MANHWA_COHORT_SHA256 =
+  '19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1';
+assert.equal(createHash('sha256').update(JSON.stringify(cohort.works), 'utf8')
+  .digest('hex'), EXPECTED_MANHWA_COHORT_SHA256,
+  'The pinned 30-title cohort cannot be replaced by editing both lock and manifest');
 const formatted = raw.works.map(v => 'manhwa :: ' + v).join('\n');
 const providerRoot = path.resolve('signed-code10');
 const sourceRoot = path.join(providerRoot, 'providers/mangaall');
