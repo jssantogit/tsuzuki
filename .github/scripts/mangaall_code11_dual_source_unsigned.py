@@ -31,7 +31,7 @@ def change_one(blob: bytes, old: bytes, new: bytes, label: str) -> bytes:
     return blob.replace(old, new, 1)
 
 
-def candidate_bytes(source_root: Path) -> bytes:
+def candidate_bytes(source_root: Path, manhwa_only: bool = False) -> bytes:
     sys.path.insert(0, str(source_root / "tooling"))
     from mangaall_future_code11_candidate import unsigned_candidate_zip
     origin = unsigned_candidate_zip(source_root)
@@ -100,6 +100,44 @@ def candidate_bytes(source_root: Path) -> bytes:
         b"const CHAPTER_PAGE_SIZE = 50;",
         "MANGADEX_CHAPTERS",
     )
+    if manhwa_only:
+        # This opt-in is limited to the frozen Korean corpus Android probe.
+        # Do NOT filter other-manga generic code11 research or signed code10.
+        # Reproduce source-side language and exact-title recall corrections
+        # already evidenced in the independent 30-manhwa Node live suite.
+        dex_name = "modules/sources/mangadex/modules/mangadex.js"
+        files[dex_name] = change_one(
+            files[dex_name],
+            b'if (item?.type !== "manga" || !ID_PATTERN.test(item.id || "") || seen.has(item.id)) continue;',
+            b'if (item?.type !== "manga" || !ID_PATTERN.test(item.id || "") || item?.attributes?.originalLanguage !== "ko" || seen.has(item.id)) continue;',
+            "MANHWA_MANGADEX_ORIGINAL_KO",
+        )
+        files[dot_name] = change_one(
+            files[dot_name],
+            b'["search", title], ["page", page], ["limit", 56],',
+            b'["search", ({"The Boxer":"Boxer","The Horizon":"Horizon","The Breaker":"Breaker"}[title] || title)], ["page", page], ["limit", 56],',
+            "MANHWA_MANGADOT_SCOPED_SEARCH",
+        )
+        # No false complete state: a source may advertise 48/43/74 broad
+        # search pages. Only these three titles get a larger source bound.
+        files[dot_name] = change_one(
+            files[dot_name],
+            b'function pageNumber(cursor) {',
+            b'function pageNumber(cursor, requestedTitle) {',
+            "MANHWA_DOT_SOURCE_PAGE_CONTEXT",
+        )
+        files[dot_name] = change_one(
+            files[dot_name],
+            b'if (n > 32) throw new Error("MangaAll bounded source search exhausted");',
+            b'if (n > (["Weak Hero","The World After the Fall","Cheese in the Trap"].includes(requestedTitle) ? 80 : 32)) throw new Error("MangaAll bounded source search exhausted");',
+            "MANHWA_DOT_SCOPED_80",
+        )
+        files[dot_name] = change_one(
+            files[dot_name],
+            b'const page = pageNumber(input?.cursor);',
+            b'const page = pageNumber(input?.cursor, title);',
+            "MANHWA_DOT_BIND_PAGE_TITLE",
+        )
     for name in tuple(files):
         if name.startswith("modules/sources/mangafire/"):
             del files[name]
@@ -121,7 +159,8 @@ def candidate_bytes(source_root: Path) -> bytes:
         raise ValueError("ORIGINAL_SOURCE_NETWORK_GRANTS_MISSING")
     perms["network"]["origins"] = sorted(TWO_ORIGINS)
     perms.pop("browser", None)
-    manifest["name"] = "MangaAll — two-source unsigned research"
+    manifest["name"] = ("MangaAll — frozen 30 manhwa source research" if manhwa_only
+                        else "MangaAll — two-source unsigned research")
     files["manifest.json"] = json.dumps(
         manifest, ensure_ascii=False, indent=2
     ).encode("utf-8")
@@ -149,9 +188,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, default=Path("future-code11-source"))
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--manhwa-only", action="store_true",
+                        help="CI-only original-ko and scoped search for frozen manhwa cohort")
     args = parser.parse_args()
     source = args.source.resolve()
-    raw = candidate_bytes(source)
+    raw = candidate_bytes(source, manhwa_only=args.manhwa_only)
     if args.output is not None:
         destination = args.output.resolve()
         if "androidTest/assets" not in str(destination):
@@ -161,7 +202,8 @@ def main():
     print("MANGAALL_DUAL_CODE11|twoSources=PINNED_CODE10_MODULES"
           "|nativeChapterBridge=UNSIGNED_CODE11|signature=UNTOUCHED"
           "|release=NOT_STARTED|mangafire=NOT_IN_PACKAGE"
-          "|sha256=" + hashlib.sha256(raw).hexdigest())
+          "|manhwaOnly=" + ("YES" if args.manhwa_only else "NO") +
+                    "|sha256=" + hashlib.sha256(raw).hexdigest())
 
 
 if __name__ == "__main__":
