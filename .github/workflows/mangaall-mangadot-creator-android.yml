@@ -53,13 +53,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
         with:
           cache-read-only: true
-      - name: Compile work-linked creator alias controls and native coverage regressions
+      - name: Revalidate exact creator alias controls after lint and author detail ID corrections
         run: |
           set -euo pipefail
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
           for attempt in 1 2 3; do
-            if ./gradlew :core:common:spotlessKotlinCheck :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*CreatorAliasProviderTest' --tests '*ResolveMangaAllIndependentCatalogIdentityTest' :core:common:testDebugUnitTest --tests 'tachiyomi.core.provider.runtime.ProviderHostTransformServicesTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :core:common:spotlessKotlinCheck :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*CreatorAliasProviderTest' --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*ProviderWorkSourcePortfolioTest' :core:common:testDebugUnitTest --tests 'tachiyomi.core.provider.runtime.ProviderHostTransformServicesTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               python3 - <<'PY'
           import xml.etree.ElementTree as ET
