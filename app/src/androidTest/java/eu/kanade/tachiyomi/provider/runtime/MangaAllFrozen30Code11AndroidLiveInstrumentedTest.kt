@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageLoader
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
@@ -25,6 +27,7 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
+import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.URI
@@ -76,6 +79,10 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
         assertTrue("Invalid pixel decode opt-in", pixelMode == "0" || pixelMode == "1")
         val pixelProbe = pixelMode == "1"
         assertTrue("Pixel probe requires source Reader metadata probe", !pixelProbe || readerProbe)
+        val appReaderMode = args.getString("mangaAllAppReaderLoaderProbe") ?: "0"
+        assertTrue("Invalid real App Reader loader opt-in", appReaderMode == "0" || appReaderMode == "1")
+        val appReaderProbe = appReaderMode == "1"
+        assertTrue("App Reader loader requires source Reader metadata probe", !appReaderProbe || readerProbe)
         assertTrue("Only three fixed 10-work shards are permitted", shard in 0..2)
         val cohort = instrumentation.context.assets.open(
             "mangaall-dual-source-30-cohort-lock.json",
@@ -315,6 +322,67 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                             "Reader image URL not HTTPS at frozen index ${index + 1}",
                             imageUrl?.startsWith("https://") == true,
                         )
+                    }
+                    if (appReaderProbe) {
+                        // Exercise the app's actual HTTP Reader transport and
+                        // per-provider origin policy, NOT only a raw HTTP client.
+                        // This does not create editorial canonical authority
+                        // or certify on-screen Reader UI/viewer navigation.
+                        val first = readerPages.first().jsonObject
+                        val firstHeaders = (first["headers"] as? JsonObject)
+                            ?.mapValues { (_, value) -> value.jsonPrimitive.content }
+                            ?: emptyMap()
+                        val readerNetworkOrigins = manifest.permissions.network
+                            ?.origins.orEmpty().toSet()
+                        val request = PreparedHttpPage(
+                            url = requireNotNull(first["url"]?.jsonPrimitive?.content),
+                            headers = firstHeaders,
+                            allowedOrigins = readerNetworkOrigins,
+                            allowLocalNetwork = false,
+                        )
+                        val readerLoader = ProviderHttpPageLoader(
+                            requests = listOf(request),
+                            cacheRoot = File(context.cacheDir, "mangaall-app-reader-$shard"),
+                        )
+                        try {
+                            val loadedPage = readerLoader.getPages().single()
+                            readerLoader.loadPage(loadedPage)
+                            assertTrue(
+                                "App Reader loader not ready for frozen index ${index + 1}",
+                                loadedPage.status == Page.State.Ready,
+                            )
+                            val downloaded = requireNotNull(loadedPage.stream).invoke().use { input ->
+                                val output = ByteArrayOutputStream()
+                                val block = ByteArray(16 * 1024)
+                                while (true) {
+                                    val count = input.read(block)
+                                    if (count < 0) break
+                                    assertTrue(
+                                        "App Reader cached pixel exceeds 16MiB for frozen index ${index + 1}",
+                                        output.size() + count <= 16 * 1024 * 1024,
+                                    )
+                                    output.write(block, 0, count)
+                                }
+                                output.toByteArray()
+                            }
+                            val sampled = BitmapFactory.Options().apply { inSampleSize = 8 }
+                            val bitmap = BitmapFactory.decodeByteArray(
+                                downloaded, 0, downloaded.size, sampled,
+                            )
+                            assertTrue(
+                                "App Reader cached bitmap decode failed for frozen index ${index + 1}",
+                                bitmap != null && bitmap.width > 0 && bitmap.height > 0,
+                            )
+                            bitmap!!.getPixel(0, 0)
+                            bitmap.recycle()
+                            println(
+                                "MANGAALL_FROZEN30_APP_READER|index=${index + 1}|shard=$shard" +
+                                    "|loader=REAL_APP_OKHTTP|bitmap=DECODED|uiReader=NOT_TESTED" +
+                                    "|canonical=NOT_TESTED|signed=NO",
+                            )
+                        } finally {
+                            readerLoader.recycle()
+                        }
                     }
                     if (pixelProbe) {
                         // Android HTTPS transport and BitmapFactory decoding ONLY:
