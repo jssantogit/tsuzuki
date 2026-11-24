@@ -29,9 +29,9 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.URI
 import java.net.URL
-import javax.net.ssl.HttpsURLConnection
 import java.security.MessageDigest
 import java.util.UUID
+import javax.net.ssl.HttpsURLConnection
 
 /**
  * NONSHIPPING, source-HID-only Android CI probe for EXACTLY the frozen 30 manhwas.
