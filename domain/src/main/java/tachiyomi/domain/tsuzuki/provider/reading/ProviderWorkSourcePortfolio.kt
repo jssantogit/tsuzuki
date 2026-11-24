@@ -76,7 +76,9 @@ object ProviderWorkSourcePortfolio {
                 expectedAuthors == null -> ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED
                 !detailVerified -> ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED
                 sourceAuthors.isEmpty() -> ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE
-                sourceAuthors.none { it in expectedAuthors } -> ProviderWorkVerification.AUTHOR_CONFLICT
+                sourceAuthors.none { it in expectedAuthors } &&
+                    !hasCatalogAttestedRomanization(providerId, candidate, independentlyVerifiedAuthors.orEmpty()) ->
+                    ProviderWorkVerification.AUTHOR_CONFLICT
                 else -> ProviderWorkVerification.AUTHOR_CORROBORATED
             }
             val qualified = hasSourceAttestedAlternateEdition(
@@ -118,6 +120,24 @@ object ProviderWorkSourcePortfolio {
             .plus(candidate.aliases.asSequence())
             .any { explicitlyQualifiedEdition(it, normalizedBase) } ||
             mangaFireUrlAttestsEditionVariant(providerId, candidate, normalizedBase)
+    }
+
+    // Only a catalog's independently attested native credit may establish
+    // a transliteration comparison. Never compare two similar Latin names.
+    private fun hasCatalogAttestedRomanization(
+        providerId: ProviderId,
+        candidate: ProviderWorkCandidate,
+        verifiedNames: Set<String>,
+    ): Boolean {
+        if (providerId.value != MANGAALL_PROVIDER_ID ||
+            (!candidate.externalWorkId.startsWith(MANGAALL_MANGADEX_PREFIX) &&
+                !candidate.externalWorkId.startsWith("mangadot:"))
+        ) {
+            return false
+        }
+        return candidate.authors.any { source ->
+            HangulCreatorRomanization.matchesUnique(verifiedNames, source)
+        }
     }
 
     private fun creatorKeys(name: String): Set<String> = buildSet {

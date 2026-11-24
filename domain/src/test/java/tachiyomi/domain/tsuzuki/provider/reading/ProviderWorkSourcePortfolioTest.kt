@@ -135,6 +135,61 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
+    fun `romanization is anchored in independently published complete Hangul credits`() {
+        val provider = ProviderId("app.tsuzuki.mangaall")
+        val item = original.copy(externalWorkId = "mangadot:42", title = "Independent Fictional Work")
+        fun assess(
+            names: Set<String>,
+            source: String,
+            candidate: ProviderWorkCandidate = item,
+            query: String = item.title,
+        ): ProviderWorkSourceAssessment = ProviderWorkSourcePortfolio.assess(
+            provider,
+            "en",
+            query,
+            names,
+            listOf(candidate.copy(authors = listOf(source))),
+        ).single()
+
+        for ((native, latin) in listOf(
+            "강 지훈" to "Ji-Hun Kang",
+            "김 서윤" to "Kim Seo-Yun",
+            "문 백현" to "Baek-Hyeon Mun",
+            "우람" to "Woo-Ram",
+            "유 소민" to "Usomin",
+            "권 기운" to "Gi-Un Kwon",
+        )) {
+            val result = assess(setOf(native), latin)
+            result.workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
+            result.canPromoteChapters shouldBe false
+            result.canOpenReader shouldBe false
+        }
+
+        for ((native, latin) in listOf(
+            "강 지훈" to "Kang",
+            "강 지훈" to "Ji-Hun Kim",
+            "강 지훈" to "Ji-Hyeon Kang",
+            "강지훈" to "Ji-Hun Kang",
+            "김 서윤" to "Yun Seo Kim",
+            "김 서윤" to "Kim Seo-Yun Studio",
+            "김 서윤" to "Kim Seo-Yun (다른사람)",
+            "강" to "Kang",
+            "Ji-Hoon Kang" to "Ji-Hun Kang",
+            "Moonrise" to "Moon Rise",
+        )) {
+            assess(setOf(native), latin).workVerification shouldBe ProviderWorkVerification.AUTHOR_CONFLICT
+        }
+
+        assess(setOf("구나", "쿠나"), "Kuna").workVerification shouldBe ProviderWorkVerification.AUTHOR_CONFLICT
+        assess(setOf("강 지훈"), "Ji-Hun Kang", query = "Different Work")
+            .workVerification shouldBe ProviderWorkVerification.TITLE_UNVERIFIED
+        assess(setOf("강 지훈"), "Ji-Hun Kang", item.copy(detailOutcome = ProviderWorkDetailOutcome.DETAIL_FAILED))
+            .workVerification shouldBe ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED
+        assess(setOf("강 지훈"), "Ji-Hun Kang", item.copy(coverageOutcome = ProviderCoverageOutcome.EMPTY))
+            .canCollectProvisionalChapters shouldBe false
+    }
+
+    @Test
     fun `typographic apostrophes do not reject exact titles but suffix differences remain distinct`() {
         val observed = original.copy(
             title = "An Author’s Work",
