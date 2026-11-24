@@ -44,13 +44,18 @@ integrity=complete and all(r["outcome"] not in ("CONTRACT_FAILED","INCOMPLETE") 
     r["empty"]<=r["terminal"] and r["external"]+r["pageLists"]+r["pageFailures"]==r["chapterOne"]
     for r in rows)
 ready=sum(r["outcome"]=="SOURCE_PAGE_LIST_READY" for r in rows)
+# Known externally hosted chapters are coverage observations, not failures.
+# Unexpected errors from reading.pages must not be certified as healthy.
+transport_healthy=integrity and all(r["pageFailures"]==0 for r in rows)
 # A complete observation of missing/externally hosted chapters is NOT a
 # successful chapter-one Reader result, and remains explicitly counted.
 report=dict(schemaVersion=1,scope="MANGADEX_EN_ONLY",shard=shard,
     corpusSha256="19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1",
     instrumentationPassed=process_ok,completeReport=complete,integrity=integrity,
+    transportHealthy=transport_healthy,
     sourcePageListReady=ready,works=rows,canonical="NOT_TESTED",readerPixels="NOT_TESTED")
 Path(sys.argv[4],"verdict.json").write_text(json.dumps(report,indent=2)+"\n")
-print(f"MANGAALL_DEX_AUDIT|shard={shard}|reports={len(rows)}|integrity={integrity}|ready={ready}|expected=10|canonical=NOT_TESTED")
+print(f"MANGAALL_DEX_AUDIT|shard={shard}|reports={len(rows)}|integrity={integrity}|transportHealthy={transport_healthy}|ready={ready}|expected=10|canonical=NOT_TESTED")
 assert integrity, "Incomplete or invalid independent source audit"
+assert transport_healthy, "Unexpected MangaDex page preparation failure"
 PY
