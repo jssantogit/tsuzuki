@@ -127,6 +127,21 @@ jobs:
                   types=[t if isinstance(t,str) and t in known else "OTHER" for t in types]
                   exact_ref=sum(exact_url(o.get("url")) or exact_url(o.get("@id")) for o in credited)
                   people=sum(len(author_names(o.get("author"))) for o in credited)
+                  # Only public bibliographic creator credits; no chapter content or raw HTML.
+                  print("DOT_PUBLIC_CREDITS|index="+str(index)+"|names="+json.dumps([n[:128] for o in credited for n in author_names(o.get("author"))][:12],ensure_ascii=True))
+                  query="query { mangas(search: "+json.dumps(works[index-1])+", page: 1, limit: 25, order: popularity, kind: \"manhwa\") { id name english japanese synonyms personRoles { person { name } rolesEn } } }"
+                  catalog_request=urllib.request.Request("https://shikimori.io/api/graphql",data=json.dumps({"query":query}).encode(),headers={"Content-Type":"application/json","Accept":"application/json","User-Agent":"Tsuzuki-CI-catalog-contract-observation"},method="POST")
+                  with urllib.request.urlopen(catalog_request,timeout=15) as resp:
+                      catalog_raw=resp.read(512*1024+1)
+                  if len(catalog_raw)>512*1024:
+                      raise ValueError("catalog bound")
+                  rows=json.loads(catalog_raw).get("data",{}).get("mangas",[])
+                  exact_catalog=[r for r in rows if normalized(r.get("name"))==normalized(works[index-1])]
+                  if len(exact_catalog)==1:
+                      roles=exact_catalog[0].get("personRoles") or []
+                      names=[str((p.get("person") or {}).get("name") or "")[:128] for p in roles if isinstance(p,dict) and any("Story" in x or "Art" in x for x in p.get("rolesEn") or [])]
+                      print("SHIKI_PUBLIC_CREDITS|index="+str(index)+"|names="+json.dumps(names[:12],ensure_ascii=True))
+
                   url_exact=sum(exact_url(o.get("url")) for o in credited)
                   id_exact=sum(exact_url(o.get("@id")) for o in credited)
                   id_present=sum(o.get("@id") is not None for o in credited)
