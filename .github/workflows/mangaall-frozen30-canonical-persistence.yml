@@ -103,7 +103,7 @@ jobs:
           set -euo pipefail
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
-          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
             cat "$log"
             exit 0
           fi
@@ -112,7 +112,7 @@ jobs:
             exit 1
           fi
           for attempt in 1 2 3; do
-            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               exit 0
             fi
@@ -199,3 +199,5 @@ jobs:
 # Repeat strict frozen cohort with explicit-release confirmation regressions.
 
 # Explicit chapter-release SQLite migration, regression and restored Reader (2026-11-24).
+
+# Independent source lookup lanes and same-owner catalog retries (2026-11-24).
