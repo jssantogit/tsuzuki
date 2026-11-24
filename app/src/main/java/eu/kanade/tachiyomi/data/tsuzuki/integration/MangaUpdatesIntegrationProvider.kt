@@ -17,6 +17,7 @@ import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
+import tachiyomi.domain.tsuzuki.integration.CreatorAliasProvider
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.MetadataProvider
@@ -43,7 +44,7 @@ class MangaUpdatesIntegrationProvider private constructor(
     private val api: MangaUpdatesIntegrationApi,
     private val userLibraryApi: MangaUpdatesUserLibraryApi,
     override val connection: Flow<Boolean>,
-) : SearchProvider, DiscoveryProvider, MetadataProvider, RatingsProvider, UserListProvider {
+) : SearchProvider, DiscoveryProvider, CreatorAliasProvider, RatingsProvider, UserListProvider {
 
     @Inject
     constructor(trackerManager: TrackerManager) : this(
