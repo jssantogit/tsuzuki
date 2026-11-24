@@ -46,7 +46,13 @@ jobs:
           assert all(isinstance(t,str) and 1<=len(t)<=180 and
               'http' not in t.lower() for t in data['works'])
           assert len({t.strip().casefold() for t in data['works']})==30
-          print('MANGAALL_DUAL30_AUTH|works=30|sources=MANGADEX_MANGADOT|provider=IMMUTABLE_CODE10_MODULES|live=AUTHORIZED')
+          lock=json.loads(Path('.github/mangaall-dual-source-30-cohort-lock.json').read_text())
+          assert set(lock)=={'cohort','format','freezeUntil','works'}
+          assert lock['cohort']=='MANHWA_30_FIXED_20261123'
+          assert lock['format']=='manhwa'
+          assert lock['freezeUntil']=='THIRTY_OF_THIRTY_VERIFIED_AND_EXPLICITLY_APPROVED'
+          assert data['works']==lock['works'], 'FROZEN_30_MANHWA_CORPUS_VIOLATED'
+          print('MANGAALL_DUAL30_AUTH|works=30|cohort=MANHWA_FIXED|format=manhwa|sources=MANGADEX_MANGADOT|provider=IMMUTABLE_CODE10_MODULES|live=AUTHORIZED')
           PY
 
   real-dual-source:
