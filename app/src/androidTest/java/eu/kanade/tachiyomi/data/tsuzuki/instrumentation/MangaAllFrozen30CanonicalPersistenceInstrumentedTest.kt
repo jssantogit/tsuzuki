@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageLoader
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -341,11 +342,22 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             if (titles.getById(titleId) != null) return "DIRTY_DATABASE"
             val catalogName = ownerScope(index)
             val bootstrap = ResolveMangaAllIndependentCatalogIdentity(catalogRegistry(setOf(catalogName)))
-            val identity = bootstrap.execute(
+            var identity = bootstrap.execute(
                 works[index - 1],
                 CatalogItemFormat.MANHWA,
                 searchTitle = nativeTitle(index),
             )
+            // Retry only transient catalog unavailability against the same
+            // independent owner. Ambiguous or unverified identities stay red.
+            for (attempt in 1..2) {
+                if (identity.status != MangaAllCatalogIdentityStatus.CATALOG_UNAVAILABLE) break
+                delay(attempt * 2_000L)
+                identity = bootstrap.execute(
+                    works[index - 1],
+                    CatalogItemFormat.MANHWA,
+                    searchTitle = nativeTitle(index),
+                )
+            }
             if (identity.status != MangaAllCatalogIdentityStatus.RESOLVED) return identity.status.name
             val owner = requireNotNull(identity.identity)
             val provenance = identity.toCanonicalReadingMetadata()
