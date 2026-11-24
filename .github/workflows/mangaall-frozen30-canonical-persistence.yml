@@ -103,7 +103,7 @@ jobs:
           set -euo pipefail
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
-          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
             cat "$log"
             exit 0
           fi
@@ -112,7 +112,7 @@ jobs:
             exit 1
           fi
           for attempt in 1 2 3; do
-            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               exit 0
             fi
@@ -195,3 +195,5 @@ jobs:
           test '${{ needs.canonical-restart.result }}' = 'success'
 
 # Frozen cohort repeat: bounded alias discovery and incremental refresh (2026-11-24).
+
+# Repeat strict frozen cohort with explicit-release confirmation regressions.
