@@ -12,6 +12,9 @@
 |---|---|---:|---:|---:|---|
 | [#45302021667](https://github.com/jssantogit/tsuzuki/actions/runs/45302021667) | Primeira execução, etiquetas históricas ainda `manga` no auditor | 24/30 | 44 | 0 | RED legítimo |
 | [#45302391930](https://github.com/jssantogit/tsuzuki/actions/runs/45302391930) | Exatamente os mesmos títulos, etiqueta de fonte `manhwa` e lock aplicado | 24/30 | 44 | 0 | RED legítimo |
+| [#45302867949](https://github.com/jssantogit/tsuzuki/actions/runs/45302867949) | Mesma lista, filtro MangaDex coreano e três obras com aliases comprovados | 24/30 | **45** | 0 | RED legítimo; 29/30 com capítulo 1 em HID |
+
+**Atualização na terceira rodada:** *SSS-Class Revival Hunter* e *Return of the Blossoming Blade* ganharam comprovação de capítulo 1 em HID de fonte após incluir nomes alternativos verificados. O número de obras com capítulo 1 comprovado passou de 27/30 para **29/30**. *Sweet Home* e *Wind Breaker* não apresentam mais conflito de autor entre títulos principais depois de filtrar MangaDex para idioma original coreano; seguem com rivais de fonte/edições e sem edição canônica autorizada. *Raeliana* continua sem correspondência exata/primeiro capítulo comprovado.
 
 **Busca parcial (6/30):** *The Boxer*, *The Horizon*, *Weak Hero*, *The World After the Fall*, *The Breaker*, *Cheese in the Trap*. **Sem comprovação de capítulo nº 1 em qualquer HID auditado (3/30):** *SSS-Class Revival Hunter*, *Return of the Blossoming Blade*, *The Reason Why Raeliana Ended Up at the Duke's Mansion*. **Colisões de autores em títulos principais:** *Sweet Home* e *Wind Breaker*; especificamente para *Wind Breaker*, não misturar a obra coreana com o mangá japonês homônimo. Outras obras apresentaram rivais no mesmo provedor e capítulos sem numeração inicial em uma edição específica, sem prova de ausência da obra.
 
@@ -21,8 +24,11 @@ Embora 27/30 obras tenham ao menos um HID com capítulo 1 e cursor terminal, iss
 
 1. O runner e o agregador agora verificam `manhwa`, `cohort` e a lista exata do lock. Nem reformatar o manifesto nem atualizar o código autoriza substituição das obras.
 2. Adaptação CI-only da busca MangaDex usa `attributes.originalLanguage === "ko"` antes de devolver candidatos ao roteador, para não classificar mangás japoneses homônimos como manhwas. O provider assinado não foi alterado.
-3. Somente três obras recebem **termos adicionais corroborados** para busca, mantendo seus títulos canônicos e seus HIDs independentes: *SSS-Class Revival Hunter* → *SSS-Class Suicide Hunter*; *Return of the Blossoming Blade* → *Return of the Mount Hua Sect*; *The Reason Why Raeliana Ended Up at the Duke's Mansion* → *Why Raeliana Ended Up at the Duke's Mansion*. Essas variantes NÃO promovem identidade automaticamente.
+3. Somente três obras recebem **termos adicionais corroborados** para busca, mantendo seus títulos canônicos e seus HIDs independentes: *SSS-Class Revival Hunter* → *SSS-Class Suicide Hunter*; *Return of the Blossoming Blade* → *Return of the Mount Hua Sect*; *The Reason Why Raeliana Ended Up at the Duke's Mansion* → *Why Raeliana Ended Up at the Duke's Mansion* e o título original `그녀가 공작저로 가야 했던 사정`. Essas variantes NÃO promovem identidade automaticamente.
 4. Repetir o live com o mesmo manifesto até distinguir limites de paginação, ausência genuína de capítulos na fonte, erro do provider e ambiguidades legítimas. Nunca completar páginas omitidas por inferência ou atribuir autoria inexistente.
+
+
+**4ª CI do corpus fixo:** [#45303354025](https://github.com/jssantogit/tsuzuki/actions/runs/45303354025) coleta, sem dados sensíveis, o total de páginas que o MangaDot anuncia em cada busca; isso permite distinguir orçamento real de 32 páginas de buscas ainda muito maiores. Conferir agregador antes de afirmar resultados. A instrumentação e testes negativos offline passaram em [#45302868058](https://github.com/jssantogit/tsuzuki/actions/runs/45302868058) e [#45302985077](https://github.com/jssantogit/tsuzuki/actions/runs/45302985077).
 
 ## Critério para encerrar o corpus
 
