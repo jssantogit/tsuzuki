@@ -14,10 +14,15 @@ data class MUAuthor(
 @Serializable
 data class MUAuthorDetail(
     @SerialName("author_id")
-    val authorId: Long,
+    val authorId: Long? = null,
     val name: String,
     val associated: List<MUAuthorName> = emptyList(),
-)
+    val id: Long? = null,
+) {
+    fun confirmsId(expected: Long): Boolean = expected > 0 &&
+        (authorId == expected || id == expected) &&
+        (authorId == null || authorId == expected) && (id == null || id == expected)
+}
 
 @Serializable
 data class MUAuthorName(
