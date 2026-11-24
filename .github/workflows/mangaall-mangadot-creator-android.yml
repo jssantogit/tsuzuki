@@ -52,7 +52,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
         with:
           cache-read-only: true
-      - name: Run discoverable JUnit DOM regressions and build Android APKs
+      - name: Validate same-document JSON-LD IDs through actual Android Host
         run: |
           set -euo pipefail
           log="$(mktemp)"
