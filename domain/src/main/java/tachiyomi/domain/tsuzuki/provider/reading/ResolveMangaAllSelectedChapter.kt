@@ -16,11 +16,14 @@ class ResolveMangaAllSelectedChapter(
     private val chapterSources: ResolveProviderChapterReading,
     private val selectedSource: ResolveMangaAllSelectedReadingOption,
 ) {
-    suspend fun execute(canonicalChapterId: String, requestedLanguage: String): ProviderChapterReadingOption? {
-        if (canonicalChapterId.isBlank() || requestedLanguage.isBlank()) return null
-        val chapter = canonicalChapters.getById(canonicalChapterId) ?: return null
+    suspend fun execute(canonicalChapterId: String, requestedLanguage: String): ProviderChapterReadingOption? =
+        options(canonicalChapterId, requestedLanguage).singleOrNull()
+
+    suspend fun options(canonicalChapterId: String, requestedLanguage: String): List<ProviderChapterReadingOption> {
+        if (canonicalChapterId.isBlank() || requestedLanguage.isBlank()) return emptyList()
+        val chapter = canonicalChapters.getById(canonicalChapterId) ?: return emptyList()
         val validated = chapterSources.options(canonicalChapterId)
-        return selectedSource.select(
+        return selectedSource.options(
             canonicalTitleId = chapter.canonicalTitleId,
             canonicalChapterId = canonicalChapterId,
             requestedLanguage = requestedLanguage,
