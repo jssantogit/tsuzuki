@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.tsuzuki.instrumentation
 
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.App
@@ -43,6 +44,7 @@ import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.MetadataProvider
 import tachiyomi.domain.tsuzuki.integration.RatingsProvider
@@ -215,6 +217,15 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             val identities = titles.getExternalIdentities(titleId)
             if (identities.size != 1 || !identities.single().verified) return null
             val owner = identities.single()
+            val ownerIntegration = IntegrationId(owner.provider)
+            if (snapshot.metadata.externalIds[ownerIntegration] != owner.externalId) return null
+            val credits = listOfNotNull(snapshot.metadata.authors, snapshot.metadata.artists)
+            if (credits.isEmpty() || credits.any {
+                    it.providerId != ownerIntegration || it.externalId != owner.externalId || it.value.isEmpty()
+                }
+            ) {
+                return null
+            }
             if (titles.getByExternalIdentity(owner.provider, owner.externalId)?.id != titleId) return null
             val chapterRows = chapters.getByCanonicalTitleId(titleId)
             val one = chapterRows.filter {
@@ -244,9 +255,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 add(owner.provider)
                 add(owner.externalId)
                 addAll(snapshot.metadata.externalIds.entries.map { "${it.key.value}:${it.value}" }.sorted())
+                addAll(credits.flatMap { it.value }.sorted())
                 add(one.id)
                 add(option.readerSourceKey)
-                addAll(chapterRows.map { it.id }.sorted())
+                addAll(chapterRows.map { listOf(it.id, it.sortKey, it.confirmation.name).joinToString("\u0000") }.sorted())
                 addAll(rows.map {
                     listOf(it.evidence.producerId, it.evidence.externalChapterKey, it.mappedCanonicalChapterId)
                         .joinToString("\u0000")
@@ -295,6 +307,12 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             return "COLLECTED"
         }
 
+        instrument.sendStatus(
+            1,
+            Bundle().apply {
+                putString("stream", "MANGAALL_CANONICAL_PROCESS|phase=$phase|shard=$shard|pid=${Process.myPid()}")
+            },
+        )
         var passed = 0
         for (index in (shard * 10 + 1)..(shard * 10 + 10)) {
             val titleId = "mangaall-frozen30-canonical-$index"
