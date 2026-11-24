@@ -89,9 +89,40 @@ const adaptedDotHttp = originalDotHttp.replace(
 );
 const adaptedDotHttpUri = 'data:text/javascript;base64,' +
   Buffer.from(adaptedDotHttp, 'utf8').toString('base64');
+// Preserve the ORIGINAL fail-closed conditions, but distinguish the exact
+// pagination guard responsible for rejection. This affects only the UNSIGNED
+// live investigation, not the source adapter in the signed code10 package.
+const originalPagingGuard = `  if (!Array.isArray(rows) || rows.length > 56 ||
+      (current != null && (!Number.isInteger(current) || current !== page)) ||
+      (total != null && (!Number.isInteger(total) || total < 0 || total > 32)) ||
+      (cursor != null && typeof cursor !== "string") ||
+      (hasNext && (rows.length === 0 || page >= 32))) {
+    throw new Error("MangaAll invalid API response");
+  }`;
+assert.equal(originalDotSource.split(originalPagingGuard).length, 2,
+  'MangaDot pagination source guard changed; audit before modifying CI diagnostics');
+const typedPagingGuard = `  if (!Array.isArray(rows) || rows.length > 56) {
+    throw new Error("MangaAll source lookup invalid rows");
+  }
+  if (current != null && (!Number.isInteger(current) || current !== page)) {
+    throw new Error("MangaAll source lookup invalid current");
+  }
+  if (total != null && (!Number.isInteger(total) || total < 0 || total > 32)) {
+    throw new Error("MangaAll source lookup invalid total");
+  }
+  if (cursor != null && typeof cursor !== "string") {
+    throw new Error("MangaAll source lookup invalid cursor");
+  }
+  if (hasNext && rows.length === 0) {
+    throw new Error("MangaAll source lookup empty continuation");
+  }
+  if (hasNext && page >= 32) {
+    throw new Error("MangaAll bounded source search exhausted");
+  }`;
 const experimentalDotCode = originalDotSource
   .replace(sourcePageLimit,
     'if (n > 32) throw new Error("MangaAll bounded source search exhausted");')
+  .replace(originalPagingGuard, typedPagingGuard)
   .replace(originalHttpImport, 'from "' + adaptedDotHttpUri + '"');
 const extendedMangaDot = await import('data:text/javascript;base64,' +
   Buffer.from(experimentalDotCode, 'utf8').toString('base64'));
@@ -218,6 +249,15 @@ function closedError(err) {
     return 'INVALID_CONTRACT';
   }
   if (/bounded source search exhausted/i.test(message)) return 'SOURCE_LOOKUP_PAGE_BUDGET';
+  for (const [detail, code] of [
+    ['invalid rows', 'SOURCE_PAGING_ROWS_INVALID'],
+    ['invalid current', 'SOURCE_PAGING_CURRENT_INVALID'],
+    ['invalid total', 'SOURCE_PAGING_TOTAL_INVALID'],
+    ['invalid cursor', 'SOURCE_PAGING_CURSOR_INVALID'],
+    ['empty continuation', 'SOURCE_PAGING_EMPTY_CONTINUATION'],
+  ]) {
+    if (message.includes('MangaAll source lookup ' + detail)) return code;
+  }
   if (/invalid API response|incomplete page/i.test(message)) return 'SOURCE_PAGINATION_INVALID';
   if (/response too large/i.test(message)) return 'OVERSIZED_UPSTREAM_RESPONSE';
   if (/request limit/i.test(message)) return 'SOURCE_REQUEST_BUDGET';
