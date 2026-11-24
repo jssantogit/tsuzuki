@@ -60,9 +60,13 @@ class ResolveMangaAllIndependentCatalogIdentity(
     suspend fun execute(
         title: String,
         format: CatalogItemFormat? = null,
+        searchTitle: String? = null,
     ): MangaAllCatalogIdentityResult = coroutineScope {
         val query = title.trim()
         require(query.isNotBlank() && query.length <= 256)
+        // A more selective native-title query is a retrieval hint, not an identity override.
+        val retrievalQuery = searchTitle?.trim() ?: query
+        require(retrievalQuery.isNotBlank() && retrievalQuery.length <= 256)
         registry.awaitReady()
         // A reading provider can never self-corroborate its own candidate.
         val sources = registry.searchProviders()
@@ -83,7 +87,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
 
         val gate = Semaphore(MAX_CONCURRENT_CATALOGS)
         val results = sources.map { source ->
-            async { gate.withPermit { searchFully(source, query, format) } }
+            async { gate.withPermit { searchFully(source, retrievalQuery, format) } }
         }.awaitAll()
         val failures = results.count { it.failed }
         val observed = results.flatMap(SourceSearchResult::items)
@@ -148,6 +152,9 @@ class ResolveMangaAllIndependentCatalogIdentity(
                 } &&
                 (listOf(it.title) + it.titles.values).any { name ->
                     normalize(name) == normalize(query)
+                } &&
+                (listOf(it.title) + it.titles.values).any { name ->
+                    normalize(name) == normalize(retrievalQuery)
                 }
         } ?: return@coroutineScope fields.copy(status = MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED)
 
