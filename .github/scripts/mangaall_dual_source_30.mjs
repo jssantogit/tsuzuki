@@ -416,29 +416,51 @@ async function offlineContracts() {
   assert.equal(last.lookupHttpStatus, 503);
   assert.equal(last.items.length, 0);
   assert.equal(last.nextCursor, null);
+  // Reproduce a real search with >24 sorted HIDs. Source-ID ordering must NOT
+  // discard the exact-title candidate before a per-HID chapter audit. This is
+  // an unsigned CI telemetry regression, not evidence of canonical identity.
+  const decoys = Array.from({length: 26}, (_, index) => ({
+    externalWorkId: 'mangadex:decoy-' + String(index).padStart(2, '0'),
+    title: 'Monster Edition ' + index, aliases: [], authors: ['Test Creator'],
+  }));
+  const primary = {
+    externalWorkId: 'mangadex:z-exact', title: 'Monster',
+    aliases: [], authors: ['Test Creator'],
+  };
+  const alias = {
+    externalWorkId: 'mangadex:z-alias', title: 'An Unrelated Series',
+    aliases: ['Monster'], authors: ['Another Creator'],
+  };
+  const fixture = async rows => {
+    const probe = await probeJourney({
+      async lookup(input) {
+        assert.deepEqual(input.titles, ['Monster']);
+        return {items: rows, nextCursor: null};
+      },
+      async chapters() { throw Error('PREVIEW_NOT_CANONICAL'); },
+    }, {...works[0], names: ['Monster'], format: 'manga'}, [], {
+      lookupContract: 'v1', lookupPageLimit: 32, chapterPageLimit: 8,
+      includeCandidates: true, includeCandidateCoverage: false,
+    });
+    assert.equal(probe.lookupComplete, true);
+    assert.equal(probe.candidateCount, rows.length);
+    assert.equal(probe.candidateSummariesTruncated, true);
+    assert.equal(probe.candidateSummaries.length, 24);
+    assert.equal(probe.candidateSummaries[0].workId, primary.externalWorkId);
+    return probe;
+  };
+  const single = await fixture([...decoys, primary]);
+  assert.equal(single.matchingWorkCount, 1);
+  assert.equal(single.unresolvedCandidates, false);
+  assert.equal(single.chapters, 'NOT_TESTED');
+  const rival = await fixture([...decoys, primary, alias]);
+  assert.equal(rival.matchingWorkCount, 2);
+  assert.equal(rival.unresolvedCandidates, true);
+  assert.equal(rival.candidateSummaries[1].workId, alias.externalWorkId);
+  assert.equal(rival.chapters, 'AMBIGUOUS_NOT_AUTHORIZED');
   console.log('MANGAALL_DUAL30_OFFLINE|outcome=PASS|sources=MANGADEX_MANGADOT' +
     '|mangafire=NOT_CALLED|router=ORIGINAL_MODULE_ADAPTED_IN_MEMORY|signedPackage=UNTOUCHED');
 }
-const mode = process.argv[2];
-if (mode === '--offline') {
-  await offlineContracts();
-  process.exit(0);
-}
-if (mode === '--plan') {
-  console.log(JSON.stringify({
-    scope: 'UNSIGNED_TWO_SOURCE_CI_PREVIEW_FROM_IMMUTABLE_CODE10_MODULES',
-    sourceRepositoryCommit: PROVIDER_SHA, sources: SOURCES, workCount: 30,
-    selectedShard: shard, shardCount: count,
-    assigned: assigned.map(w => ({ id: w.id, title: w.names[0] })),
-    network: 'NOT_STARTED', signedSourceReissued: false,
-    canonicalBinding: 'NOT_AUTHORIZED',
-  }));
-  process.exit(0);
-}
-if (mode !== '--live' || process.env.MANGAALL_DUAL30_ACK !== ACK) {
-  throw Error('Live MangaALL two-source 30 requires explicit opt-in');
-}
-const { createHttpBridge } = await importFromProvider('tooling/mangaall_live_probe_core.mjs');
 // Raise only the UNSIGNED CI probe's overall lookup budget from 8 to 32.
 // In the released Host, this is a limit requiring separate implementation.
 const originalJourney = readFileSync(path.join(
@@ -465,6 +487,26 @@ const extendedJourneyCode = originalJourney
 const { probeJourney, journeyVerdict } =
   await import('data:text/javascript;base64,' +
     Buffer.from(extendedJourneyCode, 'utf8').toString('base64'));
+const mode = process.argv[2];
+if (mode === '--offline') {
+  await offlineContracts();
+  process.exit(0);
+}
+if (mode === '--plan') {
+  console.log(JSON.stringify({
+    scope: 'UNSIGNED_TWO_SOURCE_CI_PREVIEW_FROM_IMMUTABLE_CODE10_MODULES',
+    sourceRepositoryCommit: PROVIDER_SHA, sources: SOURCES, workCount: 30,
+    selectedShard: shard, shardCount: count,
+    assigned: assigned.map(w => ({ id: w.id, title: w.names[0] })),
+    network: 'NOT_STARTED', signedSourceReissued: false,
+    canonicalBinding: 'NOT_AUTHORIZED',
+  }));
+  process.exit(0);
+}
+if (mode !== '--live' || process.env.MANGAALL_DUAL30_ACK !== ACK) {
+  throw Error('Live MangaALL two-source 30 requires explicit opt-in');
+}
+const { createHttpBridge } = await importFromProvider('tooling/mangaall_live_probe_core.mjs');
 const stats = [], wireRecords = [], bridges = new Map();
 for (const [origin, source] of Object.entries(ORIGINS)) {
   bridges.set(origin, createHttpBridge({
