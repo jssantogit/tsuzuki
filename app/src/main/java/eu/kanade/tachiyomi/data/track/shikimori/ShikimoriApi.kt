@@ -128,6 +128,9 @@ class ShikimoriApi(
                 |mangas(search: $query, limit: 20, kind:"!light_novel,!novel") {
                     |id
                     |name
+                    |english
+                    |japanese
+                    |synonyms
                     |chapters
                     |kind
                     |poster {
@@ -226,6 +229,9 @@ class ShikimoriApi(
                     |mangas($arguments) {
                         |id
                         |name
+                        |english
+                        |japanese
+                        |synonyms
                         |chapters
                         |kind
                         |poster {
@@ -281,6 +287,9 @@ class ShikimoriApi(
                 |mangas(ids: $query, limit: 1, kind:"!light_novel,!novel") {
                     |id
                     |name
+                    |english
+                    |japanese
+                    |synonyms
                     |chapters
                     |kind
                     |poster {
