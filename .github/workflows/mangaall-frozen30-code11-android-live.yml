@@ -1,0 +1,115 @@
+name: MangaALL — frozen 30 manhwas, unsigned code11 REAL Android Host (OPT-IN)
+# Exactly the immutable 30-work cohort, 3 isolated Android emulator jobs of 10.
+# Real network, QuickJS and Binder; source-HID-only evidence, NO editorial
+# canonical binding, Reader image pixels, signing or releases.
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/workflows/mangaall-frozen30-code11-android-live.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-frozen30-code11-android-live
+  cancel-in-progress: false
+
+jobs:
+  frozen-manhwa-native-chapters:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 95
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Require workflow-only opt-in, immutable cohort and script checks
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/run_mangaall_frozen30_code11_android_live.sh
+          python3 -m py_compile .github/scripts/mangaall_code11_dual_source_unsigned.py
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import subprocess
+          files = subprocess.check_output(
+              ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+              text=True,
+          ).splitlines()
+          assert files == [".github/workflows/mangaall-frozen30-code11-android-live.yml"], files
+          src = Path(".github/mangaall-dual-source-30-cohort-lock.json")
+          lock = json.loads(src.read_text())
+          request = json.loads(Path(".github/mangaall-dual-source-30-request.json").read_text())
+          works = lock["works"]
+          assert lock["cohort"] == "MANHWA_30_FIXED_20261123"
+          assert lock["format"] == "manhwa"
+          assert lock["freezeUntil"] == "THIRTY_OF_THIRTY_VERIFIED_AND_EXPLICITLY_APPROVED"
+          assert isinstance(works, list) and len(works) == len(set(works)) == 30
+          assert request["works"] == works
+          digest = hashlib.sha256(json.dumps(
+              works, ensure_ascii=False, separators=(",", ":")
+          ).encode("utf-8")).hexdigest()
+          assert digest == "19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1"
+          kotlin = Path("app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFrozen30Code11AndroidLiveInstrumentedTest.kt").read_text()
+          runner = Path(".github/scripts/run_mangaall_frozen30_code11_android_live.sh").read_text()
+          assert digest in kotlin
+          assert "mangaAllFrozen30Shard" in kotlin and "mangaAllFrozen30Shard" in runner
+          assert "I_ACCEPT_MANGAALL_TWO_SOURCE_CODE11_ANDROID_LIVE" in kotlin and "I_ACCEPT_MANGAALL_TWO_SOURCE_CODE11_ANDROID_LIVE" in runner
+          assert "airplane-mode disable" in runner
+          Path("app/src/androidTest/assets").mkdir(parents=True, exist_ok=True)
+          destination = Path("app/src/androidTest/assets/mangaall-dual-source-30-cohort-lock.json")
+          destination.write_bytes(src.read_bytes())
+          print("MANGAALL_FROZEN30_ANDROID|cohort=LOCKED|works=30|shards=3|reader=NOT_TESTED|signed=UNCHANGED")
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: future-code11-source
+          persist-credentials: false
+      - name: Stage pinned source in NONSHIPPING unsigned code11 research ZIP
+        run: |
+          set -euo pipefail
+          test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
+          python3 .github/scripts/mangaall_code11_dual_source_unsigned.py \
+            --source future-code11-source \
+            --output app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          test -s app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          ! git ls-files --error-unmatch app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Compile code11 Android Host and frozen-cohort instrumentation
+        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Enable KVM for GitHub-hosted Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Validate ten fixed manhwas on real Android Host, shard ${{ matrix.shard }}
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_frozen30_code11_android_live.sh ${{ matrix.shard }}
+      - name: Upload ONLY sanitized Android cohort verdict
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-frozen30-code11-android-shard-${{ matrix.shard }}
+          path: .github/results/mangaall-frozen30-code11-android-live/shard-${{ matrix.shard }}/
+          if-no-files-found: ignore
+          retention-days: 2
