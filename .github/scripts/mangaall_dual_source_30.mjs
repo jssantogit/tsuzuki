@@ -447,9 +447,21 @@ const originalJourney = readFileSync(path.join(
 const oldJourneyCeiling = 'lookupPageLimit > 8';
 assert.equal(originalJourney.split(oldJourneyCeiling).length, 2,
   'Pinned real journey source changed, cannot adapt page budget safely');
-const extendedJourneyCode = originalJourney.replace(
-  oldJourneyCeiling, 'lookupPageLimit > 32',
-);
+// The pinned journey keeps all HIDs for its match decision but only exports
+// the first 24 bounded metadata summaries. Prioritize exact title/alias hits
+// in this UNSIGNED diagnostic copy: otherwise broad queries can truncate the
+// very HID that was found, falsely making the per-HID chapter audit look empty.
+// Never promote a match to an editorial binding; rivals remain unresolved.
+const originalSummaryOrder = `const observed = [...candidates.values()].sort((a, b) =>
+      a.externalWorkId.localeCompare(b.externalWorkId));`;
+assert.equal(originalJourney.split(originalSummaryOrder).length, 2,
+  'Pinned journey candidate summary order changed; audit required');
+const prioritySummaryOrder = `const observed = [...candidates.values()].sort((a, b) =>
+      Number(exact(b, titles)) - Number(exact(a, titles)) ||
+      a.externalWorkId.localeCompare(b.externalWorkId));`;
+const extendedJourneyCode = originalJourney
+  .replace(oldJourneyCeiling, 'lookupPageLimit > 32')
+  .replace(originalSummaryOrder, prioritySummaryOrder);
 const { probeJourney, journeyVerdict } =
   await import('data:text/javascript;base64,' +
     Buffer.from(extendedJourneyCode, 'utf8').toString('base64'));
