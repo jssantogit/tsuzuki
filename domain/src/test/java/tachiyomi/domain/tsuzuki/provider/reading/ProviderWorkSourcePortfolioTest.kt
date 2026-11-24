@@ -66,6 +66,29 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
+    fun `typographic apostrophes do not reject exact titles but suffix differences remain distinct`() {
+        val observed = original.copy(
+            title = "An Author’s Work",
+        )
+        val exact = ProviderWorkSourcePortfolio.assess(
+            ProviderId("app.tsuzuki.mangafire"),
+            "en",
+            "An Author's Work",
+            setOf("Fujimoto Tatsuki"),
+            listOf(observed),
+        )
+        exact.single().workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
+        val different = ProviderWorkSourcePortfolio.assess(
+            ProviderId("app.tsuzuki.mangafire"),
+            "en",
+            "An Author's Work 2",
+            setOf("Fujimoto Tatsuki"),
+            listOf(observed),
+        )
+        different.single().workVerification shouldBe ProviderWorkVerification.TITLE_UNVERIFIED
+    }
+
+    @Test
     fun `same work with two readable HIDs preserves both identities without choosing an edition`() {
         val portfolio = ProviderWorkSourcePortfolio.assess(
             providerId = ProviderId("app.tsuzuki.mangafire"),
