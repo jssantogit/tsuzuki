@@ -178,9 +178,24 @@ const granularMangaDotAdapter = {
     return granularPage(rows, offset, fingerprint);
   },
 };
+// Diagnostics only: do not swallow the source's exception. Observe precisely
+// which original adapter rejected the source lookup, without storing its raw
+// message, URI, request body, response or headers.
+const sourceLookupFailures = [];
+const tracedLookup = (source, originalLookup) => async input => {
+  try {
+    return await originalLookup(input);
+  } catch (err) {
+    sourceLookupFailures.push({ source, reason: closedError(err) });
+    throw err;
+  }
+};
 const dualReading = router.createMangaAllReading({
-  mangadex: { ...dexModule.default.reading, chapters: extendedMangaDex.chapters },
-  mangadot: granularMangaDotAdapter,
+  mangadex: { ...dexModule.default.reading,
+    lookup: tracedLookup('mangadex', dexModule.default.reading.lookup),
+    chapters: extendedMangaDex.chapters },
+  mangadot: { ...granularMangaDotAdapter,
+    lookup: tracedLookup('mangadot', extendedMangaDot.lookup) },
 });
 
 function safeTestId(value) {
@@ -202,6 +217,8 @@ function closedError(err) {
   if (/invalid (?:cursor|chapter|source|binding|language|response)/i.test(message)) {
     return 'INVALID_CONTRACT';
   }
+  if (/bounded source search exhausted/i.test(message)) return 'SOURCE_LOOKUP_PAGE_BUDGET';
+  if (/invalid API response|incomplete page/i.test(message)) return 'SOURCE_PAGINATION_INVALID';
   if (/response too large/i.test(message)) return 'OVERSIZED_UPSTREAM_RESPONSE';
   if (/request limit/i.test(message)) return 'SOURCE_REQUEST_BUDGET';
   if (/timeout/i.test(message) || err?.name === 'TimeoutError') return 'TIMEOUT';
@@ -435,6 +452,7 @@ const results = [];
 for (const [index, work] of assigned.entries()) {
   const before = stats.length;
   const beforeWire = wireRecords.length;
+  const beforeSourceFailure = sourceLookupFailures.length;
   let probe, failure = null;
   try {
     probe = await probeJourney(dualReading, work, grants, {
@@ -460,6 +478,7 @@ for (const [index, work] of assigned.entries()) {
   }
   const observations = stats.slice(before);
   const wireObserved = wireRecords.slice(beforeWire);
+  const lookupFailures = sourceLookupFailures.slice(beforeSourceFailure);
   const bySource = Object.fromEntries(SOURCES.map(source => [source, {
     maxUpstreamBodyBytes: Math.max(0, ...wireObserved.filter(x => x.source === source).map(x => x.bytes)),
     upstreamOver192KiB: wireObserved.filter(x => x.source === source && x.bytes > 192 * 1024).length,
@@ -479,6 +498,8 @@ for (const [index, work] of assigned.entries()) {
     // messages, cookies, URLs, response bodies or an unverified failure claim.
     lookupError: typeof probe.lookupError === 'string' &&
       /^[A-Z0-9_]{1,45}$/.test(probe.lookupError) ? probe.lookupError : null,
+    sourceLookupFailures: lookupFailures.slice(0, 16),
+    sourceLookupFailuresTruncated: lookupFailures.length > 16,
     lookupPages: probe.lookupPages ?? 0, lookupComplete: probe.lookupComplete === true,
     candidateCount: probe.candidateCount ?? 0,
     candidateSummariesTruncated: probe.candidateSummariesTruncated === true,
