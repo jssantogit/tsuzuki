@@ -49,6 +49,16 @@ class ResolveMangaAllSelectedReadingOptionTest {
         // different internal source never rescues the explicit selection.
         dotResolver.select(title, "chapter-1", "en", listOf(dexOption, dotOption, secondDot)) shouldBe null
         dexResolver.select(title, "chapter-1", "en", listOf(dexOption, dotOption, secondDot)) shouldBe dexOption
+        val rivalWork = option(dot.copy(externalWorkId = "mangadot:999"), "mangadot:chapters:999")
+        val otherChapter = dotOption.copy(canonicalChapterId = "chapter-2")
+        val wrongLanguage = option(dot.copy(facetId = "pt-br"), "mangadot:chapters:321")
+        val wrongSource = option(dot, "mangafire:chapter")
+        val all = listOf(dexOption, dotOption, secondDot, rivalWork, otherChapter, wrongLanguage, wrongSource)
+        dotResolver.options(title, "chapter-1", "en", all) shouldBe listOf(dotOption, secondDot)
+        dotResolver.options(title, "chapter-1", "pt-br", all) shouldBe emptyList()
+        dotResolver.options("other-title", "chapter-1", "en", all) shouldBe emptyList()
+        dexResolver.options(title, "chapter-1", "en", all) shouldBe listOf(dexOption)
+        dotResolver.select(title, "chapter-1", "en", all) shouldBe null
     }
 
     @Test
