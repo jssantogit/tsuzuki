@@ -147,7 +147,11 @@ def check_shard(payload, index, works):
                     type(data.get("upstreamOver192KiB")) is int and
                     0 <= data["upstreamOver192KiB"] <= 320 and all(
                 type(data.get(f)) is int and 0 <= data[f] <= 320 for f in fields
-            ) and data["requests"] == sum(data[f] for f in fields[1:]),
+            ) and data["requests"] == sum(data[f] for f in fields[1:]) and
+            type(data.get("searchPagesObserved", 0)) is int and
+            0 <= data.get("searchPagesObserved", 0) <= data["http200"] and
+            type(data.get("searchRowsObserved", 0)) is int and
+            0 <= data.get("searchRowsObserved", 0) <= 100 * data.get("searchPagesObserved", 0),
                 "SOURCE_HTTP_COUNTERS_INVALID")
         require(type(row.get("candidateCount")) is int and
                 0 <= row["candidateCount"] <= 1_000_000 and
@@ -232,6 +236,8 @@ def aggregate(works, payloads):
             "lookupUpstreamErrors": 0,
             "multisourceParallelWithoutSameSourceRivals": 0,
             "sourceLookupFailuresObserved": 0,
+            "sourceSearchPagesObserved": 0, "sourceSearchRowsObserved": 0,
+            "noCandidateDespiteUpstreamSearchRows": 0,
         },
         "works": [],
     }
@@ -278,6 +284,17 @@ def aggregate(works, payloads):
         if row.get("sourceLookupFailuresTruncated"):
             issues.append("SOURCE_LOOKUP_DIAGNOSTICS_TRUNCATED")
         if row["candidateCount"] == 0: issues.append("NO_SOURCE_CANDIDATE")
+        source_search_rows = sum(
+            x.get("searchRowsObserved", 0) for x in row["httpBySource"].values()
+        )
+        source_search_pages = sum(
+            x.get("searchPagesObserved", 0) for x in row["httpBySource"].values()
+        )
+        counts["sourceSearchRowsObserved"] += source_search_rows
+        counts["sourceSearchPagesObserved"] += source_search_pages
+        if row["candidateCount"] == 0 and source_search_rows > 0:
+            counts["noCandidateDespiteUpstreamSearchRows"] += 1
+            issues.append("UPSTREAM_SEARCH_ROWS_WITHOUT_EXACT_MATCH")
         if row.get("candidateSummariesTruncated"): issues.append("CANDIDATES_TRUNCATED")
         for source, http in row["httpBySource"].items():
             counts["http403"] += http["http403"]
@@ -331,6 +348,10 @@ def aggregate(works, payloads):
             "sourceLookupFailures": row.get("sourceLookupFailures", []),
             "sourceLookupFailuresTruncated": row.get("sourceLookupFailuresTruncated", False),
             "candidates": row["candidateCount"],
+            "sourceSearchRowsObserved": {
+                source: http.get("searchRowsObserved", 0)
+                for source, http in row["httpBySource"].items()
+            },
             "ambiguous": bool(row.get("unresolvedCandidates")),
             "sameSourceRivals": bool(row.get("sameSourceRivals")),
             "candidateMultiplicityClass": multiplicity,
@@ -519,12 +540,15 @@ def main():
                   ) +
                   "|multiplicity=" + row["candidateMultiplicityClass"] +
                   "|chapterOne=" + str(row["atLeastOneCompleteSourceChapterOne"]) +
+                  "|rawSearchRows=" + str(sum(row["sourceSearchRowsObserved"].values())) +
                   "|issues=" + ",".join(row["issues"]))
         print("MANGAALL_DUAL30_GATE|outcome=" + report["outcome"] +
               "|works=30|sources=2|completeLookup=" + str(counts["completeLookup"]) +
               "|ambiguous=" + str(counts["ambiguous"]) +
               "|completeChapterAudits=" + str(counts["completeChapterAudits"]) +
               "|oversized64K=" + str(counts["oversized64KiB"]) +
+              "|rawSearchRows=" + str(counts["sourceSearchRowsObserved"]) +
+              "|emptyMatchWithRawRows=" + str(counts["noCandidateDespiteUpstreamSearchRows"]) +
               "|canonical=NOT_TESTED|mangafire=EXCLUDED")
         if os.getenv("GITHUB_STEP_SUMMARY"):
             with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
