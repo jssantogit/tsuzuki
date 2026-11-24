@@ -57,15 +57,17 @@ class MangaUpdatesIntegrationProvider private constructor(
         val text = query.query?.trim().orEmpty()
         if (text.isEmpty()) return@capture CatalogPage(emptyList(), false)
 
-        val all = api.search(text)
-        val page = all
-            .drop(query.offset.coerceAtLeast(0))
-            .take(query.limit.coerceAtLeast(0))
+        val offset = query.offset.coerceAtLeast(0)
+        val limit = query.limit.coerceAtLeast(0)
+        if (limit == 0) return@capture CatalogPage(emptyList(), false)
+        val page = api.searchWindow(text, offset, limit)
+        check(page.items.size <= limit && page.totalHits >= 0)
+        check(page.items.size.toLong() == (page.totalHits.toLong() - offset).coerceIn(0L, limit.toLong()))
 
         CatalogPage(
-            items = page.map { it.toIntegrationCatalogItem(integrationId.value) },
-            hasNextPage = query.offset + page.size < all.size,
-            totalCount = all.size,
+            items = page.items.map { it.toIntegrationCatalogItem(integrationId.value) },
+            hasNextPage = offset.toLong() + page.items.size < page.totalHits,
+            totalCount = page.totalHits,
         )
     }
 
