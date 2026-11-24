@@ -435,6 +435,7 @@ async function offlineContracts() {
   assert.equal(Object.keys(verifiedAliasQueries).length, 3);
   assert.ok(experimentalDotCode.includes('if (n > 80) throw new Error('));
   assert.ok(extendedJourneyCode.includes('lookupPageLimit > 80'));
+  assert.ok(extendedJourneyCode.includes('sameExactTitle(candidate.title, title)'));
   // Regression: original-language metadata is required for Korean manhwa.
   // The source adapter must continue to reject unverified Japanese-language
   // works even when the translated English title is identical.
@@ -572,14 +573,35 @@ const originalSummaryOrder = `const observed = [...candidates.values()].sort((a,
 assert.equal(originalJourney.split(originalSummaryOrder).length, 2,
   'Pinned journey candidate summary order changed; audit required');
 const prioritySummaryOrder = `const exactPrimary = candidate => titles.some(title =>
-      normalize(candidate.title) === normalize(title));
+      sameExactTitle(candidate.title, title));
     const matchRank = candidate => exactPrimary(candidate) ? 2 :
       exact(candidate, titles) ? 1 : 0;
     const observed = [...candidates.values()].sort((a, b) =>
       matchRank(b) - matchRank(a) ||
       a.externalWorkId.localeCompare(b.externalWorkId));`;
+// The original router already tokenizes punctuation and treats straight and
+// typographic apostrophes equivalently. The pinned CI journey instead used raw
+// NFKC lowercase exactness; it falsely rejected the actual MangaDot Raeliana
+// HID after router lookup. Normalize ONLY apostrophe glyph variants, not
+// arbitrary fuzzy titles, deleted words or unverified edition aliases.
+const originalExact = `function exact(candidate, titles) {
+  return [candidate.title, ...(Array.isArray(candidate.aliases) ? candidate.aliases : [])]
+    .some((value) => titles.some((title) => normalize(value) === normalize(title)));
+}`;
+assert.equal(originalJourney.split(originalExact).length, 2,
+  'Pinned journey exact matcher changed; audit punctuation before live');
+const punctuationExact = `function sameExactTitle(left, right) {
+  const fold = value => normalize(value).replace(/[\\u2018\\u2019\\u02bc]/gu, "'");
+  const a = fold(left);
+  return !!a && a === fold(right);
+}
+function exact(candidate, titles) {
+  return [candidate.title, ...(Array.isArray(candidate.aliases) ? candidate.aliases : [])]
+    .some(value => titles.some(title => sameExactTitle(value, title)));
+}`;
 const extendedJourneyCode = originalJourney
   .replace(oldJourneyCeiling, 'lookupPageLimit > 80')
+  .replace(originalExact, punctuationExact)
   .replace(originalSummaryOrder, prioritySummaryOrder);
 const { probeJourney, journeyVerdict } =
   await import('data:text/javascript;base64,' +
