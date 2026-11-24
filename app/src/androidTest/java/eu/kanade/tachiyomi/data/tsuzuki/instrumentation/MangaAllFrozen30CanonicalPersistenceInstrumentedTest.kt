@@ -370,13 +370,38 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 titleNames.upsert(TitleNameObservation(titleId, owner.provider, key, value, now))
             }
             if (refresh.execute(titleId, forceRefresh = true).isFailure) return "REFRESH_FAILED"
-            val one = chapters.getByCanonicalTitleId(titleId).filter {
+            val chapterRows = chapters.getByCanonicalTitleId(titleId)
+            val chapterOnes = chapterRows.filter {
                 it.type == CanonicalChapterType.REGULAR && it.displayNumber == "1" &&
                     it.baseNumber == 1 && it.part == null && it.alphaSuffix == null &&
                     it.decimalFraction == null && it.confirmation != CanonicalChapterConfirmation.CONFLICTED
-            }.singleOrNull() ?: return "CANONICAL_CHAPTER_ONE_MISSING_OR_AMBIGUOUS"
+            }
+            val one = chapterOnes.singleOrNull()
+            val options = if (one == null) emptyList() else resolver.options(one.id)
+            val sourceRows = associations.getByTitle(titleId)
+            val mappedRows = evidence.getByCanonicalTitleId(titleId)
+            val verifiedSources = sourceRows.filter {
+                it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED &&
+                    it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED
+            }
+            val dexOptions = options.count { it.contentSourceId == "mangadex" }
+            val dotOptions = options.count { it.contentSourceId == "mangadot" }
+            val rivalReleaseRefs = options.groupBy { it.bindingRef() }.count { it.value.size > 1 }
+            instrument.sendStatus(
+                1,
+                Bundle().apply {
+                    putString(
+                        "stream",
+                        "MANGAALL_CANONICAL_DIAGNOSTIC|index=$index|chapters=${chapterRows.size}" +
+                            "|chapterOne=${chapterOnes.size}|evidence=${mappedRows.size}" +
+                            "|associations=${sourceRows.size}|verified=${verifiedSources.size}" +
+                            "|dexOptions=$dexOptions|dotOptions=$dotOptions|rivalReleaseRefs=$rivalReleaseRefs",
+                    )
+                },
+            )
+            if (one == null) return "CANONICAL_CHAPTER_ONE_MISSING_OR_AMBIGUOUS"
             // No synthetic user-confirmed edition and no first-HID fallback.
-            val option = resolver.options(one.id).singleOrNull() ?: return "READER_OPTION_MISSING_OR_AMBIGUOUS"
+            val option = options.singleOrNull() ?: return "READER_OPTION_MISSING_OR_AMBIGUOUS"
             val association = associations.get(option.bindingRef()) ?: return "SOURCE_ASSOCIATION_MISSING"
             if (association.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED ||
                 association.editionQualification != ProviderSourceEditionQualification.UNRESOLVED
