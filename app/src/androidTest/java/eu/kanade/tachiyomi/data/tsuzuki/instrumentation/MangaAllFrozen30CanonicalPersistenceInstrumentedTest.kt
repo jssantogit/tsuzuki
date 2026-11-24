@@ -628,6 +628,28 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     )
                 },
             )
+            // Read-only, source-scoped mapped chapter range. A first-page
+            // lookup preview cannot tell whether chapter 1 was reconciled.
+            for (source in listOf("mangadex", "mangadot")) {
+                val producers = verifiedSources.filter { it.ref.externalWorkId.startsWith("$source:") }
+                    .map { it.ref.evidenceProducerId() }.toSet()
+                val mappedIds = mappedRows.filter { it.evidence.producerId in producers }
+                    .mapNotNull { it.mappedCanonicalChapterId }.toSet()
+                val regular = chapterRows.filter { it.id in mappedIds && it.type == CanonicalChapterType.REGULAR }
+                val numbers = regular.mapNotNull { it.baseNumber }.filter { it in 0..1_000_000 }
+                val exactOnes = chapterOnes.count { it.id in mappedIds }
+                instrument.sendStatus(
+                    1,
+                    Bundle().apply {
+                        putString(
+                            "stream",
+                            "MANGAALL_CANONICAL_RANGE|index=$index|source=$source|mapped=${mappedIds.size}" +
+                                "|regular=${regular.size}|min=${numbers.minOrNull() ?: -1}" +
+                                "|max=${numbers.maxOrNull() ?: -1}|chapterOne=$exactOnes",
+                        )
+                    },
+                )
+            }
             if (one == null) return "CANONICAL_CHAPTER_ONE_MISSING_OR_AMBIGUOUS"
             // Multiple releases of one exact HID are separate explicit picker
             // choices. Rival work HIDs within a source are still not equivalent.

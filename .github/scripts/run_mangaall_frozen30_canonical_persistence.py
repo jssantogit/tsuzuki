@@ -125,6 +125,28 @@ def collect_diagnostics(log, shard, focused=False):
     return [rows[i] for i in sorted(rows)]
 
 
+def collect_ranges(log, shard, focused=False):
+    pattern = (
+        r"MANGAALL_CANONICAL_RANGE\|index=(\d+)\|source=(mangadex|mangadot)"
+        r"\|mapped=(\d+)\|regular=(\d+)\|min=(-1|\d+)\|max=(-1|\d+)"
+        r"\|chapterOne=(\d+)(?=\s|$)"
+    )
+    rows = {}
+    for match in re.finditer(pattern, log):
+        index, source, mapped, regular, lo, hi, one = match.groups()
+        index, mapped, regular, lo, hi, one = map(int, (index, mapped, regular, lo, hi, one))
+        key = (index, source)
+        if (index not in expected_indices(shard, focused) or key in rows
+                or not 0 <= one <= regular <= mapped <= 1_000_000
+                or not (-1 <= lo <= hi <= 1_000_000)
+                or ((lo == -1) != (hi == -1))
+                or (regular == 0 and lo != -1)):
+            return []
+        rows[key] = dict(index=index, source=source, mapped=mapped, regular=regular,
+                         min=lo, max=hi, chapterOne=one)
+    return [rows[k] for k in sorted(rows)]
+
+
 def collect_acquisition(log, shard, focused=False):
     # Closed codes and bounded counts only; never forward raw instrumentation.
     pattern = (
@@ -178,6 +200,7 @@ def invoke(shard, phase, catalog, reader=False, focused=False):
     parsed = parse_phase(log,shard,phase,ok,catalog,owners,focused)
     if phase == "COLLECT":
         parsed["diagnostics"] = collect_diagnostics(log, shard, focused)
+        parsed["ranges"] = collect_ranges(log, shard, focused)
         parsed["acquisition"] = collect_acquisition(log, shard, focused)
     if reader and phase == "RESTORE":
         parsed["reader"] = parse_reader(log, shard, parsed, ok, catalog, owners, focused)
@@ -231,6 +254,8 @@ def run(shard, catalog, reader=False, focused=False):
                 print(f"MANGAALL_CANONICAL_PERSISTENCE|phase={phase.upper()}|index={row['index']}|outcome={row['status']}")
         for row in report["collect"].get("diagnostics", []):
             print("MANGAALL_CANONICAL_DIAGNOSTIC|" + "|".join(f"{key}={value}" for key, value in row.items()))
+        for row in report["collect"].get("ranges", []):
+            print("MANGAALL_CANONICAL_RANGE|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("acquisition", []):
             print("MANGAALL_CANONICAL_ACQUISITION|" + "|".join(f"{key}={value}" for key, value in row.items()))
         if reader:
@@ -315,6 +340,12 @@ def selftest():
     assert collect_diagnostics(diagnostic, 0)[0]["rivalReleaseRefs"] == 1
     assert collect_diagnostics(diagnostic+"\n"+diagnostic, 0) == []
     assert collect_diagnostics(diagnostic, 1) == []
+    range_row = "MANGAALL_CANONICAL_RANGE|index=1|source=mangadex|mapped=3|regular=3|min=40|max=42|chapterOne=0"
+    assert collect_ranges(range_row, 0)[0]["min"] == 40
+    assert collect_ranges(range_row + "\n" + range_row, 0) == []
+    assert collect_ranges(range_row, 1) == []
+    assert collect_ranges(range_row.replace("min=40", "min=43"), 0) == []
+    assert collect_ranges(range_row + "|id=foreign", 0) == []
     acquisition = ("MANGAALL_CANONICAL_ACQUISITION|index=1|source=MANGADOT"
                    "|event=PROVIDER_READING_SOURCE_ASSOCIATION|outcome=CANDIDATES"
                    "|reason=AUTHOR_CONFLICT|candidates=0|count=2")
