@@ -167,12 +167,18 @@ class ResolveMangaAllIndependentCatalogIdentity(
         title: String,
         format: CatalogItemFormat?,
     ): SourceSearchResult {
-        return withTimeoutOrNull(CATALOG_TIMEOUT_MILLIS) {
+        // The native MangaUpdates Manhwa filter still reports more than
+        // 100 candidates for some exact Korean work names. Bound the larger
+        // budget explicitly; never treat exhaustion as complete.
+        val narrowedManhwa = source.integrationId.value == "mangaupdates" && format == CatalogItemFormat.MANHWA
+        val maxPages = if (narrowedManhwa) MAX_MANHWA_PAGES_PER_CATALOG else MAX_PAGES_PER_CATALOG
+        val timeout = if (narrowedManhwa) MANHWA_CATALOG_TIMEOUT_MILLIS else CATALOG_TIMEOUT_MILLIS
+        return withTimeoutOrNull(timeout) {
             val seen = mutableListOf<CatalogItem>()
             val seenIds = mutableSetOf<String>()
             var expectedTotal: Int? = null
             var offset = 0
-            for (index in 0 until MAX_PAGES_PER_CATALOG) {
+            for (index in 0 until maxPages) {
                 val result = try {
                     source.search(
                         CatalogQuery(query = title, format = format, offset = offset, limit = PAGE_SIZE),
@@ -227,6 +233,8 @@ class ResolveMangaAllIndependentCatalogIdentity(
     private companion object {
         const val PAGE_SIZE = 25
         const val MAX_PAGES_PER_CATALOG = 4
+        const val MAX_MANHWA_PAGES_PER_CATALOG = 12
+        const val MANHWA_CATALOG_TIMEOUT_MILLIS = 24_000L
         const val MAX_CONCURRENT_CATALOGS = 3
         const val CATALOG_TIMEOUT_MILLIS = 15_000L
         const val DETAIL_TIMEOUT_MILLIS = 10_000L
