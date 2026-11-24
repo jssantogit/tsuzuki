@@ -19,15 +19,24 @@ class ResolveMangaAllSelectedReadingOption(
         canonicalChapterId: String,
         requestedLanguage: String,
         verifiedOptions: List<ProviderChapterReadingOption>,
-    ): ProviderChapterReadingOption? {
-        if (canonicalTitleId.isBlank() || canonicalChapterId.isBlank() || requestedLanguage.isBlank()) return null
+    ): ProviderChapterReadingOption? =
+        options(canonicalTitleId, canonicalChapterId, requestedLanguage, verifiedOptions).singleOrNull()
+
+    /** Only eligible releases of the exact saved work and language, for explicit confirmation. */
+    suspend fun options(
+        canonicalTitleId: String,
+        canonicalChapterId: String,
+        requestedLanguage: String,
+        verifiedOptions: List<ProviderChapterReadingOption>,
+    ): List<ProviderChapterReadingOption> {
+        if (canonicalTitleId.isBlank() || canonicalChapterId.isBlank() || requestedLanguage.isBlank()) return emptyList()
         val language = requestedLanguage.lowercase()
-        val saved = selections.get(canonicalTitleId, language) ?: return null
+        val saved = selections.get(canonicalTitleId, language) ?: return emptyList()
         if (saved.canonicalTitleId != canonicalTitleId ||
             saved.ref.facetId != language ||
             !MangaAllReadingIdentity.supportsRequestedLanguage(saved.ref)
         ) {
-            return null
+            return emptyList()
         }
         return verifiedOptions.filter { option ->
             val source = option.contentSourceId
@@ -36,6 +45,6 @@ class ResolveMangaAllSelectedReadingOption(
                 source != null &&
                 option.providerChapterId.startsWith("$source:") &&
                 option.providerChapterId.substringAfter(':').isNotBlank()
-        }.singleOrNull()
+        }
     }
 }
