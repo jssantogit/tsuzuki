@@ -97,6 +97,21 @@ def parse_reader(log, shard, restored, process_ok, catalog, owners):
                        "status": rows.get(i, "NOT_OBSERVED")} for i in sorted(indices)]}
 
 
+def collect_diagnostics(log, shard):
+    fields = ("chapters", "chapterOne", "evidence", "associations", "verified",
+              "dexOptions", "dotOptions", "rivalReleaseRefs")
+    pattern = r"MANGAALL_CANONICAL_DIAGNOSTIC\|index=(\d+)" + "".join(
+        r"\|" + key + r"=(\d+)" for key in fields)
+    rows = {}
+    for match in re.finditer(pattern, log):
+        index, *counts = map(int, match.groups())
+        if index not in range(shard * 10 + 1, shard * 10 + 11) or index in rows:
+            # Diagnostic rows are not success evidence. Drop ambiguous records.
+            return []
+        rows[index] = dict(index=index, **dict(zip(fields, counts)))
+    return [rows[i] for i in sorted(rows)]
+
+
 def scope(catalog):
     if catalog!="explicit_plan":
         return None, None
@@ -123,6 +138,8 @@ def invoke(shard, phase, catalog, reader=False):
     except subprocess.SubprocessError:
         log, ok = "", False
     parsed = parse_phase(log,shard,phase,ok,catalog,owners)
+    if phase == "COLLECT":
+        parsed["diagnostics"] = collect_diagnostics(log, shard)
     if reader and phase == "RESTORE":
         parsed["reader"] = parse_reader(log, shard, parsed, ok, catalog, owners)
     return parsed
@@ -173,6 +190,8 @@ def run(shard, catalog, reader=False):
         for phase in ("collect", "restore"):
             for row in report[phase]["works"]:
                 print(f"MANGAALL_CANONICAL_PERSISTENCE|phase={phase.upper()}|index={row['index']}|outcome={row['status']}")
+        for row in report["collect"].get("diagnostics", []):
+            print("MANGAALL_CANONICAL_DIAGNOSTIC|" + "|".join(f"{key}={value}" for key, value in row.items()))
         if reader:
             for row in report["restore"]["reader"]["works"]:
                 print(f"MANGAALL_CANONICAL_READER|index={row['index']}|outcome={row['status']}|ui=NOT_TESTED")
@@ -250,6 +269,10 @@ def selftest():
     assert not parse_reader(reader_log.replace("index=10", "index=11"), 0, r, True, "mangaupdates", None)["complete"]
     assert not parse_reader(reader_log, 0, parse_phase(second.replace("RESTORED", "NO_COLLECTED_RECEIPT"), 0, "RESTORE", True), True, "mangaupdates", None)["complete"]
     assert not parse_reader(reader_log.replace("FIRST_PAGE_DECODED", "LOADER_FAILED"), 0, r, True, "mangaupdates", None)["complete"]
+    diagnostic = "MANGAALL_CANONICAL_DIAGNOSTIC|index=1|chapters=10|chapterOne=1|evidence=20|associations=2|verified=2|dexOptions=1|dotOptions=2|rivalReleaseRefs=1"
+    assert collect_diagnostics(diagnostic, 0)[0]["rivalReleaseRefs"] == 1
+    assert collect_diagnostics(diagnostic+"\n"+diagnostic, 0) == []
+    assert collect_diagnostics(diagnostic, 1) == []
     print("MANGAALL_CANONICAL_PERSISTENCE|selftest=PASS")
 
 
