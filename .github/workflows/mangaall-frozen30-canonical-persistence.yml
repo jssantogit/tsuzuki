@@ -201,3 +201,5 @@ jobs:
 # Explicit chapter-release SQLite migration, regression and restored Reader (2026-11-24).
 
 # Independent source lookup lanes and same-owner catalog retries (2026-11-24).
+
+# Re-run after exact Spotless correction.
