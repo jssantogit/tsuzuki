@@ -945,10 +945,12 @@ class CollectProviderReadingEvidence private constructor(
             ) {
                 continue
             }
-            val page = when (val result = gateway.chapters(
-                descriptor.id,
-                ProviderReadingChaptersRequest(assessment.ref),
-            )) {
+            val page = when (
+                val result = gateway.chapters(
+                    descriptor.id,
+                    ProviderReadingChaptersRequest(assessment.ref),
+                )
+            ) {
                 is ProviderCallResult.Success -> result.value
                 is ProviderCallResult.Failure -> continue
             }
