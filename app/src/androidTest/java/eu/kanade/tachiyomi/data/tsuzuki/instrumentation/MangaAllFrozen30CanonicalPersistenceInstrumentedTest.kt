@@ -429,8 +429,9 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             val option = selected.execute(chapter.id, "en") ?: return "SELECTED_OPTION_MISSING"
             val prepared = when (val result = resolver.preparedContent(option)) {
                 is ProviderCallResult.Failure -> return "PREPARATION_FAILED"
-                is ProviderCallResult.Success -> result.value as? PreparedChapterContent.HttpPages
-                    ?: return "UNEXPECTED_DELIVERY"
+                is ProviderCallResult.Success ->
+                    result.value as? PreparedChapterContent.HttpPages
+                        ?: return "UNEXPECTED_DELIVERY"
             }
             if (prepared.pages.any { !it.url.startsWith("https://") || it.allowLocalNetwork }) {
                 return "INVALID_PAGE_AUTHORITY"
