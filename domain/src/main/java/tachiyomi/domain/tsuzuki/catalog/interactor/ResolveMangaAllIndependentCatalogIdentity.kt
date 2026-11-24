@@ -141,6 +141,8 @@ class ResolveMangaAllIndependentCatalogIdentity(
         val verified = detail?.getOrNull()?.takeIf {
             it.provider == selected.provider &&
                 it.providerId == selected.providerId &&
+                (format == null || format == CatalogItemFormat.UNKNOWN || it.format == format) &&
+                (selected.format == CatalogItemFormat.UNKNOWN || it.format == selected.format) &&
                 selected.externalIds.all { (provider, id) ->
                     it.externalIds[provider] == null || it.externalIds[provider] == id
                 } &&
@@ -211,6 +213,14 @@ class ResolveMangaAllIndependentCatalogIdentity(
                             (!page.hasNextPage && reportedTotal > seen.size) ||
                             (page.hasNextPage && reportedTotal == seen.size)
                         )
+                ) {
+                    return@withTimeoutOrNull SourceSearchResult(seen)
+                }
+                // An advertised total beyond the remaining bounded capacity
+                // can never be fully observed in this invocation. Avoid
+                // wasting upstream requests, but preserve INCOMPLETE.
+                if (reportedTotal != null &&
+                    reportedTotal > seen.size + (maxPages - index - 1) * PAGE_SIZE
                 ) {
                     return@withTimeoutOrNull SourceSearchResult(seen)
                 }
