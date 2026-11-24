@@ -36,8 +36,18 @@ data class MangaUpdatesCollectionPage(
     val totalHits: Int,
 )
 
+data class MangaUpdatesSearchWindow(
+    val items: List<TrackSearch>,
+    val totalHits: Int,
+)
+
 interface MangaUpdatesIntegrationApi {
     suspend fun search(query: String): List<TrackSearch>
+
+    suspend fun searchWindow(query: String, offset: Int, limit: Int): MangaUpdatesSearchWindow {
+        val all = search(query)
+        return MangaUpdatesSearchWindow(all.drop(offset).take(limit), all.size)
+    }
 
     suspend fun discover(
         orderBy: String,
@@ -94,6 +104,14 @@ class MangaUpdates(id: Long) : BaseTracker(id, "MangaUpdates"), DeletableTracker
     internal val integrationApi: MangaUpdatesIntegrationApi = object : MangaUpdatesIntegrationApi {
         override suspend fun search(query: String): List<TrackSearch> =
             this@MangaUpdates.search(query)
+
+        override suspend fun searchWindow(query: String, offset: Int, limit: Int): MangaUpdatesSearchWindow =
+            if (query.startsWith(SEARCH_ID_PREFIX)) {
+                val all = search(query)
+                MangaUpdatesSearchWindow(all.drop(offset).take(limit), all.size)
+            } else {
+                api.searchWindow(query, offset, limit)
+            }
 
         override suspend fun discover(
             orderBy: String,
