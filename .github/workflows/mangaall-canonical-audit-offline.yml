@@ -40,7 +40,16 @@ jobs:
           python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
           python3 .github/scripts/verify_mangaall_frozen30_mangadex_audit.py --selftest
           python3 -m py_compile .github/scripts/mangaall_code11_dual_source_unsigned.py
-          test "$(sha256sum .github/mangaall-dual-source-30-cohort-lock.json | cut -d' ' -f1)" = 19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          cohort = json.loads(Path('.github/mangaall-dual-source-30-cohort-lock.json').read_text())
+          assert cohort['cohort'] == 'MANHWA_30_FIXED_20261123'
+          assert len(cohort['works']) == len(set(cohort['works'])) == 30
+          encoded = json.dumps(cohort['works'], ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+          assert hashlib.sha256(encoded).hexdigest() == '19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1'
+          print('MANGAALL_COHORT|lock=PASS|works=30')
+          PY
   domain-data-app:
     runs-on: ubuntu-24.04
     timeout-minutes: 75
