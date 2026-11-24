@@ -130,6 +130,14 @@ jobs:
                   url_exact=sum(exact_url(o.get("url")) for o in credited)
                   id_exact=sum(exact_url(o.get("@id")) for o in credited)
                   id_present=sum(o.get("@id") is not None for o in credited)
+                  def same_document_fragment(value):
+                      if not isinstance(value,str) or "#" not in value:
+                          return False
+                      base,fragment=value.split("#",1)
+                      return exact_url(base) and re.fullmatch(r"[A-Za-z0-9_-]{1,64}",fragment) is not None
+                  id_same_document=sum(same_document_fragment(o.get("@id")) for o in credited)
+                  id_relative_fragment=sum(isinstance(o.get("@id"),str) and re.fullmatch(r"#[A-Za-z0-9_-]{1,64}",o["@id"]) is not None for o in credited)
+
                   url_present=sum(o.get("url") is not None for o in credited)
                   parsed_ok=False
                   if len(parser.documents)==1:
@@ -139,7 +147,7 @@ jobs:
                           input=payload,text=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=5)
                       parsed_ok=check.returncode==0
 
-                  print(f"DOT_DETAIL|index={index}|outcome=HTTP200|bytes={len(raw)}|finalUrlExact={exact_url(final_url)}|structuredDocuments={len(parser.documents)}|exactNamedObjects={len(candidates)}|withCreatorFields={len(credited)}|types={','.join(types) or 'NONE'}|exactWorkRef={exact_ref}|authorPersons={people}|urlExact={url_exact}|idExact={id_exact}|idPresent={id_present}|urlPresent={url_present}|strictParser={parsed_ok}")
+                  print(f"DOT_DETAIL|index={index}|outcome=HTTP200|bytes={len(raw)}|finalUrlExact={exact_url(final_url)}|structuredDocuments={len(parser.documents)}|exactNamedObjects={len(candidates)}|withCreatorFields={len(credited)}|types={','.join(types) or 'NONE'}|exactWorkRef={exact_ref}|authorPersons={people}|urlExact={url_exact}|idExact={id_exact}|idPresent={id_present}|urlPresent={url_present}|idSameDocumentFragment={id_same_document}|idRelativeFragment={id_relative_fragment}|strictParser={parsed_ok}")
               except urllib.error.HTTPError as error:
                   print(f"DOT_DETAIL|index={index}|outcome=HTTP{error.code}")
                   if error.code in (403,429):
