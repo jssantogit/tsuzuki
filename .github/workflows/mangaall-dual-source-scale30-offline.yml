@@ -8,6 +8,7 @@ on:
       - '.github/scripts/mangaall_dual_source_30.mjs'
       - '.github/scripts/mangaall_dual_source_30_aggregate.py'
       - '.github/mangaall-dual-source-30-request.json'
+      - '.github/mangaall-dual-source-30-cohort-lock.json'
       - '.github/workflows/mangaall-dual-source-scale30-offline.yml'
       - '.github/workflows/mangaall-dual-source-scale30-live.yml'
   workflow_dispatch:
