@@ -91,6 +91,7 @@ import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -3032,6 +3033,8 @@ class ScriptProviderReadingGatewayIsolationTest {
                 "koe" to "Koe no Katachi",
                 "akame" to "Akame ga Kill!",
             ),
+            nativeBrowserTransport = InstrumentationRegistry.getArguments()
+                .getString("mangaAllCiNativeBrowserOptIn") == "I_ACCEPT_NATIVE_BROWSER_TRANSPORT",
         )
     }
 
@@ -3102,8 +3105,10 @@ class ScriptProviderReadingGatewayIsolationTest {
     private suspend fun runMangaAllCiWebviewMangaFireChapterGate(
         works: List<Pair<String, String>>,
         runCiSolverPilot: Boolean = false,
+        nativeBrowserTransport: Boolean = false,
     ) {
         require(works.size in 2..3)
+        require(!nativeBrowserTransport || (works.size == 3 && !runCiSolverPilot))
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         assertEquals(
             "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE",
@@ -3226,6 +3231,10 @@ class ScriptProviderReadingGatewayIsolationTest {
         val browserSuccess = AtomicInteger(0)
         val browserAttempts = AtomicInteger(0)
         val browserFailure = AtomicReference("NONE")
+        val nativeSearch = AtomicInteger(0)
+        val nativeChapterReads = AtomicInteger(0)
+        val nativeFailed = AtomicBoolean(false)
+        val nativeOriginRejected = AtomicBoolean(false)
         val gateway = gateway(
             main = "",
             providerId = providerId,
@@ -3258,6 +3267,50 @@ class ScriptProviderReadingGatewayIsolationTest {
                         url.encodedPath == "/api/titles" &&
                         !url.queryParameter("keyword").isNullOrBlank()
                     if (isSignedMangaFireSearch) signedApi.set(url.toString())
+                    if (nativeBrowserTransport && url.host == "mangafire.to") {
+                        // Test transport only: no HTTP request to MangaFire,
+                        // no cookie export, challenge solving or retry after
+                        // rejection. Other providers use the existing client.
+                        val allowed = url.scheme == "https" && url.port == 443 &&
+                            chain.request().method == "GET" &&
+                            Regex("/api/titles(?:/[A-Za-z0-9_-]{1,128}(?:/chapters)?)?")
+                                .matches(url.encodedPath)
+                        if (!allowed || nativeOriginRejected.get() || nativeFailed.get()) {
+                            nativeFailed.set(true)
+                            throw IOException("Native browser source unavailable")
+                        }
+                        browserAttempts.incrementAndGet()
+                        val body = try {
+                            runBlocking {
+                                AndroidProviderBrowserHostService(
+                                    context = context,
+                                    policy = ProviderNetworkPolicy(setOf("https://mangafire.to")),
+                                    providerProfileName = ProviderBrowserProfiles.nameFor(manifest.id),
+                                ).use { it.readText(url.toString(), "body") }
+                            }.also {
+                                val json = JSONObject(it)
+                                if (json.has("error")) throw IOException("Native browser rejected response")
+                            }
+                        } catch (_: Exception) {
+                            nativeFailed.set(true)
+                            nativeOriginRejected.set(true)
+                            browserFailure.set("NO_RESULT")
+                            throw IOException("Native browser source unavailable")
+                        }
+                        browserSuccess.incrementAndGet()
+                        if (isSignedMangaFireSearch) nativeSearch.incrementAndGet()
+                        if (url.encodedPath.endsWith("/chapters")) nativeChapterReads.incrementAndGet()
+                        // Local adapter envelope for the existing signed JS
+                        // HTTP contract. This is NOT an observed HTTP status.
+                        // The upstream Browser Host has already rejected 4xx/5xx.
+                        return@addInterceptor Response.Builder()
+                            .request(chain.request())
+                            .protocol(Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("Native Browser Host body")
+                            .body(body.toResponseBody())
+                            .build()
+                    }
                     val response = chain.proceed(chain.request())
                     if (isSignedMangaFireSearch) {
                         sourceHttp.set(
@@ -3285,6 +3338,17 @@ class ScriptProviderReadingGatewayIsolationTest {
             browserSuccess.set(0)
             browserAttempts.set(0)
             browserFailure.set("NONE")
+            nativeSearch.set(0)
+            nativeChapterReads.set(0)
+            nativeFailed.set(false)
+            fun publishNativeEvidence() {
+                if (!nativeBrowserTransport) return
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_NATIVE|work=$id|search=${nativeSearch.get().coerceAtMost(99)}" +
+                        "|chapterReads=${nativeChapterReads.get().coerceAtMost(99)}" +
+                        "|rejected=" + (if (nativeFailed.get()) "YES" else "NO"),
+                )
+            }
             // Code10 is a single three-source router with deferred source
             // continuations. Page one alone does not establish an exhaustive
             // MangaFire selection. Drain at most eight bounded Host pages.
@@ -3486,6 +3550,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                         "|api=$sourceJson|chapters=INCOMPLETE|chapterOne=UNVERIFIED" +
                         "|outcome=INCONCLUSIVE",
                 )
+                publishNativeEvidence()
                 continue
             }
 
@@ -3571,6 +3636,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                     "|chapterOne=$chapterOne" +
                     "|outcome=" + (if (sourceReady) "SOURCE_READY" else "INCONCLUSIVE"),
             )
+            publishNativeEvidence()
             val chapterOutcome = if (ready) "READY" else "INCONCLUSIVE"
             MangaAllInstrumentationVerdict.publish(
                 "MANGAALL_CI_CHAPTER|work=$id|outcome=$chapterOutcome" +

@@ -6,7 +6,7 @@ umask 077
 
 readonly ack='I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE'
 readonly mode="${MANGAALL_CI_GATE_MODE:-api}"
-if [[ "$mode" != 'api' && "$mode" != 'chapters' && "$mode" != 'three' && "$mode" != 'fire' && "$mode" != 'shape' ]]; then
+if [[ "$mode" != 'api' && "$mode" != 'chapters' && "$mode" != 'three' && "$mode" != 'fire' && "$mode" != 'native' && "$mode" != 'shape' ]]; then
   echo 'MANGAALL_CI_BROWSER_GATE|outcome=HARD_STOP|reason=INVALID_GATE_MODE' >&2
   exit 2
 fi
@@ -42,10 +42,10 @@ mkdir -p "$out"
 raw="$(mktemp)"
 trap 'rm -f "$raw"' EXIT
 code=0
-if [[ "$mode" == 'chapters' || "$mode" == 'three' || "$mode" == 'fire' || "$mode" == 'shape' ]]; then
+if [[ "$mode" == 'chapters' || "$mode" == 'three' || "$mode" == 'fire' || "$mode" == 'native' || "$mode" == 'shape' ]]; then
   if [[ "$mode" == 'shape' ]]; then
     test_method='mangaAllCode10CiWebviewShapeSolverThreeWorks_liveSourceAndChapterAudit'
-  elif [[ "$mode" == 'three' || "$mode" == 'fire' ]]; then
+  elif [[ "$mode" == 'three' || "$mode" == 'fire' || "$mode" == 'native' ]]; then
     test_method='mangaAllCode10CiWebviewThreeWorks_liveSourceAndChapterAudit'
   else
     test_method='mangaAllCode10CiWebviewMangaFireChapters_checksRealPagination'
@@ -55,13 +55,19 @@ else
   test_method='mangaAllCode10CiWebviewSameProfile_checksRealSignedApi'
   pattern='MANGAALL_CI_WEBVIEW\|phase=STARTED|MANGAALL_CI_WEBVIEW\|phase=WARMUP\|outcome=(PAGE_FINISHED|HTTP_REJECTED|TLS_REJECTED|RENDERER_EXITED|TIMEOUT|PROFILE_UNSUPPORTED)|MANGAALL_CI_WEBVIEW\|work=(punpun|koe)\|api=(VALID_JSON|BLOCKED|NOT_OBSERVED)\|candidates=[0-9]{1,2}|MANGAALL_CI_WEBVIEW\|outcome=(CI_SIGNED_API_ACCEPTED|CI_INCONCLUSIVE)\|signedJson=[0-2]\|works=2\|providerCandidateWorks=[0-2]\|canonical=NOT_TESTED\|chapters=NOT_TESTED\|readerPixels=NOT_TESTED'
 fi
+native_ack='NOT_AUTHORIZED'
+if [[ "$mode" == 'native' ]]; then
+  native_ack='I_ACCEPT_NATIVE_BROWSER_TRANSPORT'
+  pattern="$pattern"'|MANGAALL_CI_NATIVE\|work=(punpun|koe|akame)\|search=[0-9]{1,2}\|chapterReads=[0-9]{1,2}\|rejected=(YES|NO)'
+fi
 timeout_seconds=545
-if [[ "$mode" == 'three' || "$mode" == 'fire' ]]; then timeout_seconds=760; fi
+if [[ "$mode" == 'three' || "$mode" == 'fire' || "$mode" == 'native' ]]; then timeout_seconds=760; fi
 if [[ "$mode" == 'shape' ]]; then timeout_seconds=900; fi
 timeout --foreground "${timeout_seconds}s" adb shell am instrument -w -r \
   -e class "eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#$test_method" \
   -e mangaAllCiWebviewOptIn "$ack" \
   -e mangaAllCiShapeOptIn "${MANGAALL_CI_SHAPE_ACK:-NOT_AUTHORIZED}" \
+  -e mangaAllCiNativeBrowserOptIn "$native_ack" \
   app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner > "$raw" 2>&1 || code=$?
 
 # Only explicit redacted records may leave the temporary instrument pipe.
@@ -76,10 +82,10 @@ elif ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw"; then
 fi
 cat "$out/verdict.txt"
 
-if [[ "$mode" == 'chapters' || "$mode" == 'three' || "$mode" == 'fire' || "$mode" == 'shape' ]]; then
+if [[ "$mode" == 'chapters' || "$mode" == 'three' || "$mode" == 'fire' || "$mode" == 'native' || "$mode" == 'shape' ]]; then
   expected=2
-  if [[ "$mode" == 'three' || "$mode" == 'fire' || "$mode" == 'shape' ]]; then expected=3; fi
-  if [[ "$mode" == 'fire' || "$mode" == 'shape' ]]; then
+  if [[ "$mode" == 'three' || "$mode" == 'fire' || "$mode" == 'native' || "$mode" == 'shape' ]]; then expected=3; fi
+  if [[ "$mode" == 'fire' || "$mode" == 'native' || "$mode" == 'shape' ]]; then
     if [[ "$mode" == 'shape' ]]; then
       if ! grep -Fq 'MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=DEBUG_ONLY' "$out/verdict.txt"; then
         echo 'MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=SHAPE_SESSION|reason=SHAPE_NOT_CLEARED' >&2
@@ -92,7 +98,25 @@ if [[ "$mode" == 'chapters' || "$mode" == 'three' || "$mode" == 'fire' || "$mode
       echo 'MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=MANGAFIRE_SOURCE|reason=INSTRUMENTATION_INCOMPLETE' >&2
       exit 3
     fi
+    if [[ "$mode" == 'native' ]]; then
+      for work in punpun koe akame; do
+        if ! grep -Eq "^MANGAALL_CI_NATIVE\|work=$work\|search=[1-9][0-9]?\|chapterReads=[1-9][0-9]?\|rejected=NO$" "$out/verdict.txt"; then
+          echo "MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=NATIVE_BROWSER|work=$work|reason=NATIVE_EVIDENCE_MISSING" >&2
+          exit 3
+        fi
+        if ! grep -Eq "^MANGAALL_CI_CHAPTER\|work=$work\|phase=API\|signedUrl=OBSERVED\|http=NONE\|transport=BROWSER\|json=VALIDATED$" "$out/verdict.txt"; then
+          echo "MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=NATIVE_BROWSER|work=$work|reason=NATIVE_JSON_NOT_VALIDATED" >&2
+          exit 3
+        fi
+      done
+    fi
     if python3 .github/scripts/mangaall_ci_fire_source_gate.py "$out/verdict.txt"; then
+      if [[ "$mode" == 'native' ]]; then
+        echo 'MANGAALL_CI_NATIVE_GATE|outcome=PASS|works=3|transport=ANDROID_BROWSER_HOST|httpStatus=NOT_OBSERVED'
+        # Independent integration result; never turn a partial combined lookup
+        # into a global PASS merely because MangaFire passed.
+        python3 .github/scripts/mangaall_ci_three_gate.py "$out/verdict.txt" || true
+      fi
       echo 'MANGAALL_CI_BROWSER_GATE|outcome=PASS|stage=MANGAFIRE_SOURCE|works=3|signedCode10=UNCHANGED|unified=NOT_PROVEN|canonical=NOT_TESTED|readerPixels=NOT_TESTED'
       exit 0
     fi

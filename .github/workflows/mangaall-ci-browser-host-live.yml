@@ -19,6 +19,7 @@ on:
           - chapters
           - three
           - fire
+          - native
           - shape
       solver_acknowledge:
         description: 'Shape mode ONLY: type I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE'
@@ -84,8 +85,8 @@ jobs:
               assert type(manifest) is dict
               assert manifest.get('acknowledge') == approved
               gate = manifest.get('gate')
-              assert gate in ('api', 'chapters', 'three', 'fire', 'shape')
-              assert manifest.get('works') == (three_works if gate in ('three', 'fire', 'shape') else works)
+              assert gate in ('api', 'chapters', 'three', 'fire', 'native', 'shape')
+              assert manifest.get('works') == (three_works if gate in ('three', 'fire', 'native', 'shape') else works)
               fields = {'acknowledge', 'works', 'gate'}
               if gate == 'shape':
                   fields.add('solver_acknowledge')
@@ -96,7 +97,7 @@ jobs:
               assert os.environ['EVENT'] == 'workflow_dispatch'
               assert os.environ['MANUAL_ACK'] == approved
               gate = os.environ['MANUAL_GATE']
-              assert gate in ('api', 'chapters', 'three', 'fire', 'shape')
+              assert gate in ('api', 'chapters', 'three', 'fire', 'native', 'shape')
               if gate == 'shape':
                   assert os.environ['MANUAL_SHAPE_ACK'] == shape_consent
                   solver_ack = shape_consent
@@ -117,7 +118,7 @@ jobs:
               assert 'Array.from({length: 2}, solve)' in solver
               assert 'Array.from({length: 10}, solve)' not in solver
               assert 'docs.opencv.org/5.0/opencv.js' in solver
-          print('MANGAALL_CI_WEBVIEW|scope=' + ('3' if gate in ('three', 'fire', 'shape') else '2') + '_WORKS|code10=ORIGINAL_SIGNED|profile=ISOLATED|gate=' + gate + '|external=NOT_STARTED')
+          print('MANGAALL_CI_WEBVIEW|scope=' + ('3' if gate in ('three', 'fire', 'native', 'shape') else '2') + '_WORKS|code10=ORIGINAL_SIGNED|profile=ISOLATED|gate=' + gate + '|external=NOT_STARTED')
           PY
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
