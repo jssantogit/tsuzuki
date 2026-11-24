@@ -1,0 +1,86 @@
+name: MangaBall exact package Android browser comparison
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  package-and-runtime:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'research/mangaball-package-browser-parity-20261124'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: mangaball-development-source
+          persist-credentials: false
+      - name: Build deterministic unsigned test package outside dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/androidTest/assets/mangaball
+          archive=app/src/androidTest/assets/mangaball/development-unsigned.tsz
+          python3 mangaball-development-source/tooling/build_provider.py mangaball-development-source/providers/mangaall-ball "$archive"
+          python3 mangaball-development-source/tooling/build_provider.py mangaball-development-source/providers/mangaall-ball "$RUNNER_TEMP/mangaball-repeat.tsz"
+          cmp "$archive" "$RUNNER_TEMP/mangaball-repeat.tsz"
+          python3 - <<'PY'
+          import json, zipfile
+          from pathlib import Path
+          root = Path("mangaball-development-source")
+          source = root / "providers/mangaall-ball"
+          manifest = json.loads((source / "manifest.json").read_text())
+          assert manifest.pop("publication") == "development"
+          assert manifest["id"] == "app.tsuzuki.mangaall.mangaball"
+          assert manifest["permissions"]["browser"]["origins"] == []
+          assert manifest["permissions"]["network"] == {"origins": ["https://mangaball.com"], "localNetwork": False}
+          assert {c["id"] for c in manifest["capabilities"]} == {"reading.lookup", "reading.chapters"}
+          with zipfile.ZipFile("app/src/androidTest/assets/mangaball/development-unsigned.tsz") as archive:
+              assert set(archive.namelist()) == {"manifest.json", "main.js", "modules/http.js", "modules/mangaball.js"}
+              assert json.loads(archive.read("manifest.json")) == manifest
+              for name in archive.namelist():
+                  if name != "manifest.json":
+                      assert archive.read(name) == (source / name).read_bytes()
+          print("MANGABALL_PACKAGE|deterministic=YES|publication=DEVELOPMENT|signed=NO|sourceBytes=EXACT")
+          PY
+          git -C mangaball-development-source diff --exit-code
+          echo '524849196f9cbe1e3f5bf4ce5dc943e58c6dfdc70d52d2f63ea7992019642260  '"$archive" | sha256sum -c -
+          bash -n .github/scripts/run_mangaball_package_browser_research.sh
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          cache-read-only: true
+      - name: Compile Android runtime and package fixture
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exact QuickJS package and normal WebView lookup
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaball_package_browser_research.sh
+      - name: Retain sanitized verdict only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mangaball-package-browser-verdict
+          path: .github/results/mangaball-package-browser/verdict.txt
+          if-no-files-found: warn
+          retention-days: 3
