@@ -205,3 +205,5 @@ jobs:
 # Re-run after exact Spotless correction.
 
 # Preserve closed acquisition reason codes alongside strict canonical gate.
+
+# Export only the bounded acquisition codes through the strict runner.
