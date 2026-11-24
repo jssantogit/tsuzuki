@@ -5,6 +5,12 @@ const exactName = value => typeof value === "string" ? value.normalize("NFKC")
   .trim().toLowerCase().replace(/[‘’]/g, "'").replace(/\s+/g, " ") : "";
 const validId = id => typeof id === "string" && /^[1-9][0-9]{0,15}$/.test(id);
 const exactUrl = (value, url) => value === url || value === url + "/";
+const sameDocumentId = (value, url) => {
+  if (exactUrl(value, url)) return true;
+  if (typeof value !== "string") return false;
+  const parts = value.split("#");
+  return parts.length === 2 && exactUrl(parts[0], url) && /^[A-Za-z0-9_-]{1,64}$/.test(parts[1]);
+};
 
 export function extractMangaDotCreators(raw, id, title) {
   if (!validId(id) || !exactName(title) || typeof raw !== "string" ||
@@ -21,7 +27,7 @@ export function extractMangaDotCreators(raw, id, title) {
     if (!Array.isArray(node) && node["@type"] === "ComicSeries") {
       // A competing ComicSeries object about the same title/HID is ambiguous.
       if (exactName(node.name) === exactName(title) ||
-          exactUrl(node.url, url) || exactUrl(node["@id"], url)) matches.push(node);
+          exactUrl(node.url, url) || sameDocumentId(node["@id"], url)) matches.push(node);
     }
     for (const value of Object.values(node)) {
       if (value !== null && typeof value === "object") stack.push([value, depth + 1]);
@@ -30,10 +36,12 @@ export function extractMangaDotCreators(raw, id, title) {
   if (matches.length !== 1) return null;
   const work = matches[0];
   if (exactName(work.name) !== exactName(title) ||
-      !(exactUrl(work.url, url) || exactUrl(work["@id"], url))) return null;
+      !(exactUrl(work.url, url) || sameDocumentId(work["@id"], url))) return null;
   // Any supplied explicit URL must agree, not merely one of the two.
   if (work.url != null && !exactUrl(work.url, url)) return null;
-  if (work["@id"] != null && !exactUrl(work["@id"], url)) return null;
+  // JSON-LD entity identifiers may have a fragment on the exact work page.
+  // Never accept a different origin/path, query, or unrelated object.
+  if (work["@id"] != null && !sameDocumentId(work["@id"], url)) return null;
   const authors = Array.isArray(work.author) ? work.author : [work.author];
   if (authors.length === 0 || authors.length > 8) return null;
   const names = [];
