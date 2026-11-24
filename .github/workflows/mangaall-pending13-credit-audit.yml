@@ -180,3 +180,6 @@ jobs:
 # No canonical inventory, chapter pages, image transfer or cohort acceptance.
 
 # Retry after exact Kotlin formatting correction; scope remains public credits only.
+
+# Reobserve public credits after generic bilingual matching and corrected Shikimori variables.
+# Build must pass the existing offline regression suite before the Android audit.
