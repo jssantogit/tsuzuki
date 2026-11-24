@@ -166,7 +166,9 @@ def check_shard(payload, index, works):
             type(data.get("searchPagesObserved", 0)) is int and
             0 <= data.get("searchPagesObserved", 0) <= data["http200"] and
             type(data.get("searchRowsObserved", 0)) is int and
-            0 <= data.get("searchRowsObserved", 0) <= 100 * data.get("searchPagesObserved", 0),
+            0 <= data.get("searchRowsObserved", 0) <= 100 * data.get("searchPagesObserved", 0) and
+            type(data.get("maxReportedSearchPages", 0)) is int and
+            0 <= data.get("maxReportedSearchPages", 0) <= 4096,
                 "SOURCE_HTTP_COUNTERS_INVALID")
         require(type(row.get("candidateCount")) is int and
                 0 <= row["candidateCount"] <= 1_000_000 and
@@ -256,6 +258,7 @@ def aggregate(works, payloads):
             "sourceSearchPagesObserved": 0, "sourceSearchRowsObserved": 0,
             "noCandidateDespiteUpstreamSearchRows": 0,
             "multiTitleAliasLookups": 0,
+            "maxReportedMangaDotPages": 0,
         },
         "works": [],
     }
@@ -321,6 +324,9 @@ def aggregate(works, payloads):
             counts["transportFailures"] += http["transportError"]
             counts["upstreamOver192KiB"] += http["upstreamOver192KiB"]
             if source == "mangadot":
+                counts["maxReportedMangaDotPages"] = max(
+                    counts["maxReportedMangaDotPages"], http.get("maxReportedSearchPages", 0)
+                )
                 counts["maxUpstreamMangaDotBytes"] = max(
                     counts["maxUpstreamMangaDotBytes"], http["maxUpstreamBodyBytes"]
                 )
@@ -373,6 +379,9 @@ def aggregate(works, payloads):
                 source: http.get("searchRowsObserved", 0)
                 for source, http in row["httpBySource"].items()
             },
+            "mangaDotAdvertisedPages": row["httpBySource"]["mangadot"].get(
+                "maxReportedSearchPages", 0
+            ),
             "ambiguous": bool(row.get("unresolvedCandidates")),
             "sameSourceRivals": bool(row.get("sameSourceRivals")),
             "candidateMultiplicityClass": multiplicity,
@@ -515,6 +524,8 @@ def test_self():
 
     cases = [
         ("EXCESS_ALIAS_TERMS", lambda p: p[0]["results"][0].update(queryTitleCount=4)),
+        ("FORGED_SOURCE_PAGE_TOTAL", lambda p: p[0]["results"][0]["httpBySource"]["mangadot"].update(
+            maxReportedSearchPages=4097)),
         ("OVERFLOW_RAW_ROW_COUNT", lambda p: p[0]["results"][0]["httpBySource"]["mangadot"].update(
             searchPagesObserved=1, searchRowsObserved=101)),
         ("FOREIGN_SOURCE", lambda p: p[0].update(sourceSet=["mangadex", "mangafire"])),
@@ -581,6 +592,7 @@ def main():
                   "|multiplicity=" + row["candidateMultiplicityClass"] +
                   "|chapterOne=" + str(row["atLeastOneCompleteSourceChapterOne"]) +
                   "|rawSearchRows=" + str(sum(row["sourceSearchRowsObserved"].values())) +
+                  "|dotAdvertisedPages=" + str(row["mangaDotAdvertisedPages"]) +
                   "|issues=" + ",".join(row["issues"]))
         print("MANGAALL_DUAL30_GATE|outcome=" + report["outcome"] +
               "|works=30|sources=2|completeLookup=" + str(counts["completeLookup"]) +
@@ -589,6 +601,7 @@ def main():
               "|oversized64K=" + str(counts["oversized64KiB"]) +
               "|rawSearchRows=" + str(counts["sourceSearchRowsObserved"]) +
               "|emptyMatchWithRawRows=" + str(counts["noCandidateDespiteUpstreamSearchRows"]) +
+              "|maxDotAdvertisedPages=" + str(counts["maxReportedMangaDotPages"]) +
               "|canonical=NOT_TESTED|mangafire=EXCLUDED")
         if os.getenv("GITHUB_STEP_SUMMARY"):
             with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
