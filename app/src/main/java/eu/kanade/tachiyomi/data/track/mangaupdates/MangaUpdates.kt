@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUListItem
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MURating
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import tachiyomi.i18n.MR
+import tachiyomi.domain.tsuzuki.integration.CatalogCreatorAliasEvidence
 import tachiyomi.domain.track.model.Track as DomainTrack
 
 data class MangaUpdatesCollectionQuery(
@@ -61,6 +62,8 @@ interface MangaUpdatesIntegrationApi {
     ): List<TrackSearch>
 
     suspend fun getMangaDetails(id: Long): TrackSearch
+
+    suspend fun getVerifiedCreatorAliases(id: Long): List<CatalogCreatorAliasEvidence> = emptyList()
 
     suspend fun lookupGenres(): List<Pair<String, String>> = emptyList()
 
@@ -133,6 +136,9 @@ class MangaUpdates(id: Long) : BaseTracker(id, "MangaUpdates"), DeletableTracker
         override suspend fun getMangaDetails(id: Long): TrackSearch =
             api.getSeriesDetails(id)?.toTrackSearch(this@MangaUpdates.id)
                 ?: error("MangaUpdates title not found: $id")
+
+        override suspend fun getVerifiedCreatorAliases(id: Long): List<CatalogCreatorAliasEvidence> =
+            api.getVerifiedCreatorAliases(id)
 
         override suspend fun lookupGenres(): List<Pair<String, String>> =
             api.lookupGenres()
