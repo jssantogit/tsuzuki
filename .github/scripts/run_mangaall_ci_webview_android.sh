@@ -94,7 +94,88 @@ if [[ "$mode" == 'chapters' || "$mode" == 'three' || "$mode" == 'fire' || "$mode
     fi
     # All three sources were queried in the original signed router.
     # A healthy MangaFire never upgrades incomplete global coverage.
-    if [[ "$code" -ne 0 ]] || ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw"; then
+    if [[ "$code" -ne 0 ]] || grep -Eq '^INSTRUMENTATION_STATUS_CODE: -[12]
+      echo 'MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=MANGAFIRE_SOURCE|reason=INSTRUMENTATION_INCOMPLETE' >&2
+      exit 3
+    fi
+    if [[ "$mode" == 'native' ]]; then
+      for work in punpun koe akame; do
+        if ! grep -Eq "^MANGAALL_CI_NATIVE\|work=$work\|search=[1-9][0-9]?\|chapterReads=[1-9][0-9]?\|rejected=NO$" "$out/verdict.txt"; then
+          echo "MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=NATIVE_BROWSER|work=$work|reason=NATIVE_EVIDENCE_MISSING" >&2
+          exit 3
+        fi
+        if ! grep -Eq "^MANGAALL_CI_CHAPTER\|work=$work\|phase=API\|signedUrl=OBSERVED\|http=NONE\|transport=BROWSER\|json=VALIDATED$" "$out/verdict.txt"; then
+          echo "MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=NATIVE_BROWSER|work=$work|reason=NATIVE_JSON_NOT_VALIDATED" >&2
+          exit 3
+        fi
+      done
+    fi
+    if python3 .github/scripts/mangaall_ci_fire_source_gate.py "$out/verdict.txt"; then
+      if [[ "$mode" == 'native' ]]; then
+        echo 'MANGAALL_CI_NATIVE_GATE|outcome=PASS|works=3|transport=ANDROID_BROWSER_HOST|httpStatus=NOT_OBSERVED'
+        # Independent integration result; never turn a partial combined lookup
+        # into a global PASS merely because MangaFire passed.
+        python3 .github/scripts/mangaall_ci_three_gate.py "$out/verdict.txt" || true
+      fi
+      echo 'MANGAALL_CI_BROWSER_GATE|outcome=PASS|stage=MANGAFIRE_SOURCE|works=3|signedCode10=UNCHANGED|unified=NOT_PROVEN|canonical=NOT_TESTED|readerPixels=NOT_TESTED'
+      exit 0
+    fi
+    echo 'MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=MANGAFIRE_SOURCE|reason=SOURCE_EVIDENCE_NOT_COMPLETE' >&2
+    exit 3
+  fi
+  valid_work_records=true
+  for work in punpun koe; do
+    if ! grep -Fq "MANGAALL_CI_CHAPTER|work=$work|outcome=READY|" "$out/verdict.txt"; then
+      valid_work_records=false
+    fi
+  done
+  if [[ "$mode" == 'three' ]]; then
+    if ! grep -Fq 'MANGAALL_CI_CHAPTER|work=akame|outcome=READY|' "$out/verdict.txt"; then
+      valid_work_records=false
+    fi
+    # Strictly require actual unified three-source lookup observations for
+    # all 3 works; no provider HID or raw API URL leaves the test.
+    for work in punpun koe akame; do
+      for source in mangadex mangadot mangafire; do
+        if ! grep -Fq "MANGAALL_CI_SOURCE|work=$work|source=$source|" "$out/verdict.txt"; then
+          valid_work_records=false
+        fi
+      done
+    done
+  fi
+  # The three-work mode additionally requires a 3x3 source provenance
+  # matrix, a complete unique lookup, valid signed browser API and every
+  # chapter cursor ending with chapter one attested.
+  if [[ "$mode" == 'three' ]]; then
+    if ! python3 .github/scripts/mangaall_ci_three_gate.py "$out/verdict.txt"; then
+      echo 'MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=THREE_SOURCES|reason=EVIDENCE_NOT_COMPLETE' >&2
+      exit 3
+    fi
+  fi
+  if [[ "$code" -eq 0 ]] &&
+    grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw" &&
+    grep -Fq "MANGAALL_CI_CHAPTER|outcome=CHAPTERS_ACCEPTED|ready=$expected|works=$expected" "$out/verdict.txt" &&
+    [[ "$valid_work_records" == 'true' ]]; then
+    echo "MANGAALL_CI_BROWSER_GATE|outcome=PASS|stage=CHAPTERS|works=$expected|signedCode10=UNCHANGED|canonical=NOT_TESTED|readerPixels=NOT_TESTED"
+    exit 0
+  fi
+  echo "MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=CHAPTERS|works=$expected|reason=CHAPTER_GATE_NOT_MET" >&2
+  exit 3
+fi
+
+if [[ "$code" -eq 0 ]] &&
+  grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw" &&
+  grep -Fq 'MANGAALL_CI_WEBVIEW|outcome=CI_SIGNED_API_ACCEPTED|signedJson=2|works=2|providerCandidateWorks=2' "$out/verdict.txt" &&
+  grep -Fq 'MANGAALL_CI_WEBVIEW|work=punpun|api=VALID_JSON|candidates=' "$out/verdict.txt" &&
+  grep -Fq 'MANGAALL_CI_WEBVIEW|work=koe|api=VALID_JSON|candidates=' "$out/verdict.txt"; then
+  echo 'MANGAALL_CI_BROWSER_GATE|outcome=PASS|stage=API|signedCode10=UNCHANGED|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED'
+  exit 0
+fi
+
+echo 'MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=API|reason=SIGNED_API_GATE_NOT_MET' >&2
+exit 3
+ "$raw" ||
+      ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw"; then
       echo 'MANGAALL_CI_BROWSER_GATE|outcome=INCONCLUSIVE|stage=MANGAFIRE_SOURCE|reason=INSTRUMENTATION_INCOMPLETE' >&2
       exit 3
     fi
