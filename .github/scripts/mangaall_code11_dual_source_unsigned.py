@@ -78,6 +78,22 @@ def candidate_bytes(source_root: Path) -> bytes:
         b'if (n > 32) throw new Error("MangaAll bounded source search exhausted");',
         "MANGADOT_LOOKUP",
     )
+    # The real MangaDot API may report more than 32 pages for broad terms.
+    # A valid large total must NOT be an invalid response. Still fail closed on
+    # source cursor 33 and never convert that bounded scan into COMPLETE.
+    dot_name = "modules/sources/mangadot/modules/mangadot.js"
+    files[dot_name] = change_one(
+        files[dot_name],
+        b'(total != null && (!Number.isInteger(total) || total < 0 || total > 32))',
+        b'(total != null && (!Number.isInteger(total) || total < 0 || total > 4096))',
+        "MANGADOT_TOTAL_BUDGET",
+    )
+    files[dot_name] = change_one(
+        files[dot_name],
+        b'(hasNext && (rows.length === 0 || page >= 32)))',
+        b'(hasNext && rows.length === 0))',
+        "MANGADOT_PAGE32_PARTIAL",
+    )
     files["modules/sources/mangadex/modules/mangadex.js"] = change_one(
         files["modules/sources/mangadex/modules/mangadex.js"],
         b"const CHAPTER_PAGE_SIZE = 100;",
