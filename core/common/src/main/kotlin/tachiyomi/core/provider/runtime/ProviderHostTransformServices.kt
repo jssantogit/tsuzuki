@@ -30,20 +30,28 @@ class DefaultProviderDomHostService(
         val html = resources
             .read(owner, resourceHandle, ProviderResourceKind.HTML)
             .decodeToString()
+        val document = Jsoup.parse(html)
         val node = try {
-            Jsoup.parse(html).selectFirst(cssSelector)
+            if (cssSelector == JSON_LD_SELECTOR) {
+                // Structured metadata is data, not executable script. Refuse
+                // ambiguous documents instead of selecting their first block.
+                document.select(cssSelector).singleOrNull()
+            } else {
+                document.selectFirst(cssSelector)
+            }
         } catch (error: Exception) {
             throw ProviderHostServiceException("Provider DOM selector is invalid", error)
         } ?: throw ProviderHostServiceException("Provider DOM selector did not match")
 
-        val text = node.text()
-        if (text.length > MAX_DOM_RESULT_CHARS) {
+        val text = if (cssSelector == JSON_LD_SELECTOR) node.data() else node.text()
+        if (text.length > MAX_DOM_RESULT_CHARS || text.encodeToByteArray().size > MAX_DOM_RESULT_CHARS) {
             throw ProviderHostServiceException("Provider DOM result exceeds the text limit")
         }
         return text
     }
 
     private companion object {
+        const val JSON_LD_SELECTOR = "script[type=application/ld+json]"
         const val MAX_SELECTOR_CHARS = 2 * 1024
         const val MAX_DOM_RESULT_CHARS = 64 * 1024
     }
