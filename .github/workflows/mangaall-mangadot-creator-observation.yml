@@ -31,7 +31,7 @@ jobs:
               return bool(value.strip()) if isinstance(value,str) else bool(value) if isinstance(value,(list,dict)) else False
           observed = 0
           details = []
-          for index in (1,3,10,12):
+          for index in (1,3,10):
               url = "https://mangadot.net/api/search?" + urllib.parse.urlencode(dict(search=works[index-1], page=1, limit=56))
               request = urllib.request.Request(url, headers={"Accept":"application/json","User-Agent":"Tsuzuki-CI-source-metadata-observation"})
               try:
@@ -164,6 +164,23 @@ jobs:
                           if mu_detail.get("series_id")==mu_id and normalized(mu_detail.get("title"))==normalized(works[index-1]):
                               mu_credits=[{"name":str(a.get("name") or "")[:128],"role":str(a.get("type") or "")[:40],"hasAuthorId":type(a.get("author_id")) is int} for a in mu_detail.get("authors",[]) if isinstance(a,dict)]
                               print("MU_PUBLIC_CREDITS|index="+str(index)+"|credits="+json.dumps(mu_credits[:12],ensure_ascii=True))
+                              credited_authors=[a for a in mu_detail.get("authors",[]) if isinstance(a,dict) and a.get("type")=="Author" and type(a.get("author_id")) is int and a["author_id"]>0]
+                              # One role-linked author per control, first identify the exact published credit.
+                              expected={1:"Chugong",3:"Son Jeho",10:"JH (Jeong Ji-Hun)"}[index]
+                              selected_authors=[a for a in credited_authors if a.get("name")==expected]
+                              if len(selected_authors)==1:
+                                  author_id=selected_authors[0]["author_id"]
+                                  time.sleep(2)
+                                  req=urllib.request.Request("https://api.mangaupdates.com/v1/authors/"+str(author_id),headers=mu_headers)
+                                  with urllib.request.urlopen(req,timeout=15) as resp:
+                                      author_raw=resp.read(512*1024+1)
+                                  if len(author_raw)>512*1024:
+                                      raise ValueError("author detail bound")
+                                  author=json.loads(author_raw)
+                                  if author.get("author_id",author.get("id"))==author_id:
+                                      # Only published aliases, not private biography or contact fields.
+                                      aliases=[str(a.get("name") or "")[:128] for a in author.get("associated",[]) if isinstance(a,dict)]
+                                      print("MU_PUBLIC_AUTHOR_ALIASES|index="+str(index)+"|sameId=True|name="+json.dumps(author.get("name"),ensure_ascii=True)+"|aliases="+json.dumps(aliases[:32],ensure_ascii=True))
 
                   url_exact=sum(exact_url(o.get("url")) for o in credited)
                   id_exact=sum(exact_url(o.get("@id")) for o in credited)
