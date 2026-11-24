@@ -91,10 +91,31 @@ class PrepareCanonicalChapterForReader(
             // source, language, cached edition or torrent if the chosen chapter
             // is not verifiably readable.
             if (requestedMangaAllLanguage != null && selectedOption == null) {
-                val option = resolveMangaAllSelectedChapter?.execute(
+                val releases = resolveMangaAllSelectedChapter?.options(
                     canonicalChapterId,
                     requestedMangaAllLanguage,
-                )
+                ).orEmpty()
+                if (releases.size > 1) {
+                    trace.event(
+                        subsystem = DiagnosticSubsystem.READER,
+                        name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                        stage = DiagnosticStage.READER,
+                        outcome = DiagnosticOutcome.NEEDS_CONFIRMATION,
+                        attributes = mapOf(
+                            DiagnosticAttribute.CANDIDATE_COUNT to DiagnosticAttributeValue.Number(releases.size.toLong()),
+                        ),
+                    )
+                    return complete(
+                        trace,
+                        started,
+                        CanonicalReaderPreparation.ProviderEditionConfirmationRequired(
+                            canonicalTitleId = chapter.canonicalTitleId,
+                            canonicalChapterId = canonicalChapterId,
+                            candidateCount = releases.size,
+                        ),
+                    )
+                }
+                val option = releases.singleOrNull()
                 trace.event(
                     subsystem = DiagnosticSubsystem.READER,
                     name = DiagnosticEventName.READER_SOURCE_SELECTED,
