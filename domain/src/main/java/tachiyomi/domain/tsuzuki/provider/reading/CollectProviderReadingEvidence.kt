@@ -109,6 +109,7 @@ class CollectProviderReadingEvidence private constructor(
     private val canonicalMetadataResolver: ResolveCanonicalMetadata?,
     private val workSourceAssociationRepository: ProviderWorkSourceAssociationRepository?,
     private val provisionalCursorRepository: ProviderProvisionalCursorRepository?,
+    private val nativeMangaDotPortfolioResearch: Boolean,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
 
@@ -139,6 +140,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalMetadataResolver = canonicalMetadataResolver,
         workSourceAssociationRepository = workSourceAssociationRepository,
         provisionalCursorRepository = provisionalCursorRepository,
+        nativeMangaDotPortfolioResearch = false,
         constructorMarker = Unit,
     )
 
@@ -156,6 +158,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalMetadataResolver: ResolveCanonicalMetadata? = null,
         workSourceAssociationRepository: ProviderWorkSourceAssociationRepository? = null,
         provisionalCursorRepository: ProviderProvisionalCursorRepository? = null,
+        nativeMangaDotPortfolioResearch: Boolean = false,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -170,6 +173,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalMetadataResolver = canonicalMetadataResolver,
         workSourceAssociationRepository = workSourceAssociationRepository,
         provisionalCursorRepository = provisionalCursorRepository,
+        nativeMangaDotPortfolioResearch = nativeMangaDotPortfolioResearch,
         constructorMarker = Unit,
     )
 
@@ -906,6 +910,58 @@ class CollectProviderReadingEvidence private constructor(
         return ProviderCallResult.Success(BindingDiscovery(unresolved = unresolved))
     }
 
+    /**
+     * Nonshipping opt-in on the disposable code11 research collector only.
+     * Source-supplied coverage is insufficient: fetch the exact HID/facet
+     * through the actual gateway, validate native page rows, and keep the
+     * result provisional. The ordinary injected app collector stays closed.
+     */
+    private suspend fun observeNativeMangaDotPreviews(
+        target: ReadingTarget,
+        queryTitle: String,
+        canonicalCreators: Set<String>?,
+        candidates: List<ProviderWorkCandidate>,
+    ): List<ProviderWorkCandidate> {
+        val descriptor = target.registration.descriptor
+        if (!nativeMangaDotPortfolioResearch || descriptor.id.value != "app.tsuzuki.mangaall" ||
+            descriptor.version.code != 11L || canonicalCreators.isNullOrEmpty()
+        ) {
+            return emptyList()
+        }
+        val contenders = candidates.filter { it.externalWorkId.startsWith("mangadot:") }
+        if (contenders.size > MAX_COVERAGE_CONTENDERS) return emptyList()
+        val assessments = ProviderWorkSourcePortfolio.assess(
+            descriptor.id,
+            target.facetId,
+            queryTitle,
+            canonicalCreators,
+            contenders,
+        ).associateBy { it.ref.externalWorkId }
+        val previews = mutableListOf<ProviderWorkCandidate>()
+        for (candidate in contenders) {
+            val assessment = assessments[candidate.externalWorkId] ?: continue
+            if (assessment.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED ||
+                assessment.editionQualification != ProviderSourceEditionQualification.UNRESOLVED
+            ) {
+                continue
+            }
+            val page = when (val result = gateway.chapters(
+                descriptor.id,
+                ProviderReadingChaptersRequest(assessment.ref),
+            )) {
+                is ProviderCallResult.Success -> result.value
+                is ProviderCallResult.Failure -> continue
+            }
+            MangaAllMangaDotNativeCoverage.fromFirstPage(
+                descriptor.version.code,
+                assessment.ref,
+                candidate,
+                page,
+            )?.let(previews::add)
+        }
+        return previews
+    }
+
     private suspend fun observeSourcePortfolio(
         canonicalTitleId: String,
         queryTitle: String,
@@ -922,7 +978,7 @@ class CollectProviderReadingEvidence private constructor(
             providerId = target.registration.descriptor.id,
             facetId = target.facetId,
             candidates = matches,
-        )
+        ) + observeNativeMangaDotPreviews(target, queryTitle, canonicalCreators, matches)
         if (trusted.isEmpty()) return emptyList()
         val assessed = ProviderWorkSourcePortfolio.assess(
             providerId = target.registration.descriptor.id,
