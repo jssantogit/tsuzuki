@@ -632,85 +632,123 @@ class CollectProviderReadingEvidence private constructor(
         val descriptor = target.registration.descriptor
         val discovered = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssessment>()
         val initialCursor = ProviderCursor("""{"v":1,"remaining":{"$source":{"c":null,"o":0}}}""")
-        // Leave time for native chapter collection within the unchanged 20 s
-        // outer per-lane deadline. An incomplete search cannot auto-bind.
+        // One page per independently observed title in round-robin order.
+        // Broad primary-name pagination must not consume the entire alias
+        // budget. Preserve each query's actual cursor, detect cycles across
+        // rounds, and keep the original 12 s lookup / 20 s lane deadlines.
+        data class QueryState(
+            val index: Int,
+            val title: String,
+            var cursor: ProviderCursor = initialCursor,
+            var pages: Int = 0,
+            var done: Boolean = false,
+            val seenCursors: MutableSet<String> = mutableSetOf(initialCursor.value),
+            val seenCandidates: MutableSet<ProviderWorkCandidate> = mutableSetOf(),
+        )
+        val queries = titles.mapIndexed { index, title -> QueryState(index, title) }
         withTimeoutOrNull(MAX_RESEARCH_LOOKUP_MILLIS) {
-            for ((queryIndex, title) in titles.withIndex()) {
-                val seen = mutableSetOf<ProviderWorkCandidate>()
-                suspend fun inspect(candidates: List<ProviderWorkCandidate>): Boolean {
-                    val exact = exactFacetMatches(title, target.facetId, candidates).filter(seen::add)
-                    if (exact.isNotEmpty()) {
-                        traceLookupCandidates(
-                            canonicalTitleId,
-                            target,
-                            queryIndex,
-                            title,
-                            exact,
-                            exact,
-                            selected = null,
-                            primary = null,
+            while (queries.any { !it.done } && discovered.isEmpty()) {
+                for (query in queries) {
+                    if (query.done) continue
+                    val title = query.title
+                    val queryIndex = query.index
+                    traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
+                    val result = withTimeoutOrNull(MAX_RESEARCH_QUERY_MILLIS) {
+                        collectLookup(
+                            providerId = descriptor.id,
+                            title = title,
+                            requestedLanguage = target.facetId,
+                            maxPages = 1,
+                            startingCursor = query.cursor,
+                            expectedSourcePrefix = "$source:",
                         )
-                        // Record the identity gate before native coverage. A
-                        // missing author must be distinguishable from no hit.
-                        ProviderWorkSourcePortfolio.assess(
-                            descriptor.id,
-                            target.facetId,
-                            title,
-                            canonicalCreators,
-                            exact,
-                        ).forEach {
-                            traceWorkSourceAssociation(canonicalTitleId, target, it, DiagnosticOutcome.CANDIDATES)
+                    }
+                    when (result) {
+                        is ProviderCallResult.Success -> {
+                            val page = result.value
+                            query.pages++
+                            val next = page.continuation
+                            if (next != null && !query.seenCursors.add(next.value)) {
+                                query.done = true
+                                traceLookupAttempt(
+                                    canonicalTitleId,
+                                    target,
+                                    queryIndex,
+                                    title,
+                                    DiagnosticOutcome.FAILED,
+                                    errorCode = ProviderErrorCode.MALFORMED_RESULT,
+                                )
+                                continue
+                            }
+                            query.done = next == null || query.pages >= MAX_LOOKUP_PAGES
+                            if (next != null) query.cursor = next
+                            val exact = exactFacetMatches(title, target.facetId, page.items)
+                                .filter(query.seenCandidates::add)
+                            if (exact.isNotEmpty()) {
+                                traceLookupCandidates(
+                                    canonicalTitleId,
+                                    target,
+                                    queryIndex,
+                                    title,
+                                    exact,
+                                    exact,
+                                    selected = null,
+                                    primary = null,
+                                )
+                                ProviderWorkSourcePortfolio.assess(
+                                    descriptor.id,
+                                    target.facetId,
+                                    title,
+                                    canonicalCreators,
+                                    exact,
+                                ).forEach {
+                                    traceWorkSourceAssociation(
+                                        canonicalTitleId,
+                                        target,
+                                        it,
+                                        DiagnosticOutcome.CANDIDATES,
+                                    )
+                                }
+                                observeSourcePortfolio(canonicalTitleId, title, target, canonicalCreators, exact)
+                                    .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
+                                    .forEach { discovered[it.ref] = it }
+                            }
+                            traceLookupAttempt(
+                                canonicalTitleId,
+                                target,
+                                queryIndex,
+                                title,
+                                if (page.complete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
+                                candidateCount = page.items.size,
+                            )
                         }
-                        observeSourcePortfolio(canonicalTitleId, title, target, canonicalCreators, exact)
-                            .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
-                            .forEach { discovered[it.ref] = it }
+                        is ProviderCallResult.Failure -> {
+                            query.done = true
+                            traceLookupAttempt(
+                                canonicalTitleId,
+                                target,
+                                queryIndex,
+                                title,
+                                DiagnosticOutcome.FAILED,
+                                errorCode = result.error.code,
+                                sourceFailureCode = result.error.sourceFailureCode,
+                                malformedStage = result.error.malformedStage,
+                                httpStatus = result.error.httpStatus,
+                            )
+                        }
+                        null -> {
+                            query.done = true
+                            traceLookupAttempt(
+                                canonicalTitleId,
+                                target,
+                                queryIndex,
+                                title,
+                                DiagnosticOutcome.TIMEOUT,
+                            )
+                        }
                     }
-                    return discovered.isNotEmpty()
+                    if (discovered.isNotEmpty()) break
                 }
-                traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
-                val result = withTimeoutOrNull(MAX_RESEARCH_QUERY_MILLIS) {
-                    collectLookup(
-                        providerId = descriptor.id,
-                        title = title,
-                        requestedLanguage = target.facetId,
-                        startingCursor = initialCursor,
-                        expectedSourcePrefix = "$source:",
-                        stopWhen = { inspect(it) },
-                    )
-                }
-                when (result) {
-                    is ProviderCallResult.Success -> {
-                        // The terminal page does not run stopWhen. Validate it too.
-                        inspect(result.value.items)
-                        traceLookupAttempt(
-                            canonicalTitleId,
-                            target,
-                            queryIndex,
-                            title,
-                            if (result.value.complete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
-                            candidateCount = result.value.items.size,
-                        )
-                    }
-                    is ProviderCallResult.Failure -> traceLookupAttempt(
-                        canonicalTitleId,
-                        target,
-                        queryIndex,
-                        title,
-                        DiagnosticOutcome.FAILED,
-                        errorCode = result.error.code,
-                        sourceFailureCode = result.error.sourceFailureCode,
-                        malformedStage = result.error.malformedStage,
-                        httpStatus = result.error.httpStatus,
-                    )
-                    null -> traceLookupAttempt(
-                        canonicalTitleId,
-                        target,
-                        queryIndex,
-                        title,
-                        DiagnosticOutcome.TIMEOUT,
-                    )
-                }
-                if (discovered.isNotEmpty()) break
             }
         }
         if (discovered.isEmpty()) return ProviderReadingEvidenceCollection(complete = false)
@@ -1512,7 +1550,9 @@ class CollectProviderReadingEvidence private constructor(
         while (true) {
             if (++pageCount > maxPages) {
                 return if (providerId.value == "app.tsuzuki.mangaall") {
-                    ProviderCallResult.Success(LookupSnapshot(items.toList(), complete = false))
+                    ProviderCallResult.Success(
+                        LookupSnapshot(items.toList(), complete = false, continuation = cursor),
+                    )
                 } else {
                     malformed()
                 }
@@ -2140,6 +2180,8 @@ class CollectProviderReadingEvidence private constructor(
         val complete: Boolean,
         // Closed transport failure type for partial diagnostics; no upstream text.
         val partialErrorCode: ProviderErrorCode? = null,
+        // Exact bounded continuation; never an authoritative snapshot.
+        val continuation: ProviderCursor? = null,
     )
 
     private data class BindingDiscovery(
