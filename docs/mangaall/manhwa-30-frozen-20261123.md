@@ -13,6 +13,7 @@
 | [#45302021667](https://github.com/jssantogit/tsuzuki/actions/runs/45302021667) | Primeira execução, etiquetas históricas ainda `manga` no auditor | 24/30 | 44 | 0 | RED legítimo |
 | [#45302391930](https://github.com/jssantogit/tsuzuki/actions/runs/45302391930) | Exatamente os mesmos títulos, etiqueta de fonte `manhwa` e lock aplicado | 24/30 | 44 | 0 | RED legítimo |
 | [#45302867949](https://github.com/jssantogit/tsuzuki/actions/runs/45302867949) | Mesma lista, filtro MangaDex coreano e três obras com aliases comprovados | 24/30 | **45** | 0 | RED legítimo; 29/30 com capítulo 1 em HID |
+| [#45303354025](https://github.com/jssantogit/tsuzuki/actions/runs/45303354025) | Título original coreano de Raeliana + medição de páginas anunciadas pelo MangaDot | 24/30 | **46** | 0 | RED legítimo; Raeliana ainda sem capítulo 1 |
 
 **Atualização na terceira rodada:** *SSS-Class Revival Hunter* e *Return of the Blossoming Blade* ganharam comprovação de capítulo 1 em HID de fonte após incluir nomes alternativos verificados. O número de obras com capítulo 1 comprovado passou de 27/30 para **29/30**. *Sweet Home* e *Wind Breaker* não apresentam mais conflito de autor entre títulos principais depois de filtrar MangaDex para idioma original coreano; seguem com rivais de fonte/edições e sem edição canônica autorizada. *Raeliana* continua sem correspondência exata/primeiro capítulo comprovado.
 
@@ -28,7 +29,9 @@ Embora 27/30 obras tenham ao menos um HID com capítulo 1 e cursor terminal, iss
 4. Repetir o live com o mesmo manifesto até distinguir limites de paginação, ausência genuína de capítulos na fonte, erro do provider e ambiguidades legítimas. Nunca completar páginas omitidas por inferência ou atribuir autoria inexistente.
 
 
-**4ª CI do corpus fixo:** [#45303354025](https://github.com/jssantogit/tsuzuki/actions/runs/45303354025) coleta, sem dados sensíveis, o total de páginas que o MangaDot anuncia em cada busca; isso permite distinguir orçamento real de 32 páginas de buscas ainda muito maiores. Conferir agregador antes de afirmar resultados. A instrumentação e testes negativos offline passaram em [#45302868058](https://github.com/jssantogit/tsuzuki/actions/runs/45302868058) e [#45302985077](https://github.com/jssantogit/tsuzuki/actions/runs/45302985077).
+**4ª CI do corpus fixo:** [#45303354025](https://github.com/jssantogit/tsuzuki/actions/runs/45303354025) confirmou **24/30 buscas completas, 46 inventários completos por HID, 29/30 obras com capítulo 1 em HID**, zero saída >64KiB. O título coreano acrescentado ao teste encontrou candidato para *Raeliana* por alias, mas **não comprovou capítulo 1**. O MangaDot anunciou páginas de resultados muito além do orçamento: *The Boxer* **464**, *The Horizon* **464**, *The Breaker* **466**, *Weak Hero* **48**, *The World After the Fall* **43**, *Cheese in the Trap* **74**. Aumentar globalmente o orçamento de 32 para 64 ou 96 não resolveria as três buscas de mais de 460 páginas, e pode consumir requisições desnecessárias.
+
+**5ª CI do corpus fixo:** [#45303820829](https://github.com/jssantogit/tsuzuki/actions/runs/45303820829) foi iniciada depois de [offline #45303741114](https://github.com/jssantogit/tsuzuki/actions/runs/45303741114) GREEN; o experimento unsigned do MangaDot consulta por termos nucleares *Boxer*, *Horizon* e *Breaker* para os três títulos amplos, mas continua exigindo que o roteador confirme o título ORIGINAL/alias exato de cada candidato. Não mudar a lista nem promover edição canônica. O resultado real do 5º live ainda precisa ser observado.
 
 ## Critério para encerrar o corpus
 
