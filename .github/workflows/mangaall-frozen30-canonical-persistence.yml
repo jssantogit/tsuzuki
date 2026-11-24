@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  CATALOG_SCOPE: ${{ contains(github.event.head_commit.message, 'CATALOG_SHIKIMORI') && 'shikimori' || 'mangaupdates' }}
+  CATALOG_SCOPE: ${{ contains(github.event.head_commit.message, 'CATALOG_EXPLICIT_PLAN') && 'explicit_plan' || contains(github.event.head_commit.message, 'CATALOG_SHIKIMORI') && 'shikimori' || 'mangaupdates' }}
 
 concurrency:
   group: mangaall-frozen30-canonical-persistence
@@ -30,6 +30,7 @@ jobs:
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-frozen30-canonical-persistence.yml'
           python3 -m py_compile .github/scripts/run_mangaall_frozen30_canonical_persistence.py
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
 
   build-once:
     needs: preflight
@@ -50,12 +51,15 @@ jobs:
         run: |
           mkdir -p app/src/androidTest/assets
           cp .github/mangaall-dual-source-30-cohort-lock.json app/src/androidTest/assets/
+          cp .github/mangaall-frozen30-catalog-plan.json app/src/androidTest/assets/
       - name: Stage pinned, NONSHIPPING code11 ZIP and exact lock into test assets
         run: |
           set -euo pipefail
           test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
+          extra=()
+          if [[ "$CATALOG_SCOPE" == 'explicit_plan' ]]; then extra+=(--mangadot-creators); fi
           python3 .github/scripts/mangaall_code11_dual_source_unsigned.py \
-            --source future-code11-source --manhwa-only \
+            --source future-code11-source --manhwa-only "${extra[@]}" \
             --output app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
           test -s app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
           ! git ls-files --error-unmatch app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
@@ -93,8 +97,16 @@ jobs:
           set -euo pipefail
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+            cat "$log"
+            exit 0
+          fi
+          if ! grep -Eiq 'no cached version|offline mode|not available for offline' "$log"; then
+            cat "$log"
+            exit 1
+          fi
           for attempt in 1 2 3; do
-            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               exit 0
             fi
