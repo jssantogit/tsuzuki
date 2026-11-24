@@ -398,6 +398,9 @@ def test_self():
     assert conflict_report["outcome"] == "NEEDS_CORRECTION"
     assert "PRIMARY_TITLE_AUTHOR_CONFLICT" in conflict_report["works"][0]["issues"]
     same_author = copy.deepcopy(collision)
+    # Explicit same-source rivals in this fixture; candidate-count alone
+    # cannot establish a same-source conflict.
+    same_author[0]["results"][0]["sameSourceRivals"] = True
     same_author[0]["results"][0]["candidates"][0]["authors"] = ["Naoki Urasawa"]
     same_author[0]["results"][0]["candidates"][1]["authors"] = ["Urasawa Naoki"]
     same_author_report = aggregate(works, same_author)
