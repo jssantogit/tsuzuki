@@ -20,5 +20,10 @@
             android:name="eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestActivity"
             android:exported="false"
             android:theme="@style/Theme.Tachiyomi" />
+        <!-- Passive MangaBall comparison, debug only. -->
+        <activity
+            android:name="eu.kanade.tachiyomi.provider.runtime.MangaBallCiBrowserWarmupActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Tachiyomi" />
     </application>
 </manifest>
