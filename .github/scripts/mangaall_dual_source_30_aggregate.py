@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import unicodedata
 from pathlib import Path
 
@@ -34,6 +35,16 @@ def normalize_source_title(value):
     return " ".join(unicodedata.normalize("NFKC", value).lower().split())
 
 
+def normalized_creator_name(value):
+    if not isinstance(value, str):
+        return ""
+    # Japanese romanized credits sometimes swap given/surname order or use
+    # accent marks. Token normalization is diagnostic, not authority to bind.
+    folded = unicodedata.normalize("NFKD", value).casefold()
+    without_marks = "".join(c for c in folded if not unicodedata.combining(c))
+    return " ".join(sorted(re.findall(r"[^\W_]+", without_marks, flags=re.UNICODE)))
+
+
 def source_identity_signals(query_title, candidates):
     # A source-only translated title/alias is not a verified work identity.
     # Distinguish a same-primary-title creator conflict from an alias or
@@ -44,21 +55,25 @@ def source_identity_signals(query_title, candidates):
                if normalize_source_title(c.get("title")) == requested]
     alias_only = [c for c in matched
                   if normalize_source_title(c.get("title")) != requested]
-    creator_sets = set()
+    creator_sets = []
     for candidate in primary:
         authors = candidate.get("authors")
         if not isinstance(authors, list):
             continue
-        creators = tuple(sorted({
-            normalize_source_title(author) for author in authors
-            if normalize_source_title(author)
-        }))
+        creators = frozenset(filter(None, (normalized_creator_name(a) for a in authors)))
         if creators:
-            creator_sets.add(creators)
+            creator_sets.append(creators)
+    # A list of co-creators on one source and one shared author on another
+    # is not evidence of conflicting works. Require two disjoint sets.
+    disjoint_creators = any(
+        left.isdisjoint(right)
+        for i, left in enumerate(creator_sets)
+        for right in creator_sets[i + 1:]
+    )
     return {
         "primaryExactMatches": len(primary),
         "aliasOnlyMatches": len(alias_only),
-        "primaryTitleCreatorConflict": len(creator_sets) > 1,
+        "primaryTitleCreatorConflict": disjoint_creators,
         "canonicalIdentity": "NOT_VERIFIED",
     }
 
@@ -147,6 +162,11 @@ def check_shard(payload, index, works):
                     isinstance(candidate.get("workId"), str) and
                     candidate["workId"].startswith(candidate["source"] + ":"),
                     "FOREIGN_CANDIDATE")
+        closed_lookup_error = row.get("lookupError")
+        require(closed_lookup_error is None or (
+            isinstance(closed_lookup_error, str) and
+            re.fullmatch(r"[A-Z0-9_]{1,45}", closed_lookup_error)
+        ), "LOOKUP_ERROR_NOT_CLOSED")
         require(row.get("granularChapterPagination") == "UNSIGNED_CI_EPHEMERAL_CACHE_48K_200",
                 "GRANULAR_OUTPUT_PROVENANCE_MISSING")
         audits = row.get("sourceChapterAudits")
@@ -200,6 +220,8 @@ def aggregate(works, payloads):
             "primaryTitleAuthorConflicts": 0, "aliasOnlyWorkCount": 0,
             "chapterOneVerifiedWorks": 0, "noSourceChapterOneWorks": 0,
             "partialLookupWithCompleteChapters": 0,
+            "lookupUpstreamErrors": 0,
+            "multisourceParallelWithoutSameSourceRivals": 0,
         },
         "works": [],
     }
@@ -214,6 +236,22 @@ def aggregate(works, payloads):
         counts["sameSourceRivals"] += int(bool(row.get("sameSourceRivals")))
         counts["authorDisagreements"] += int(bool(row.get("sourceAuthorDisagreement")))
         identity = source_identity_signals(row["title"], row["candidates"])
+        exact_sources = {
+            candidate["source"] for candidate in row["candidates"]
+            if candidate.get("exactMatch") is True
+        }
+        if identity["primaryTitleCreatorConflict"]:
+            multiplicity = "PRIMARY_TITLE_CREATOR_CONFLICT"
+        elif row.get("sameSourceRivals"):
+            multiplicity = "SAME_SOURCE_RIVALS_UNRESOLVED"
+        elif len(exact_sources) > 1:
+            multiplicity = "MULTISOURCE_PARALLEL_UNRESOLVED"
+            counts["multisourceParallelWithoutSameSourceRivals"] += 1
+        elif identity["aliasOnlyMatches"]:
+            multiplicity = "ALIAS_ONLY_REQUIRES_REVIEW"
+        else:
+            multiplicity = "NO_OBSERVED_RIVAL"
+        counts["lookupUpstreamErrors"] += int(bool(row.get("lookupError")))
         counts["primaryExactMatchCount"] += identity["primaryExactMatches"]
         counts["aliasOnlyMatchCount"] += identity["aliasOnlyMatches"]
         counts["aliasOnlyWorkCount"] += int(identity["aliasOnlyMatches"] > 0)
@@ -222,6 +260,8 @@ def aggregate(works, payloads):
         if identity["primaryTitleCreatorConflict"]:
             issues.append("PRIMARY_TITLE_AUTHOR_CONFLICT")
         if not row.get("lookupComplete"): issues.append("LOOKUP_INCOMPLETE")
+        if row.get("lookupError"):
+            issues.append("LOOKUP_ERROR_" + row["lookupError"])
         if row["candidateCount"] == 0: issues.append("NO_SOURCE_CANDIDATE")
         if row.get("candidateSummariesTruncated"): issues.append("CANDIDATES_TRUNCATED")
         for source, http in row["httpBySource"].items():
@@ -271,9 +311,12 @@ def aggregate(works, payloads):
         output["works"].append({
             "position": row["position"] + 1, "title": row["title"],
             "lookupComplete": bool(row.get("lookupComplete")),
+            "lookupState": row.get("lookup"),
+            "lookupError": row.get("lookupError"),
             "candidates": row["candidateCount"],
             "ambiguous": bool(row.get("unresolvedCandidates")),
             "sameSourceRivals": bool(row.get("sameSourceRivals")),
+            "candidateMultiplicityClass": multiplicity,
             "identitySignals": identity,
             "atLeastOneCompleteSourceChapterOne": complete_chapter_one,
             "chapterOneAuthority": "SOURCE_HID_ONLY_NOT_CANONICAL",
@@ -354,6 +397,18 @@ def test_self():
     }
     assert conflict_report["outcome"] == "NEEDS_CORRECTION"
     assert "PRIMARY_TITLE_AUTHOR_CONFLICT" in conflict_report["works"][0]["issues"]
+    same_author = copy.deepcopy(collision)
+    same_author[0]["results"][0]["candidates"][0]["authors"] = ["Naoki Urasawa"]
+    same_author[0]["results"][0]["candidates"][1]["authors"] = ["Urasawa Naoki"]
+    same_author_report = aggregate(works, same_author)
+    assert same_author_report["counts"]["primaryTitleAuthorConflicts"] == 0
+    assert same_author_report["works"][0]["candidateMultiplicityClass"] == (
+        "SAME_SOURCE_RIVALS_UNRESOLVED"
+    )
+    coauthors = copy.deepcopy(collision)
+    coauthors[0]["results"][0]["candidates"][0]["authors"] = ["Author Alpha", "Illustrator Gamma"]
+    coauthors[0]["results"][0]["candidates"][1]["authors"] = ["Illustrator Gamma"]
+    assert aggregate(works, coauthors)["counts"]["primaryTitleAuthorConflicts"] == 0
     missing_chapter_one = copy.deepcopy(data)
     missing_chapter_one[0]["results"][0]["sourceChapterAudits"][0]["chapterOne"] = False
     missing_report = aggregate(works, missing_chapter_one)
@@ -368,7 +423,11 @@ def test_self():
     assert partial_report["counts"]["partialLookupWithCompleteChapters"] == 1
     assert partial_report["works"][0]["atLeastOneCompleteSourceChapterOne"] is True
     assert "LOOKUP_INCOMPLETE" in partial_report["works"][0]["issues"]
-
+    upstream_error = copy.deepcopy(partial_but_readable)
+    upstream_error[0]["results"][0]["lookupError"] = "UPSTREAM_OR_RUNTIME_ERROR"
+    upstream_report = aggregate(works, upstream_error)
+    assert upstream_report["counts"]["lookupUpstreamErrors"] == 1
+    assert "LOOKUP_ERROR_UPSTREAM_OR_RUNTIME_ERROR" in upstream_report["works"][0]["issues"]
 
     cases = [
         ("FOREIGN_SOURCE", lambda p: p[0].update(sourceSet=["mangadex", "mangafire"])),
@@ -382,6 +441,7 @@ def test_self():
         ("FIRE_REQUEST", lambda p: p[0].update(prohibitedThirdSourceRequests=1)),
         ("BAD_HTTP", lambda p: p[0]["results"][0]["httpBySource"]["mangadex"].update(http403=1)),
         ("EXCESSIVE_PAGES", lambda p: p[2]["results"][0]["sourceChapterAudits"][0].update(pages=33)),
+        ("UNSAFE_ERROR_TEXT", lambda p: p[0]["results"][0].update(lookupError="HTTP_ERROR:url")),
     ]
     for name, mutate in cases:
         trial = copy.deepcopy(data)
@@ -418,6 +478,16 @@ def main():
         dest.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n",
                         encoding="utf-8")
         counts = report["counts"]
+        # Safe, non-sensitive per-work reasons in live job logs allow analysis
+        # without raw API bodies or ephemeral artifact downloads.
+        for row in report["works"]:
+            print("MANGAALL_DUAL30_ISSUE|position=" + str(row["position"]) +
+                  "|title=" + row["title"] +
+                  "|lookup=" + str(row["lookupState"]) +
+                  "|lookupError=" + str(row["lookupError"] or "NONE") +
+                  "|multiplicity=" + row["candidateMultiplicityClass"] +
+                  "|chapterOne=" + str(row["atLeastOneCompleteSourceChapterOne"]) +
+                  "|issues=" + ",".join(row["issues"]))
         print("MANGAALL_DUAL30_GATE|outcome=" + report["outcome"] +
               "|works=30|sources=2|completeLookup=" + str(counts["completeLookup"]) +
               "|ambiguous=" + str(counts["ambiguous"]) +
