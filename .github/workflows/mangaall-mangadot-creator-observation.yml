@@ -107,6 +107,7 @@ jobs:
               request=urllib.request.Request("https://mangadot.net/manga/"+hid,headers={"Accept":"text/html","User-Agent":"Tsuzuki-CI-source-metadata-observation"})
               try:
                   with opener.open(request,timeout=15) as response:
+                      final_url=response.geturl()
                       raw=response.read(2*1024*1024+1)
                       if len(raw)>2*1024*1024:
                           print(f"DOT_DETAIL|index={index}|outcome=BODY_LIMIT")
@@ -114,8 +115,19 @@ jobs:
                   parser=Metadata()
                   parser.feed(raw.decode("utf-8",errors="replace"))
                   candidates=[o for doc in parser.documents for o in objects(doc) if normalized(o.get("name"))==normalized(works[index-1])]
-                  creator_objects=sum(any(nonempty(o.get(f)) for f in fields) for o in candidates)
-                  print(f"DOT_DETAIL|index={index}|outcome=HTTP200|structuredDocuments={len(parser.documents)}|exactNamedObjects={len(candidates)}|withCreatorFields={creator_objects}")
+                  credited=[o for o in candidates if any(nonempty(o.get(f)) for f in fields)]
+                  expected="https://mangadot.net/manga/"+hid
+                  def exact_url(value):
+                      return isinstance(value,str) and value.rstrip("/")==expected
+                  def author_names(value):
+                      entries=value if isinstance(value,list) else [value]
+                      return [e["name"] for e in entries if isinstance(e,dict) and e.get("@type")=="Person" and isinstance(e.get("name"),str) and e["name"].strip()]
+                  known={"Book","ComicSeries","ComicStory","CreativeWork","Article","WebPage","Manga","Person","ListItem"}
+                  types=[o.get("@type") for o in credited]
+                  types=[t if isinstance(t,str) and t in known else "OTHER" for t in types]
+                  exact_ref=sum(exact_url(o.get("url")) or exact_url(o.get("@id")) for o in credited)
+                  people=sum(len(author_names(o.get("author"))) for o in credited)
+                  print(f"DOT_DETAIL|index={index}|outcome=HTTP200|bytes={len(raw)}|finalUrlExact={exact_url(final_url)}|structuredDocuments={len(parser.documents)}|exactNamedObjects={len(candidates)}|withCreatorFields={len(credited)}|types={','.join(types) or 'NONE'}|exactWorkRef={exact_ref}|authorPersons={people}")
               except urllib.error.HTTPError as error:
                   print(f"DOT_DETAIL|index={index}|outcome=HTTP{error.code}")
                   if error.code in (403,429):
