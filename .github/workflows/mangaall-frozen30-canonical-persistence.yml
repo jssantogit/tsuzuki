@@ -24,7 +24,7 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
-      - name: Validate locked cohort and adversarial restart verdicts without live traffic
+      - name: Validate locked cohort, adversarial restart and restored Reader verdicts without live traffic
         run: |
           set -euo pipefail
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-frozen30-canonical-persistence.yml'
