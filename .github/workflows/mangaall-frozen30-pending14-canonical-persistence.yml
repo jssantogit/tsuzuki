@@ -109,7 +109,7 @@ jobs:
           set -euo pipefail
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
-          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:testDebugUnitTest --tests '*ShikimoriApiTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:testDebugUnitTest --tests '*ShikimoriApiTest' --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
             cat "$log"
             exit 0
           fi
@@ -118,7 +118,7 @@ jobs:
             exit 1
           fi
           for attempt in 1 2 3; do
-            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:testDebugUnitTest --tests '*ShikimoriApiTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:testDebugUnitTest --tests '*ShikimoriApiTest' --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               exit 0
             fi
@@ -203,3 +203,6 @@ jobs:
 
 # Explicit bounded rerun of the 14 non-decoded indices in CI 45422407838.
 # The 16 previously successful works remain in the original frozen lock.
+
+# Re-evaluate the exact pending14 cohort after independently attested bilingual credits,
+# literal GraphQL variables and Hangul spacing regressions. Include Wind Breaker as a control.
