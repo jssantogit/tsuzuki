@@ -1,7 +1,7 @@
-name: MangaALL — frozen 30 manhwas, real Android first image decode (OPT-IN)
+name: MangaALL — frozen 30 manhwas, actual app Reader HTTP loader (OPT-IN)
 # Immutable corpus, build ONCE and run 3 isolated GitHub-hosted Android
 # emulators against the same unsigned code11 APK pair (10 locked works/shard).
-# Source-HID only; first-page Android bitmap probe, not canonical/UI Reader, signing or release.
+# Source-HID only; actual app OkHttp Reader loader + bitmap; no canonical/UI or release.
 on:
   push:
     branches: ['probe/mangaall-dual-source-scale30-*']
@@ -62,6 +62,9 @@ jobs:
           assert "mangaAllReaderPagesProbe" in runner
           assert "mangaAllPixelDecodeProbe" in kotlin
           assert "mangaAllPixelDecodeProbe" in runner
+          assert "mangaAllAppReaderLoaderProbe" in kotlin
+          assert "mangaAllAppReaderLoaderProbe" in runner
+          assert "ProviderHttpPageLoader" in kotlin
           Path("app/src/androidTest/assets").mkdir(parents=True, exist_ok=True)
           Path("app/src/androidTest/assets/mangaall-dual-source-30-cohort-lock.json").write_bytes(
               src.read_bytes()
@@ -144,7 +147,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  frozen-manhwa-image-pixels:
+  frozen-manhwa-app-reader-loader:
     needs: build-once-unsigned
     runs-on: ubuntu-24.04
     timeout-minutes: 55
@@ -172,7 +175,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Decode first page image pixels on Android, shard ${{ matrix.shard }}
+      - name: Exercise actual app Reader loader with first page, shard ${{ matrix.shard }}
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 35
@@ -180,7 +183,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: bash .github/scripts/run_mangaall_frozen30_code11_android_live.sh ${{ matrix.shard }} 1 1
+          script: bash .github/scripts/run_mangaall_frozen30_code11_android_live.sh ${{ matrix.shard }} 1 0 1
       - name: Upload ONLY sanitized Android cohort verdict
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
