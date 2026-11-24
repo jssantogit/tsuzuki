@@ -167,6 +167,15 @@ def check_shard(payload, index, works):
             isinstance(closed_lookup_error, str) and
             re.fullmatch(r"[A-Z0-9_]{1,45}", closed_lookup_error)
         ), "LOOKUP_ERROR_NOT_CLOSED")
+        failures = row.get("sourceLookupFailures", [])
+        require(isinstance(failures, list) and len(failures) <= 16 and all(
+            isinstance(error, dict) and set(error) == {"source", "reason"} and
+            error["source"] in SOURCE_IDS and
+            isinstance(error["reason"], str) and
+            re.fullmatch(r"[A-Z0-9_]{1,45}", error["reason"])
+            for error in failures
+        ) and type(row.get("sourceLookupFailuresTruncated", False)) is bool,
+                "SOURCE_LOOKUP_FAILURES_NOT_CLOSED")
         require(row.get("granularChapterPagination") == "UNSIGNED_CI_EPHEMERAL_CACHE_48K_200",
                 "GRANULAR_OUTPUT_PROVENANCE_MISSING")
         audits = row.get("sourceChapterAudits")
@@ -222,6 +231,7 @@ def aggregate(works, payloads):
             "partialLookupWithCompleteChapters": 0,
             "lookupUpstreamErrors": 0,
             "multisourceParallelWithoutSameSourceRivals": 0,
+            "sourceLookupFailuresObserved": 0,
         },
         "works": [],
     }
@@ -252,6 +262,7 @@ def aggregate(works, payloads):
         else:
             multiplicity = "NO_OBSERVED_RIVAL"
         counts["lookupUpstreamErrors"] += int(bool(row.get("lookupError")))
+        counts["sourceLookupFailuresObserved"] += len(row.get("sourceLookupFailures", []))
         counts["primaryExactMatchCount"] += identity["primaryExactMatches"]
         counts["aliasOnlyMatchCount"] += identity["aliasOnlyMatches"]
         counts["aliasOnlyWorkCount"] += int(identity["aliasOnlyMatches"] > 0)
@@ -262,6 +273,10 @@ def aggregate(works, payloads):
         if not row.get("lookupComplete"): issues.append("LOOKUP_INCOMPLETE")
         if row.get("lookupError"):
             issues.append("LOOKUP_ERROR_" + row["lookupError"])
+        for source_error in row.get("sourceLookupFailures", []):
+            issues.append(source_error["source"].upper() + "_LOOKUP_" + source_error["reason"])
+        if row.get("sourceLookupFailuresTruncated"):
+            issues.append("SOURCE_LOOKUP_DIAGNOSTICS_TRUNCATED")
         if row["candidateCount"] == 0: issues.append("NO_SOURCE_CANDIDATE")
         if row.get("candidateSummariesTruncated"): issues.append("CANDIDATES_TRUNCATED")
         for source, http in row["httpBySource"].items():
@@ -313,6 +328,8 @@ def aggregate(works, payloads):
             "lookupComplete": bool(row.get("lookupComplete")),
             "lookupState": row.get("lookup"),
             "lookupError": row.get("lookupError"),
+            "sourceLookupFailures": row.get("sourceLookupFailures", []),
+            "sourceLookupFailuresTruncated": row.get("sourceLookupFailuresTruncated", False),
             "candidates": row["candidateCount"],
             "ambiguous": bool(row.get("unresolvedCandidates")),
             "sameSourceRivals": bool(row.get("sameSourceRivals")),
@@ -431,6 +448,12 @@ def test_self():
     upstream_report = aggregate(works, upstream_error)
     assert upstream_report["counts"]["lookupUpstreamErrors"] == 1
     assert "LOOKUP_ERROR_UPSTREAM_OR_RUNTIME_ERROR" in upstream_report["works"][0]["issues"]
+    source_error = copy.deepcopy(upstream_error)
+    source_error[0]["results"][0]["sourceLookupFailures"] = [
+        {"source": "mangadot", "reason": "SOURCE_PAGINATION_INVALID"}
+    ]
+    source_report = aggregate(works, source_error)
+    assert "MANGADOT_LOOKUP_SOURCE_PAGINATION_INVALID" in source_report["works"][0]["issues"]
 
     cases = [
         ("FOREIGN_SOURCE", lambda p: p[0].update(sourceSet=["mangadex", "mangafire"])),
@@ -445,6 +468,8 @@ def test_self():
         ("BAD_HTTP", lambda p: p[0]["results"][0]["httpBySource"]["mangadex"].update(http403=1)),
         ("EXCESSIVE_PAGES", lambda p: p[2]["results"][0]["sourceChapterAudits"][0].update(pages=33)),
         ("UNSAFE_ERROR_TEXT", lambda p: p[0]["results"][0].update(lookupError="HTTP_ERROR:url")),
+        ("UNSAFE_SOURCE_FAILURE", lambda p: p[0]["results"][0].update(
+            sourceLookupFailures=[{"source": "mangadot", "reason": "header: secret"}])),
     ]
     for name, mutate in cases:
         trial = copy.deepcopy(data)
@@ -488,6 +513,10 @@ def main():
                   "|title=" + row["title"] +
                   "|lookup=" + str(row["lookupState"]) +
                   "|lookupError=" + str(row["lookupError"] or "NONE") +
+                  "|sourceErrors=" + ",".join(
+                      error["source"].upper() + "_" + error["reason"]
+                      for error in row["sourceLookupFailures"]
+                  ) +
                   "|multiplicity=" + row["candidateMultiplicityClass"] +
                   "|chapterOne=" + str(row["atLeastOneCompleteSourceChapterOne"]) +
                   "|issues=" + ",".join(row["issues"]))
