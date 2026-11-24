@@ -106,6 +106,9 @@ class ProviderWorkSourcePortfolioTest {
             "별빛작가" to "Starlight (별빛작가)",
             "Kim Haejin (김해진)" to "Hae-Jin Kim",
             "Mira Han" to "Han Mira (한미라)",
+            "문 서연" to "MS_Star (문서연)",
+            "정하늘" to "Haneul Jeong (정 하늘)",
+            "나 래 작가" to "나래작가",
         )) {
             val result = assess(credit, source)
             result.workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
@@ -121,6 +124,11 @@ class ProviderWorkSourcePortfolioTest {
             "Mira Han" to "Han Yuna (한유나)",
             "Moonrise" to "Moonrise (A문라이즈)",
             "Moonrise" to "Moonrise (문)",
+            "문 서연" to "MS_Star (문서윤)",
+            "하늘 정" to "Haneul Jeong (정 하늘)",
+            "문" to "MS_Star (문서연)",
+            "Moon Rise" to "Moonrise",
+            "서연" to "문 서연",
         )) {
             assess(credit, source).workVerification shouldBe ProviderWorkVerification.AUTHOR_CONFLICT
         }

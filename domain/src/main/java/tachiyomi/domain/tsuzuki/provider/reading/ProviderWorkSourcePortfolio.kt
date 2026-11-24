@@ -129,8 +129,11 @@ object ProviderWorkSourcePortfolio {
         val spellings = buildSet {
             add(normalized)
             BILINGUAL_KOREAN_CREDIT.matchEntire(normalized.trim())?.let {
-                add(it.groupValues[1])
-                add(it.groupValues[2])
+                val native = it.groupValues[2]
+                if (native.count { char -> char in '가'..'힣' } in 2..32) {
+                    add(it.groupValues[1])
+                    add(native)
+                }
             }
         }
         for (spelling in spellings) {
@@ -148,7 +151,15 @@ object ProviderWorkSourcePortfolio {
     }
 
     private fun normalizeCreator(name: String): String? {
-        val tokens = name.trim().lowercase()
+        // Korean catalogs may insert a space between a surname and given
+        // name. Preserve the full Hangul sequence, including its order;
+        // ignore only whitespace in an entirely Hangul credit. This is not
+        // phonetic transliteration or a Latin pseudonym matching rule.
+        val trimmed = name.trim()
+        if (HANGUL_CREDIT.matches(trimmed)) {
+            return "hangul:" + trimmed.replace(WHITESPACE, "")
+        }
+        val tokens = trimmed.lowercase()
             .split(CREATOR_SEPARATORS)
             .filter(String::isNotBlank)
             .takeIf { it.isNotEmpty() }
@@ -248,8 +259,9 @@ object ProviderWorkSourcePortfolio {
     private val WHITESPACE = Regex("\\s+")
     private val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
     private val CREATOR_COMBINING_MARKS = Regex("\\p{M}+")
+    private val HANGUL_CREDIT = Regex("""[가-힣]+(?:\s+[가-힣]+)*""")
     private val BILINGUAL_KOREAN_CREDIT = Regex(
-        """([\p{IsLatin}][\p{IsLatin}\p{M} ,.'’\-‐‑]{0,127}?)\s*\(([가-힣]{2,32}(?: [가-힣]{1,32})?)\)""",
+        """([\p{IsLatin}][\p{IsLatin}\p{M} ,.'’_\-‐‑]{0,127}?)\s*\(([가-힣]+(?:\s+[가-힣]+)*)\)""",
     )
     private val EXPLICIT_NAME_HYPHEN = Regex("([A-Za-z])[-‐‑]([A-Za-z])")
     private val JAPANESE_LONG_YO = Regex("(?:ry|ky|gy|sh|ch|j|ny|hy|by|py|my)ou")
