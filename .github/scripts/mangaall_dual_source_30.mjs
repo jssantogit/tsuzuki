@@ -107,8 +107,11 @@ const typedPagingGuard = `  if (!Array.isArray(rows) || rows.length > 56) {
   if (current != null && (!Number.isInteger(current) || current !== page)) {
     throw new Error("MangaAll source lookup invalid current");
   }
-  if (total != null && (!Number.isInteger(total) || total < 0 || total > 32)) {
-    throw new Error("MangaAll source lookup invalid total");
+  if (total != null && (!Number.isInteger(total) || total < 0)) {
+    throw new Error("MangaAll source lookup invalid total format");
+  }
+  if (total != null && total > 32) {
+    throw new Error("MangaAll source lookup total exceeds budget");
   }
   if (cursor != null && typeof cursor !== "string") {
     throw new Error("MangaAll source lookup invalid cursor");
@@ -252,7 +255,8 @@ function closedError(err) {
   for (const [detail, code] of [
     ['invalid rows', 'SOURCE_PAGING_ROWS_INVALID'],
     ['invalid current', 'SOURCE_PAGING_CURRENT_INVALID'],
-    ['invalid total', 'SOURCE_PAGING_TOTAL_INVALID'],
+    ['invalid total format', 'SOURCE_PAGING_TOTAL_FORMAT_INVALID'],
+    ['total exceeds budget', 'SOURCE_PAGING_TOTAL_EXCEEDS_BUDGET'],
     ['invalid cursor', 'SOURCE_PAGING_CURSOR_INVALID'],
     ['empty continuation', 'SOURCE_PAGING_EMPTY_CONTINUATION'],
   ]) {
