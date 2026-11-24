@@ -62,10 +62,13 @@ def classify(record):
     owner_id = record.get("providerId")
     external = record.get("externalIds")
     if (owner != "mangaupdates" or not isinstance(owner_id, str)
-            or not re.fullmatch(r"[0-9]+", owner_id)
-            or not isinstance(external, dict) or external.get(owner) != owner_id
+            or not re.fullmatch(r"[1-9][0-9]*", owner_id)
+            or not isinstance(external, dict) or (owner in external and external[owner] != owner_id)
             or record.get("catalogsQueried") != 1 or record.get("catalogsFailed") != 0):
         return "OWNER_PROVENANCE_UNVERIFIED", None
+    # CatalogItem.provider/providerId are the detail owner identity. externalIds
+    # contains optional crosswalks; the Kotlin resolver verified the search/detail
+    # owner match and toCanonicalReadingMetadata validates and adds the self ID.
     if record.get("format") != "MANHWA":
         return "FORMAT_UNVERIFIED", None
     authors = record.get("authors")
