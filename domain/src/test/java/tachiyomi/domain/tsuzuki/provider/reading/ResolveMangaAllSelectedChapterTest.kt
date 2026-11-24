@@ -55,7 +55,12 @@ class ResolveMangaAllSelectedChapterTest {
         )
         resolver.execute(chapter.id, "en") shouldBe option
         resolver.execute(chapter.id, "pt-br") shouldBe null
-        coVerify(exactly = 2) { sources.options(chapter.id) }
+        val secondRelease = option.copy(providerChapterId = "mangafire:second-release")
+        val rival = option.copy(externalWorkId = "mangafire:other-work")
+        coEvery { sources.options(chapter.id) } returns listOf(option, rival, secondRelease)
+        resolver.options(chapter.id, "en") shouldBe listOf(option, secondRelease)
+        resolver.execute(chapter.id, "en") shouldBe null
+        coVerify(exactly = 4) { sources.options(chapter.id) }
     }
 
     @Test
@@ -66,6 +71,6 @@ class ResolveMangaAllSelectedChapterTest {
         coEvery { chapters.getById("missing") } returns null
         ResolveMangaAllSelectedChapter(chapters, sources, selections).execute("missing", "en") shouldBe null
         coVerify(exactly = 0) { sources.options(any()) }
-        coVerify(exactly = 0) { selections.select(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { selections.options(any(), any(), any(), any()) }
     }
 }
