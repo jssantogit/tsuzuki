@@ -3604,6 +3604,16 @@ class CollectProviderReadingEvidenceTest {
         verifyNativePreview("challenge")
     }
 
+    @Test
+    fun `native preview is reused once and following pages use the actual continuation`() = runTest {
+        verifyNativePreview("multipage")
+    }
+
+    @Test
+    fun `native preview cannot replace a concurrently changed checkpoint`() = runTest {
+        verifyNativePreview("changed")
+    }
+
     private suspend fun verifyNativePreview(mode: String) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
@@ -3619,9 +3629,12 @@ class CollectProviderReadingEvidenceTest {
         )
         val ref = ProviderBindingRef(mangaAll, "en", "mangadot:317")
         val cursor = ProviderCursor("m1:317:en:aaaaaaaaaaaaaaaa:200")
+        val next = ProviderCursor("m1:317:en:aaaaaaaaaaaaaaaa:400")
         val cursors = mockk<ProviderProvisionalCursorRepository>(relaxed = true)
         var discarded = false
+        var checkpointReads = 0
         coEvery { cursors.get(canonicalTitle.id, ref, 11, any()) } answers {
+            checkpointReads++
             if (discarded) {
                 null
             } else {
@@ -3630,8 +3643,8 @@ class CollectProviderReadingEvidenceTest {
                     ref,
                     11L,
                     arg<String>(3),
-                    cursor,
-                    1,
+                    if (mode == "changed" && checkpointReads > 1) next else cursor,
+                    if (mode == "changed" && checkpointReads > 1) 2 else 1,
                 )
             }
         }
@@ -3666,7 +3679,7 @@ class CollectProviderReadingEvidenceTest {
                 },
                 chaptersHandler = { request ->
                     reads += request.cursor
-                    if (request.cursor == cursor && mode != "resume") {
+                    if (request.cursor == cursor && mode in setOf("expired", "malformed", "challenge")) {
                         ProviderCallResult.Failure(
                             ProviderError(
                                 code = if (mode == "malformed") {
@@ -3688,13 +3701,17 @@ class CollectProviderReadingEvidenceTest {
                             ProviderPage(
                                 listOf(
                                     ProviderChapterObservation(
-                                        providerChapterId = "mangadot:chapters:201",
-                                        rawLabel = "Chapter 1",
-                                        rawNumber = 1.0,
+                                        providerChapterId = if (request.cursor == next) {
+                                            "mangadot:chapters:202"
+                                        } else {
+                                            "mangadot:chapters:201"
+                                        },
+                                        rawLabel = if (request.cursor == next) "Chapter 2" else "Chapter 1",
+                                        rawNumber = if (request.cursor == next) 2.0 else 1.0,
                                         language = "en",
                                     ),
                                 ),
-                                nextCursor = null,
+                                nextCursor = if (mode == "multipage" && request.cursor == cursor) next else null,
                             ),
                         )
                     }
@@ -3719,6 +3736,15 @@ class CollectProviderReadingEvidenceTest {
             reads shouldBe listOf(cursor, null)
             result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:201"
             result.cursorProgress.single().expectedCursor shouldBe null
+        } else if (mode == "multipage" || mode == "changed") {
+            reads shouldBe listOf(cursor, next)
+            result.partialEvidence.map { it.externalChapterKey }.toSet() shouldBe if (mode == "multipage") {
+                setOf("mangadot:chapters:201", "mangadot:chapters:202")
+            } else {
+                setOf("mangadot:chapters:202")
+            }
+            result.cursorProgress.single().expectedCursor shouldBe if (mode == "multipage") cursor else next
+            result.cursorProgress.single().nextCursor shouldBe null
         } else {
             reads shouldBe listOf(cursor)
             result.partialEvidence shouldBe emptyList()

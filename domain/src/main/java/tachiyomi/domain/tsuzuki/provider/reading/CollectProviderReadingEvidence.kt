@@ -1103,18 +1103,18 @@ class CollectProviderReadingEvidence private constructor(
         )
     }
 
-    /**
-     * Nonshipping opt-in on the disposable code11 research collector only.
-     * Source-supplied coverage is insufficient: fetch the exact HID/facet
-     * through the actual gateway, validate native page rows, and keep the
-     * result provisional. The ordinary injected app collector stays closed.
-     */
     private data class NativeChapterPreview(
         val cursor: ProviderCursor?,
         val page: ProviderPage<ProviderChapterObservation>,
         val observedAt: Long,
     )
 
+    /**
+     * Nonshipping opt-in on the disposable code11 research collector only.
+     * Source-supplied coverage is insufficient: fetch the exact HID/facet
+     * through the actual gateway, validate native page rows, and keep the
+     * result provisional. The ordinary injected app collector stays closed.
+     */
     private suspend fun observeNativeMangaDotPreviews(
         canonicalTitleId: String,
         target: ReadingTarget,
