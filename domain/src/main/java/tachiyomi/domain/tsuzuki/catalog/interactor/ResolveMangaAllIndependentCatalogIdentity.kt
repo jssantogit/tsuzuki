@@ -147,7 +147,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
                     it.externalIds[provider] == null || it.externalIds[provider] == id
                 } &&
                 (listOf(it.title) + it.titles.values).any { name ->
-                    normalize(name) == normalize(query) || normalize(name) == normalize(selected.title)
+                    normalize(name) == normalize(query)
                 }
         } ?: return@coroutineScope fields.copy(status = MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED)
 
