@@ -27,6 +27,23 @@ jobs:
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-frozen30-independent-catalog.yml'
           python3 -m py_compile .github/scripts/run_mangaall_frozen30_independent_catalog.py
           python3 .github/scripts/run_mangaall_frozen30_independent_catalog.py --check-lock
+          python3 - <<'PY'
+          import runpy
+          classify = runpy.run_path(".github/scripts/run_mangaall_frozen30_independent_catalog.py")["classify"]
+          base = dict(schemaVersion=1, mode="DIRECT_LIVE_ANDROID_CATALOG_ONLY",
+                      catalogSource="mangaupdates", canonical="NOT_EXECUTED_HOST",
+                      status="RESOLVED", provider="mangaupdates", providerId="42",
+                      externalIds={}, catalogsQueried=1, catalogsFailed=0,
+                      format="MANHWA", creatorsAttested=True, authors=["Fixture"], artists=[])
+          assert classify(base)[0] == "CATALOG_IDENTITY_ATTESTED"
+          assert classify(dict(base, externalIds={"mangaupdates":"42"}))[0] == "CATALOG_IDENTITY_ATTESTED"
+          assert classify(dict(base, externalIds={"mangaupdates":"43"}))[0] == "OWNER_PROVENANCE_UNVERIFIED"
+          assert classify(dict(base, providerId="0"))[0] == "OWNER_PROVENANCE_UNVERIFIED"
+          assert classify(dict(base, status="CATALOG_AMBIGUOUS"))[0] == "CATALOG_AMBIGUOUS"
+          assert classify(dict(base, format="UNKNOWN"))[0] == "FORMAT_UNVERIFIED"
+          assert classify(dict(base, creatorsAttested=False))[0] == "CREATOR_PROVENANCE_UNVERIFIED"
+          print("MANGAALL_CATALOG|ownerContractRegression=PASS")
+          PY
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version-file: .github/.java-version
@@ -40,7 +57,7 @@ jobs:
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
           for attempt in 1 2 3; do
-            if ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :app:spotlessKotlinCheck :app:testDebugUnitTest --tests '*MangaUpdatesIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               exit 0
             fi
