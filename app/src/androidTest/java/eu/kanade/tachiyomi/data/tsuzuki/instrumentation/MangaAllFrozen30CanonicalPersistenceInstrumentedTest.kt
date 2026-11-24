@@ -467,6 +467,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     val seenCursors = queries.associateWith { mutableSetOf(initial.value) }
                     val seenCandidates = mutableSetOf<String>()
                     var failed = false
+                    var truncated = false
+                    var sourceObservations = 0
                     val completed = withTimeoutOrNull(20_000L) {
                         repeat(8) {
                             for (query in queries) {
@@ -504,7 +506,12 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                                         candidate.coverageOutcome?.name.orEmpty(),
                                         assessment.editionQualification.name,
                                     ).joinToString("\u0000")
-                                    if (!seenCandidates.add(key) || observations.size >= 24) continue
+                                    if (!seenCandidates.add(key)) continue
+                                    if (sourceObservations >= 12) {
+                                        truncated = true
+                                        continue
+                                    }
+                                    sourceObservations++
                                     observations += JsonObject(
                                         mapOf(
                                             "source" to JsonPrimitive(source),
@@ -532,7 +539,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     }
                     sourceStates[source] = when {
                         failed -> "LOOKUP_FAILURE"
-                        completed == true -> "COMPLETE"
+                        completed == true && !truncated -> "COMPLETE"
                         else -> "BOUNDED"
                     }
                 }
