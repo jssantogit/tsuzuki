@@ -617,7 +617,7 @@ globalThis.tsuzuki = { http: { async request(method,url,headers,body) {
   // Keep ONLY bounded row counts, never upstream titles, URLs, query terms,
   // response JSON or source IDs in the diagnostic telemetry. Missing/malformed
   // arrays are unknown, not evidence of a genuinely empty source catalog.
-  let observedSearchRows = null;
+  let observedSearchRows = null, reportedSearchPages = null;
   const searchPath = new URL(url).pathname;
   const source = ORIGINS[origin];
   const isSearch = method === 'GET' && (
@@ -628,10 +628,16 @@ globalThis.tsuzuki = { http: { async request(method,url,headers,body) {
       const payload = JSON.parse(response.body);
       const rows = source === 'mangadot' ? payload.manga_list ?? payload.results : payload.data;
       if (Array.isArray(rows) && rows.length <= 100) observedSearchRows = rows.length;
+      if (source === 'mangadot') {
+        const page = payload?.pagination;
+        const total = page?.total_pages ?? page?.totalPages ?? page?.last_page;
+        if (Number.isInteger(total) && total >= 0 && total <= 4096)
+          reportedSearchPages = total;
+      }
     } catch { /* unknown upstream schema is never claimed empty */ }
   }
   wireRecords.push({
-    source, searchRows: observedSearchRows,
+    source, searchRows: observedSearchRows, reportedSearchPages,
     bytes: typeof response.body === 'string' ? Buffer.byteLength(response.body, 'utf8') : 0,
   });
   return encoded;
@@ -678,6 +684,9 @@ for (const [index, work] of assigned.entries()) {
     searchPagesObserved: wireObserved.filter(x => x.source === source && x.searchRows !== null).length,
     searchRowsObserved: wireObserved.filter(x => x.source === source && x.searchRows !== null)
       .reduce((sum, x) => sum + x.searchRows, 0),
+    maxReportedSearchPages: Math.max(0, ...wireObserved
+      .filter(x => x.source === source && x.reportedSearchPages !== null)
+      .map(x => x.reportedSearchPages)),
     requests: observations.filter(x => x.source === source).length,
     http200: observations.filter(x => x.source === source && x.status === 200).length,
     http403: observations.filter(x => x.source === source && x.status === 403).length,
