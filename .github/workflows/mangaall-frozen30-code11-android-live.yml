@@ -1,7 +1,7 @@
 name: MangaALL — frozen 30 manhwas, unsigned code11 REAL Android Host (OPT-IN)
-# Exactly the immutable 30-work cohort, 3 isolated Android emulator jobs of 10.
-# Real network, QuickJS and Binder; source-HID-only evidence, NO editorial
-# canonical binding, Reader image pixels, signing or releases.
+# Immutable corpus, build ONCE and run 3 isolated GitHub-hosted Android
+# emulators against the same unsigned code11 APK pair (10 locked works/shard).
+# Source-HID only; no canonical binding, Reader pixels, signing or release.
 on:
   push:
     branches: ['probe/mangaall-dual-source-scale30-*']
@@ -13,22 +13,18 @@ permissions:
 
 concurrency:
   group: mangaall-frozen30-code11-android-live
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  frozen-manhwa-native-chapters:
+  build-once-unsigned:
     runs-on: ubuntu-24.04
-    timeout-minutes: 95
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2]
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
           persist-credentials: false
-      - name: Require workflow-only opt-in, immutable cohort and script checks
+      - name: Require workflow-only opt-in, immutable 30-work hash and safe scripts
         run: |
           set -euo pipefail
           bash -n .github/scripts/run_mangaall_frozen30_code11_android_live.sh
@@ -63,8 +59,9 @@ jobs:
           assert "I_ACCEPT_MANGAALL_TWO_SOURCE_CODE11_ANDROID_LIVE" in kotlin and "I_ACCEPT_MANGAALL_TWO_SOURCE_CODE11_ANDROID_LIVE" in runner
           assert "airplane-mode disable" in runner
           Path("app/src/androidTest/assets").mkdir(parents=True, exist_ok=True)
-          destination = Path("app/src/androidTest/assets/mangaall-dual-source-30-cohort-lock.json")
-          destination.write_bytes(src.read_bytes())
+          Path("app/src/androidTest/assets/mangaall-dual-source-30-cohort-lock.json").write_bytes(
+              src.read_bytes()
+          )
           print("MANGAALL_FROZEN30_ANDROID|cohort=LOCKED|works=30|shards=3|reader=NOT_TESTED|signed=UNCHANGED")
           PY
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -73,7 +70,7 @@ jobs:
           ref: 89b5979fff297c2a099359258c9f9249e0089db4
           path: future-code11-source
           persist-credentials: false
-      - name: Stage pinned source in NONSHIPPING unsigned code11 research ZIP
+      - name: Stage pinned, NONSHIPPING code11 ZIP and exact lock into test assets
         run: |
           set -euo pipefail
           test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
@@ -89,14 +86,45 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: true
-      - name: Compile code11 Android Host and frozen-cohort instrumentation
+      - name: Spotless, app and Android instrumentation compile ONCE
         run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Share unsigned APKs with three emulator shards, without signing
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-frozen30-unsigned-apks
+          path: app/build/outputs/apk/
+          if-no-files-found: error
+          retention-days: 1
+
+  frozen-manhwa-native-chapters:
+    needs: build-once-unsigned
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download exact common unsigned Android APK pair
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mangaall-frozen30-unsigned-apks
+          path: app/build/outputs/apk/
+      - name: Confirm one app APK, one instrument APK and shard-bound script
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/run_mangaall_frozen30_code11_android_live.sh
+          test "$(find app/build/outputs/apk/debug -type f \( -name '*universal*.apk' -o -name 'app-debug.apk' \) | wc -l)" -eq 1
+          test "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' | wc -l)" -eq 1
       - name: Enable KVM for GitHub-hosted Android emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Validate ten fixed manhwas on real Android Host, shard ${{ matrix.shard }}
+      - name: Validate ten frozen manhwas on Android Host, shard ${{ matrix.shard }}
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 35
