@@ -75,10 +75,32 @@ jobs:
           set -euo pipefail
           test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
           python3 .github/scripts/mangaall_code11_dual_source_unsigned.py \
-            --source future-code11-source \
+            --source future-code11-source --manhwa-only \
             --output app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
           test -s app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
           ! git ls-files --error-unmatch app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          python3 - <<'PY'
+          import json
+          import zipfile
+          from pathlib import Path
+          package = Path("app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip")
+          with zipfile.ZipFile(package) as zf:
+              manifest = json.loads(zf.read("manifest.json"))
+              dot = zf.read("modules/sources/mangadot/modules/mangadot.js").decode()
+              dex = zf.read("modules/sources/mangadex/modules/mangadex.js").decode()
+          assert manifest["id"] == "app.tsuzuki.mangaall"
+          assert manifest["version"]["code"] == 11
+          assert "mangafire" not in str(manifest).lower()
+          assert manifest["name"] == "MangaAll — frozen 30 manhwa source research"
+          assert 'originalLanguage !== "ko"' in dex
+          assert '"The Boxer":"Boxer"' in dot
+          assert '"The Horizon":"Horizon"' in dot
+          assert '"The Breaker":"Breaker"' in dot
+          assert '["Weak Hero","The World After the Fall","Cheese in the Trap"]' in dot
+          assert 'pageNumber(input?.cursor, title)' in dot
+          assert not any("mangafire" in member.lower() for member in manifest["permissions"]["network"]["origins"])
+          print("MANGAALL_FROZEN30_ANDROID|nativeSource=MANHWA_ONLY_KO|scopedQueries=VERIFIED|canonical=NOT_TESTED")
+          PY
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version-file: .github/.java-version
