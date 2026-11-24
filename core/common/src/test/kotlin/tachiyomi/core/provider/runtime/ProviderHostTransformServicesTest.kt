@@ -33,6 +33,30 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
+    fun `large html resource yields only unique bounded structured metadata`() = runBlocking {
+        val json = """{"@type":"ComicSeries","name":"Work","author":{"@type":"Person","name":"Creator"}}"""
+        val script = """<script type="application/ld+json">$json</script>"""
+        val html = "<html><head>$script</head><body>" + "x".repeat(350 * 1024) + "</body></html>"
+        val handle = store.put(owner, ProviderResourceKind.HTML, html.encodeToByteArray())
+        val dom = DefaultProviderDomHostService(owner, store)
+        dom.selectText(handle, "script[type=application/ld+json]") shouldBe json
+        dom.selectText(handle, "script") shouldBe ""
+        val other = DefaultProviderDomHostService(owner.copy(invocationId = "invocation-2"), store)
+        runCatching { other.selectText(handle, "script[type=application/ld+json]") }.isFailure shouldBe true
+    }
+
+    @Test
+    fun `structured metadata rejects duplicate or oversized script blocks`() = runBlocking {
+        val script = """<script type="application/ld+json">{"name":"Work"}</script>"""
+        val dom = DefaultProviderDomHostService(owner, store)
+        val duplicate = store.put(owner, ProviderResourceKind.HTML, (script + script).encodeToByteArray())
+        runCatching { dom.selectText(duplicate, "script[type=application/ld+json]") }.isFailure shouldBe true
+        val oversized = """<script type="application/ld+json">""" + "é".repeat(40 * 1024) + "</script>"
+        val handle = store.put(owner, ProviderResourceKind.HTML, oversized.encodeToByteArray())
+        runCatching { dom.selectText(handle, "script[type=application/ld+json]") }.isFailure shouldBe true
+    }
+
+    @Test
     fun `zip extraction keeps archive and entry bytes behind opaque handles`() = runBlocking {
         val archive = store.put(
             owner = owner,
