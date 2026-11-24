@@ -15,6 +15,7 @@
 | [#45302867949](https://github.com/jssantogit/tsuzuki/actions/runs/45302867949) | Mesma lista, filtro MangaDex coreano e três obras com aliases comprovados | 24/30 | **45** | 0 | RED legítimo; 29/30 com capítulo 1 em HID |
 | [#45303354025](https://github.com/jssantogit/tsuzuki/actions/runs/45303354025) | Título original coreano de Raeliana + medição de páginas anunciadas pelo MangaDot | 24/30 | **46** | 0 | RED legítimo; Raeliana ainda sem capítulo 1 |
 | [#45303820829](https://github.com/jssantogit/tsuzuki/actions/runs/45303820829) | Consulta específica Boxer/Horizon/Breaker, filtro de título ORIGINAL preservado | **27/30** | **46** | 0 | RED legítimo; 3 buscas parciais |
+| [#45304306390](https://github.com/jssantogit/tsuzuki/actions/runs/45304306390) | Budget 80 apenas para as três buscas previamente parciais | **30/30** | **46** | 0 | RED legítimo; Raeliana ainda sem capítulo 1 |
 
 **Atualização na terceira rodada:** *SSS-Class Revival Hunter* e *Return of the Blossoming Blade* ganharam comprovação de capítulo 1 em HID de fonte após incluir nomes alternativos verificados. O número de obras com capítulo 1 comprovado passou de 27/30 para **29/30**. *Sweet Home* e *Wind Breaker* não apresentam mais conflito de autor entre títulos principais depois de filtrar MangaDex para idioma original coreano; seguem com rivais de fonte/edições e sem edição canônica autorizada. *Raeliana* continua sem correspondência exata/primeiro capítulo comprovado.
 
@@ -35,6 +36,16 @@ Embora 27/30 obras tenham ao menos um HID com capítulo 1 e cursor terminal, iss
 **5ª CI do corpus fixo:** [#45303820829](https://github.com/jssantogit/tsuzuki/actions/runs/45303820829) concluiu RED com **27/30 buscas completas** e 46 inventários completos por HID, zero saída >64KiB. Para a busca original *The Boxer*, a consulta de origem `Boxer` reduziu 464→1 página; *The Horizon* `Horizon` reduziu 464→1; *The Breaker* `Breaker` reduziu 466→6. O filtro do roteador sobre os títulos originais permaneceu estrito, sem canonizar candidatos. As três buscas restantes: *Weak Hero* (48 páginas), *The World After the Fall* (43) e *Cheese in the Trap* (74).
 
 **6ª CI do corpus fixo:** [#45304306390](https://github.com/jssantogit/tsuzuki/actions/runs/45304306390) iniciada após [offline #45304234239](https://github.com/jssantogit/tsuzuki/actions/runs/45304234239) GREEN. Sem mudar nenhuma das 30 obras, aumento experimental condicionado a esses três títulos: no máximo 80 páginas apenas para eles, mantendo os demais em 32. Orçamento global não foi ampliado; se a fonte não couber, registrar falha explícita. A versão assinada e Host de produção permanecem intactos. Não assumir conclusão da 6ª antes dos resultados reais.
+
+## 6ª rodada: busca 30/30, mas evidências ainda incompletas
+
+[Live #45304306390](https://github.com/jssantogit/tsuzuki/actions/runs/45304306390): após medir os totais MangaDot `Weak Hero=48`, `The World After the Fall=43`, `Cheese in the Trap=74` páginas, o orçamento limitado a 80 e aplicado **somente** a essas três obras permitiu esgotar a busca das trinta. **30/30 lookups completos**, 46 inventários de capítulo por HID, zero saída >64KiB. O agregador permaneceu RED em razão de riscos na entrada HTTP Host192KiB e capítulos/edições individuais não corroborados; a seleção canônica/Reader no Android não foi validada. Nunca usar esse resultado para substituir o corpus por novas obras.
+
+## Falso negativo encontrado: Raeliana
+
+O artefato detalhado da 4ª live confirmou que a fonte MangaDot já devolvia o candidato `Why Raeliana Ended Up at the Duke’s Mansion`, com apóstrofo tipográfico `’`, mas o auditor CI realizava comparação estrita com o alias de consulta `Why Raeliana Ended Up at the Duke's Mansion`, com apóstrofo ASCII `'`. O roteador original aceitava ambos por tokenização de pontuação; **o verificador de CI excluía indevidamente o HID MangaDot da auditoria de capítulos**. O MangaDex confirmou o título original em coreano e uma edição de 91 capítulos em inglês, porém ainda sem número exato 1; isso não implica ausência de capítulo 1 na obra inteira.
+
+A correção [commit ab327062](https://github.com/jssantogit/tsuzuki/commit/ab32706296cfc2eb2024fc2e891e9956192d2d16) altera **apenas a cópia da jornada no runner não assinado**, equivalendo exclusivamente variações de apóstrofo, sem comparação difusa, remoção de termos ou vinculação automática. O teste de regressão [commit 5218f0cc](https://github.com/jssantogit/tsuzuki/commit/5218f0cc3fb593d9451ca26963b4119679f7696e) exerce busca simulada com variantes `'` e `’` e recusa palavras adicionais (e.g., edição `Part 2`); [CI offline #45304876197](https://github.com/jssantogit/tsuzuki/actions/runs/45304876197) GREEN. [7ª live do corpus fixo #45304943319](https://github.com/jssantogit/tsuzuki/actions/runs/45304943319) disparada com **as mesmas 30 obras**. Conferir os artefatos e o gate antes de afirmar capítulo 1 efetivamente presente.
 
 ## Critério para encerrar o corpus
 
