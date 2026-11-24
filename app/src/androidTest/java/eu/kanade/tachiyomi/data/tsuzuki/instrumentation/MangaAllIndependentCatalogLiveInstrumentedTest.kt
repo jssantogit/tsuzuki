@@ -7,6 +7,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.App
 import eu.kanade.tachiyomi.data.tsuzuki.integration.MangaUpdatesIntegrationProvider
+import eu.kanade.tachiyomi.data.tsuzuki.integration.ShikimoriIntegrationProvider
+import eu.kanade.tachiyomi.data.tsuzuki.integration.ShikimoriRequestGate
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -38,8 +40,8 @@ import java.text.Normalizer
 
 /**
  * LIVE, opt-in, disposable-emulator catalog probe. Unlike the offline contract
- * suite this calls the production MangaUpdates integration and its real HTTP
- * implementation through the app's own TrackerManager. It never consults the
+ * suite this calls one explicitly selected production independent integration
+ * and its real HTTP implementation through the app's own TrackerManager. It never consults the
  * MangaAll provider or uses source-authored identity as canonical authority.
  *
  * This checks the catalog bootstrap ONLY. It does not run chapter reconciliation,
@@ -73,9 +75,16 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         // This is the *actual* Tsuzuki/MangaUpdates integration and its real
         // tracker/network adapter, not a fake provider or a test HTTP client.
         val app = target.applicationContext as App
-        val catalog = MangaUpdatesIntegrationProvider(app.graph.trackerManager)
+        val catalogName = args.getString("mangaAllLiveCatalogSource") ?: "mangaupdates"
+        val catalog: SearchProvider = when (catalogName) {
+            "mangaupdates" -> MangaUpdatesIntegrationProvider(app.graph.trackerManager)
+            "shikimori" -> ShikimoriIntegrationProvider(app.graph.trackerManager, ShikimoriRequestGate())
+            else -> error("Unknown independent catalog scope")
+        }
+        val metadataCatalog = catalog as MetadataProvider
         // Emit only closed failure codes and pagination counts from the
         // actual adapter; never send its exception, query, or response body.
+        val diagnosticPrefix = if (catalogName == "mangaupdates") "MU_SEARCH_CONTRACT" else "SHIKI_SEARCH_CONTRACT"
         var activeIndex = -1
         val observedSearch = object : SearchProvider by catalog {
             override suspend fun search(query: CatalogQuery): Result<CatalogPage> {
@@ -88,10 +97,10 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                         .matchEntire(it)?.value
                 }
                 val facts = if (error != null) {
-                    contract ?: "MU_SEARCH_CONTRACT|reason=OTHER_FAILURE"
+                    contract ?: "$diagnosticPrefix|reason=OTHER_FAILURE"
                 } else {
                     val page = result.getOrThrow()
-                    "MU_SEARCH_CONTRACT|reason=OK|total=${page.totalCount ?: -1}|rows=${page.items.size}"
+                    "$diagnosticPrefix|reason=OK|total=${page.totalCount ?: -1}|rows=${page.items.size}"
                 }
                 instrument.sendStatus(
                     1,
@@ -107,7 +116,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         }
         val registry = object : IntegrationRegistry {
             override fun searchProviders(): List<SearchProvider> = listOf(observedSearch)
-            override fun metadataProviders(): List<MetadataProvider> = listOf(catalog)
+            override fun metadataProviders(): List<MetadataProvider> = listOf(metadataCatalog)
             override fun discoveryProviders(): List<DiscoveryProvider> = emptyList()
             override fun chapterEvidenceProviders(): List<ChapterEvidenceProvider> = emptyList()
             override fun ratingsProviders(): List<RatingsProvider> = emptyList()
@@ -151,7 +160,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 put("caseId", "user-" + sha256(normalizedTitle(work.title)).take(12))
                 put("query", work.title)
                 put("status", attested.status.name)
-                put("catalogSource", "mangaupdates")
+                put("catalogSource", catalogName)
                 put("provider", attested.identity?.provider.orEmpty())
                 put("providerId", attested.identity?.providerId.orEmpty())
                 put("title", attested.identity?.title.orEmpty())
@@ -188,7 +197,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 append("MANGAALL_REAL_CATALOG|mode=DIRECT_LIVE_ANDROID_CATALOG_ONLY")
                 append("|case=user-").append(sha256(normalizedTitle(work.title)).take(12))
                 append("|index=").append(index)
-                append("|source=MANGAUPDATES_PRODUCTION")
+                append("|source=").append(catalogName.uppercase()).append("_PRODUCTION")
                 append("|outcome=").append(attested.status)
                 append("|candidates=").append(attested.candidateCount)
                 append("|catalogs=").append(attested.catalogsQueried)
@@ -206,7 +215,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 putString(
                     "stream",
                     "MANGAALL_REAL_CATALOG_BATCH|selected=${selected.size}|conclusive=$conclusive|" +
-                        "catalog=MANGAUPDATES_PRODUCTION|canonical=NOT_EXECUTED_HOST",
+                        "catalog=${catalogName.uppercase()}_PRODUCTION|canonical=NOT_EXECUTED_HOST",
                 )
             },
         )
