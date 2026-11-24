@@ -6,6 +6,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider
@@ -125,6 +126,29 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
         val result = ResolveMangaAllIndependentCatalogIdentity(registry(mal)).execute("Work")
         result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE
         result.identity shouldBe null
+    }
+
+    @Test
+    fun `narrowed MangaUpdates manhwa lookup consumes eight real pages before verification`() = runTest {
+        val offsets = mutableListOf<Int>()
+        val mu = source("mangaupdates", search = { query ->
+            offsets += query.offset
+            query.format shouldBe CatalogItemFormat.MANHWA
+            val rows = (query.offset until minOf(query.offset + query.limit, 176)).map { index ->
+                item("mangaupdates", "${index + 1}", if (index == 175) "Work" else "Other $index")
+                    .copy(format = CatalogItemFormat.MANHWA)
+            }
+            CatalogPage(rows, query.offset + rows.size < 176, totalCount = 176)
+        }, detail = { id ->
+            id shouldBe "176"
+            item("mangaupdates", id, "Work", authors = listOf("Verified Creator"))
+                .copy(format = CatalogItemFormat.MANHWA)
+        })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(mu))
+            .execute("Work", CatalogItemFormat.MANHWA)
+        result.status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+        offsets shouldBe (0..7).map { it * 25 }
+        result.identity?.providerId shouldBe "176"
     }
 
     @Test
