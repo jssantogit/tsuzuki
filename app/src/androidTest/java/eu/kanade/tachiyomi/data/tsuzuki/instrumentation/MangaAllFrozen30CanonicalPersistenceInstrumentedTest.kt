@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.data.tsuzuki.instrumentation
 
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
@@ -14,6 +15,8 @@ import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackageSource
 import eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGateway
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageLoader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -70,6 +73,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.CollectProviderReadingEvidence
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterEvidenceAdapter
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderSourceEditionQualification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkVerification
@@ -78,6 +82,8 @@ import tachiyomi.domain.tsuzuki.provider.reading.ResolveMangaAllSelectedReadingO
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.provider.reading.SelectMangaAllSource
 import tachiyomi.domain.tsuzuki.provider.reading.evidenceProducerId
+import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
 
@@ -96,6 +102,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         assertEquals("I_ACCEPT_FROZEN30_CANONICAL_RESEARCH", args.getString("mangaAllCanonicalOptIn"))
         val catalogScope = args.getString("mangaAllCanonicalCatalog") ?: "mangaupdates"
         require(catalogScope in setOf("mangaupdates", "shikimori", "explicit_plan"))
+        val readerMode = args.getString("mangaAllCanonicalReaderProbe") ?: "0"
+        require(readerMode in setOf("0", "1"))
         val phase = requireNotNull(args.getString("mangaAllCanonicalPhase"))
         require(phase in setOf("COLLECT", "RESTORE"))
         val shard = requireNotNull(args.getString("mangaAllFrozen30Shard")).toInt()
@@ -361,6 +369,58 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             return "COLLECTED"
         }
 
+        // Use the exact restored canonical option, not a fresh source lookup.
+        // This exercises the same selected-source preparation and HTTP loader
+        // used by the Reader, but makes no Activity/Viewer rendering claim.
+        suspend fun readRestoredChapter(titleId: String, index: Int): String {
+            val chapter = chapters.getByCanonicalTitleId(titleId).filter {
+                it.type == CanonicalChapterType.REGULAR && it.displayNumber == "1" &&
+                    it.baseNumber == 1 && it.part == null && it.alphaSuffix == null &&
+                    it.decimalFraction == null && it.confirmation != CanonicalChapterConfirmation.CONFLICTED
+            }.singleOrNull() ?: return "CHAPTER_MISSING"
+            val option = selected.execute(chapter.id, "en") ?: return "SELECTED_OPTION_MISSING"
+            val prepared = when (val result = resolver.preparedContent(option)) {
+                is ProviderCallResult.Failure -> return "PREPARATION_FAILED"
+                is ProviderCallResult.Success -> result.value as? PreparedChapterContent.HttpPages
+                    ?: return "UNEXPECTED_DELIVERY"
+            }
+            if (prepared.pages.any { !it.url.startsWith("https://") || it.allowLocalNetwork }) {
+                return "INVALID_PAGE_AUTHORITY"
+            }
+            val cache = File(context.cacheDir, "mangaall-canonical-reader-$shard-$index")
+            val loader = ProviderHttpPageLoader(requests = prepared.pages.take(1), cacheRoot = cache)
+            try {
+                val page = loader.getPages().single()
+                loader.loadPage(page)
+                if (page.status != Page.State.Ready) return "LOADER_FAILED"
+                val stream = page.stream ?: return "LOADER_FAILED"
+                val output = ByteArrayOutputStream()
+                stream.invoke().use { input ->
+                    val block = ByteArray(16 * 1024)
+                    while (true) {
+                        val count = input.read(block)
+                        if (count < 0) break
+                        if (output.size() + count > 16 * 1024 * 1024) return "IMAGE_LIMIT"
+                        output.write(block, 0, count)
+                    }
+                }
+                val image = output.toByteArray()
+                val sampled = BitmapFactory.Options().apply { inSampleSize = 8 }
+                val bitmap = BitmapFactory.decodeByteArray(image, 0, image.size, sampled)
+                    ?: return "BITMAP_FAILED"
+                try {
+                    if (bitmap.width <= 0 || bitmap.height <= 0) return "BITMAP_FAILED"
+                    bitmap.getPixel(0, 0)
+                } finally {
+                    bitmap.recycle()
+                }
+                return "FIRST_PAGE_DECODED"
+            } finally {
+                loader.recycle()
+                cache.deleteRecursively()
+            }
+        }
+
         instrument.sendStatus(
             1,
             Bundle().apply {
@@ -387,6 +447,29 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 throw error
             } catch (_: Exception) {
                 "UNCLASSIFIED_FAILURE"
+            }
+            if (phase == "RESTORE" && readerMode == "1") {
+                val readingOutcome = if (result == "RESTORED") {
+                    try {
+                        readRestoredChapter(titleId, index)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        "UNCLASSIFIED_FAILURE"
+                    }
+                } else {
+                    "PERSISTENCE_NOT_VERIFIED"
+                }
+                instrument.sendStatus(
+                    1,
+                    Bundle().apply {
+                        putString(
+                            "stream",
+                            "MANGAALL_CANONICAL_READER|index=$index|outcome=$readingOutcome" +
+                                "|catalog=${ownerScope(index)}|ui=NOT_TESTED",
+                        )
+                    },
+                )
             }
             val expectedOutcome = if (phase == "COLLECT") "COLLECTED" else "RESTORED"
             if (result == expectedOutcome) passed++
