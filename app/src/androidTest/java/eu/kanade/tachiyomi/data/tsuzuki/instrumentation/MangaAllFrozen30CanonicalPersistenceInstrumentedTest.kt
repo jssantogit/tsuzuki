@@ -20,8 +20,10 @@ import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageLoader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -63,6 +65,7 @@ import tachiyomi.domain.tsuzuki.integration.SearchProvider
 import tachiyomi.domain.tsuzuki.integration.TrackingProvider
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshot
+import tachiyomi.domain.tsuzuki.integration.resolveVerifiedCreatorAliases
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
@@ -83,7 +86,10 @@ import tachiyomi.domain.tsuzuki.provider.reading.CollectProviderReadingEvidence
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterEvidenceAdapter
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCursor
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderSourceEditionQualification
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkSourcePortfolio
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveMangaAllSelectedChapter
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveMangaAllSelectedReadingOption
@@ -113,14 +119,19 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val readerMode = args.getString("mangaAllCanonicalReaderProbe") ?: "0"
         require(readerMode in setOf("0", "1"))
         val phase = requireNotNull(args.getString("mangaAllCanonicalPhase"))
-        require(phase in setOf("COLLECT", "RESTORE"))
+        require(phase in setOf("COLLECT", "RESTORE", "CREDIT_AUDIT"))
+        val creditAudit = phase == "CREDIT_AUDIT"
+        require(!creditAudit || args.getString("mangaAllCreditAuditOptIn") == "PUBLIC_CREDITS_ONLY")
         val shard = requireNotNull(args.getString("mangaAllFrozen30Shard")).toInt()
         require(shard in 0..2)
         val pendingMode = args.getString("mangaAllCanonicalPending14") ?: "0"
         require(pendingMode in setOf("0", "1"))
         require(pendingMode == "0" || catalogScope == "explicit_plan")
         val pending14 = setOf(5, 6, 8, 11, 15, 16, 19, 20, 21, 23, 25, 27, 28, 29)
-        val indices = (shard * 10 + 1..shard * 10 + 10).filter { pendingMode == "0" || it in pending14 }
+        require(!creditAudit || (pendingMode == "1" && readerMode == "0"))
+        val indices = (shard * 10 + 1..shard * 10 + 10).filter {
+            (pendingMode == "0" || it in pending14) && (!creditAudit || it != 16)
+        }
         val context = instrument.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)
         assertTrue(
@@ -275,6 +286,17 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 val candidates = (event.attributes["candidate_count"] as? DiagnosticAttributeValue.Number)?.value ?: 0
                 acquisitionFacts += "source=$source|event=${event.name.name}|outcome=${event.outcome.name}" +
                     "|reason=$reason|candidates=$candidates"
+                // Additional closed facts distinguish author acceptance from
+                // missing coverage or an explicit edition exclusion.
+                val qualifiers = listOfNotNull(
+                    code("provider_coverage_outcome")?.let { "COVERAGE_$it" },
+                    code("provider_edition_qualification")?.let { "EDITION_$it" },
+                )
+                for (qualifier in qualifiers) {
+                    if (acquisitionFacts.size >= 2_048) break
+                    acquisitionFacts += "source=$source|event=${event.name.name}|outcome=${event.outcome.name}" +
+                        "|reason=$qualifier|candidates=$candidates"
+                }
             }
         }
         val collector = CollectProviderReadingEvidence(
@@ -410,6 +432,115 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 !identity.creatorsAttested
             ) {
                 return "CATALOG_FORMAT_OR_CREATOR_UNVERIFIED"
+            }
+            if (creditAudit) {
+                // Separate opt-in report: only public credit spellings for the
+                // locked research corpus. No HIDs, URLs, titles, raw responses,
+                // user data, canonical writes, chapter inventory or Reader calls.
+                fun publicCredits(names: Collection<String>) = JsonArray(
+                    names.asSequence().map(String::trim)
+                        .filter { it.length in 1..128 && it.matches(Regex("[\\\\p{L}\\\\p{M}\\\\p{N} .,'’·_()\\\\-]+")) }
+                        .distinct().take(32).map(::JsonPrimitive).toList(),
+                )
+                val published = provenance.authors?.value.orEmpty() + provenance.artists?.value.orEmpty()
+                val ownerId = IntegrationId(owner.provider)
+                val aliases = resolveVerifiedCreatorAliases(
+                    provenance,
+                    mapOf(ownerId to owner.providerId),
+                    metadataRegistry.metadataProviders(),
+                )
+                val verifiedNames = (published + aliases).toSet()
+                val names = (owner.titles + ("source:primary" to owner.title)).entries.sortedWith(
+                    compareBy(
+                        { if (it.key.lowercase() in setOf("en", "english")) 0 else 1 },
+                        { if (it.key.lowercase() in setOf("romaji", "romanized")) 0 else 1 },
+                    ),
+                ).map { it.value }
+                val queries = (listOf(works[index - 1]) + names).map(String::trim)
+                    .filter { it.isNotBlank() && it.length <= 1024 }
+                    .distinctBy { it.lowercase().replace(Regex("\\\\s+"), " ") }.take(3)
+                val observations = mutableListOf<JsonObject>()
+                val sourceStates = mutableMapOf<String, String>()
+                for (source in listOf("mangadex", "mangadot")) {
+                    val initial = ProviderCursor("""{"v":1,"remaining":{"$source":{"c":null,"o":0}}}""")
+                    val cursors = queries.associateWith { initial }.toMutableMap()
+                    val seenCursors = queries.associateWith { mutableSetOf(initial.value) }
+                    val seenCandidates = mutableSetOf<String>()
+                    var failed = false
+                    val completed = withTimeoutOrNull(20_000L) {
+                        repeat(8) {
+                            for (query in queries) {
+                                val cursor = cursors[query] ?: continue
+                                val result = withTimeoutOrNull(6_000L) {
+                                    gateway.lookup(id, ProviderReadingLookupRequest(
+                                        titles = listOf(query),
+                                        cursor = cursor,
+                                        coverageEvidenceVersion = 1,
+                                        requestedLanguage = "en",
+                                    ))
+                                }
+                                val page = (result as? ProviderCallResult.Success)?.value
+                                if (page == null || page.items.any { !it.externalWorkId.startsWith("$source:") }) {
+                                    failed = true
+                                    cursors.remove(query)
+                                    continue
+                                }
+                                for (candidate in page.items) {
+                                    val assessment = ProviderWorkSourcePortfolio.assess(
+                                        id, "en", query, verifiedNames, listOf(candidate),
+                                    ).single()
+                                    if (assessment.workVerification == ProviderWorkVerification.TITLE_UNVERIFIED) continue
+                                    val key = candidate.externalWorkId + candidate.authors.joinToString("|") +
+                                        candidate.detailOutcome + candidate.coverageOutcome
+                                    if (!seenCandidates.add(key) || observations.size >= 24) continue
+                                    observations += JsonObject(
+                                        mapOf(
+                                            "source" to JsonPrimitive(source),
+                                            "authors" to publicCredits(candidate.authors),
+                                            "detail" to JsonPrimitive(candidate.detailOutcome?.name ?: "NONE"),
+                                            "coverage" to JsonPrimitive(candidate.coverageOutcome?.name ?: "NONE"),
+                                            "verification" to JsonPrimitive(assessment.workVerification.name),
+                                            "edition" to JsonPrimitive(assessment.editionQualification.name),
+                                        ),
+                                    )
+                                }
+                                val next = page.nextCursor
+                                if (next == null) {
+                                    cursors.remove(query)
+                                } else if (!seenCursors.getValue(query).add(next.value)) {
+                                    failed = true
+                                    cursors.remove(query)
+                                } else {
+                                    cursors[query] = next
+                                }
+                            }
+                            if (cursors.isEmpty()) return@withTimeoutOrNull true
+                        }
+                        false
+                    }
+                    sourceStates[source] = when {
+                        failed -> "LOOKUP_FAILURE"
+                        completed == true -> "COMPLETE"
+                        else -> "BOUNDED"
+                    }
+                }
+                val report = JsonObject(
+                    mapOf(
+                        "index" to JsonPrimitive(index),
+                        "catalog" to JsonPrimitive(catalogName),
+                        "authors" to publicCredits(provenance.authors?.value.orEmpty()),
+                        "artists" to publicCredits(provenance.artists?.value.orEmpty()),
+                        "aliases" to publicCredits(aliases),
+                        "sources" to JsonObject(sourceStates.mapValues { JsonPrimitive(it.value) }),
+                        "candidates" to JsonArray(observations),
+                    ),
+                ).toString()
+                check(report.encodeToByteArray().size <= 48 * 1024)
+                val encoded = report.encodeToByteArray().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                instrument.sendStatus(1, Bundle().apply {
+                    putString("stream", "MANGAALL_PUBLIC_CREDIT_AUDIT|index=$index|payload=$encoded")
+                })
+                return "IDENTITY_AUDITED"
             }
             val now = System.currentTimeMillis()
             val canonical = titles.getOrCreateByExternalIdentity(
@@ -576,7 +707,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             val titleId = "mangaall-frozen30-canonical-$index"
             acquisitionFacts.clear()
             val result = try {
-                if (phase == "COLLECT") {
+                if (phase == "COLLECT" || creditAudit) {
                     collect(index, titleId)
                 } else {
                     val receipt = File(receipts, "$index.sha256")
@@ -627,7 +758,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     },
                 )
             }
-            val expectedOutcome = if (phase == "COLLECT") "COLLECTED" else "RESTORED"
+            val expectedOutcome = when (phase) {
+                "CREDIT_AUDIT" -> "IDENTITY_AUDITED"
+                "COLLECT" -> "COLLECTED"
+                else -> "RESTORED"
+            }
             if (result == expectedOutcome) passed++
             instrument.sendStatus(
                 1,
