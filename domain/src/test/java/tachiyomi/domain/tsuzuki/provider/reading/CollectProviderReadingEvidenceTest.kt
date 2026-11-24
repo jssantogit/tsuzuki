@@ -7,6 +7,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -3410,6 +3411,94 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `unsigned research lanes retain native MangaDot evidence despite a slow MangaDex lookup`() = runTest {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val bindings = MemoryBindingRepository()
+        val observed = MemoryWorkSourceAssociationRepository()
+        val dotId = "mangadot:317"
+        var dotLookups = 0
+        var dexLookups = 0
+        var dotReads = 0
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll, versionCode = 11),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    val cursor = requireNotNull(request.cursor).value
+                    if (cursor.contains("\"mangadex\"")) {
+                        dexLookups++
+                        delay(30_000)
+                        error("lookup must time out")
+                    } else {
+                        check(cursor.contains("\"mangadot\""))
+                        dotLookups++
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(
+                                    ProviderWorkCandidate(
+                                        externalWorkId = dotId,
+                                        title = "Dandadan",
+                                        url = "https://mangadot.net/manga/317",
+                                        authors = listOf("Arakawa Hiromu"),
+                                        detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    ),
+                                ),
+                                nextCursor = ProviderCursor("next-dot-page"),
+                            ),
+                        )
+                    }
+                },
+                chaptersHandler = { request ->
+                    request.binding.externalWorkId shouldBe dotId
+                    dotReads++
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "mangadot:chapters:111",
+                                    rawLabel = "Chapter 1",
+                                    rawNumber = 1.0,
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = observed,
+            nativeMangaDotPortfolioResearch = true,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        dexLookups shouldBe 1
+        dotLookups shouldBe 1
+        dotReads shouldBe 2
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        result.snapshots shouldBe emptyList()
+        result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:111"
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        observed.getByTitle(canonicalTitle.id).single().workVerification shouldBe
+            ProviderWorkVerification.AUTHOR_CORROBORATED
+    }
+
+    @Test
     fun `MangaAll incomplete lookup retains provisional chapters without binding`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
@@ -3713,14 +3802,14 @@ class CollectProviderReadingEvidenceTest {
         }
     }
 
-    private fun registry(provider: ProviderId = providerId) = DefaultProviderRegistry(
+    private fun registry(provider: ProviderId = providerId, versionCode: Long = 2) = DefaultProviderRegistry(
         registrations = {
             listOf(
                 ProviderRegistration(
                     descriptor = ProviderDescriptor(
                         id = provider,
                         name = "MangaFire",
-                        version = ProviderVersion("0.1.1", 2),
+                        version = ProviderVersion("0.1.1", versionCode),
                         origin = ProviderOrigin.Repository("app.tsuzuki.providers"),
                         runtime = ProviderRuntimeKind.SCRIPT,
                         capabilities = setOf(
