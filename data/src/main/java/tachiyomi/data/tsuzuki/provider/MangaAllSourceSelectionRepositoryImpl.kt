@@ -10,6 +10,8 @@ import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelection
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionRepository
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
+import tachiyomi.domain.tsuzuki.provider.reading.evidenceProducerId
 
 @Inject
 @SingleIn(AppScope::class)
@@ -48,6 +50,36 @@ class MangaAllSourceSelectionRepositoryImpl(
                 selectedAt = selectedAt,
             )
         }.awaitAsOneOrNull()
+
+    override suspend fun getRelease(canonicalChapterId: String, ref: ProviderBindingRef): String? {
+        val language = ref.facetId ?: return null
+        if (ref.providerId.value != "app.tsuzuki.mangaall") return null
+        return database.tsuzuki_mangaall_chapter_releasesQueries.getMangaAllChapterRelease(
+            canonicalChapterId = canonicalChapterId,
+            language = language,
+            externalWorkId = ref.externalWorkId,
+        ).awaitAsOneOrNull()
+    }
+
+    override suspend fun selectRelease(
+        canonicalTitleId: String,
+        option: ProviderChapterReadingOption,
+        at: Long,
+    ): Boolean {
+        val ref = option.bindingRef()
+        val language = ref.facetId ?: return false
+        if (ref.providerId.value != "app.tsuzuki.mangaall" || at < 0) return false
+        database.tsuzuki_mangaall_chapter_releasesQueries.selectMangaAllChapterRelease(
+            canonicalChapterId = option.canonicalChapterId,
+            language = language,
+            externalWorkId = ref.externalWorkId,
+            providerChapterId = option.providerChapterId,
+            selectedAt = at,
+            canonicalTitleId = canonicalTitleId,
+            producerId = ref.evidenceProducerId(),
+        )
+        return getRelease(option.canonicalChapterId, ref) == option.providerChapterId
+    }
 
     override suspend fun select(choice: MangaAllSourceSelection): Boolean {
         val language = choice.ref.facetId ?: return false

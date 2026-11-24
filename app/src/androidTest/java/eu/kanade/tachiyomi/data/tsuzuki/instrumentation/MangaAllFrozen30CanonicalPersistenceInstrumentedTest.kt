@@ -321,6 +321,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 )
                 add(one.id)
                 add(option.readerSourceKey)
+                addAll(selected.options(one.id, "en").map { it.readerSourceKey }.sorted())
                 addAll(
                     chapterRows.map {
                         listOf(it.id, it.sortKey, it.confirmation.name).joinToString("\u0000")
@@ -415,11 +416,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 },
             )
             if (one == null) return "CANONICAL_CHAPTER_ONE_MISSING_OR_AMBIGUOUS"
-            // Distinct content sources are separate explicit picker choices.
-            // Never select among rival editions or releases of the same source.
+            // Multiple releases of one exact HID are separate explicit picker
+            // choices. Rival work HIDs within a source are still not equivalent.
             val bySource = options.groupBy { it.contentSourceId }
             if (bySource.isEmpty() || bySource.keys.any { it !in setOf("mangadex", "mangadot") } ||
-                bySource.values.any { it.size != 1 }
+                bySource.values.any { rows -> rows.map { it.bindingRef() }.distinct().size != 1 }
             ) {
                 return "READER_OPTION_MISSING_OR_AMBIGUOUS"
             }
@@ -436,10 +437,14 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             // Exercise each explicit source choice in stable test order, not
             // a production preference or automatic fallback. The last choice
             // is the one whose exact receipt must survive process restart.
-            for (option in options.sortedBy { it.contentSourceId }) {
-                if (select.select(titleId, option.bindingRef(), System.currentTimeMillis()) !=
-                    MangaAllSourceSelectionResult.SELECTED
+            for (option in options.sortedBy { it.readerSourceKey }) {
+                val result = select.select(titleId, option.bindingRef(), System.currentTimeMillis())
+                if (result != MangaAllSourceSelectionResult.SELECTED &&
+                    result != MangaAllSourceSelectionResult.ALREADY_SELECTED
                 ) {
+                    return "SOURCE_SELECTION_FAILED"
+                }
+                if (!selected.rememberRelease(option, System.currentTimeMillis())) {
                     return "SOURCE_SELECTION_FAILED"
                 }
                 if (selected.execute(one.id, "en")?.readerSourceKey != option.readerSourceKey) {

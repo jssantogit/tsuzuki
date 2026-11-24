@@ -91,10 +91,15 @@ class PrepareCanonicalChapterForReader(
             // source, language, cached edition or torrent if the chosen chapter
             // is not verifiably readable.
             if (requestedMangaAllLanguage != null && selectedOption == null) {
-                val releases = resolveMangaAllSelectedChapter?.options(
+                val option = resolveMangaAllSelectedChapter?.execute(
                     canonicalChapterId,
                     requestedMangaAllLanguage,
-                ).orEmpty()
+                )
+                val releases = if (option == null) {
+                    resolveMangaAllSelectedChapter?.options(canonicalChapterId, requestedMangaAllLanguage).orEmpty()
+                } else {
+                    emptyList()
+                }
                 if (releases.size > 1) {
                     trace.event(
                         subsystem = DiagnosticSubsystem.READER,
@@ -116,7 +121,6 @@ class PrepareCanonicalChapterForReader(
                         ),
                     )
                 }
-                val option = releases.singleOrNull()
                 trace.event(
                     subsystem = DiagnosticSubsystem.READER,
                     name = DiagnosticEventName.READER_SOURCE_SELECTED,
@@ -243,6 +247,12 @@ class PrepareCanonicalChapterForReader(
 
         return complete(trace, started, result)
     }
+
+    /** Called only after an explicit chapter-specific Reader selection succeeds. */
+    suspend fun rememberMangaAllRelease(
+        option: tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption,
+        at: Long,
+    ): Boolean = resolveMangaAllSelectedChapter?.rememberRelease(option, at) == true
 
     private suspend fun prepareProviderFallback(
         canonicalChapterId: String,

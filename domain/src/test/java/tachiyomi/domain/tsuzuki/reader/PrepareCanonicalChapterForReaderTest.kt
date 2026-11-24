@@ -319,6 +319,7 @@ class PrepareCanonicalChapterForReaderTest {
         val selected = mockk<ResolveMangaAllSelectedChapter>()
         val reader = mockk<ResolveProviderChapterReading>()
         coEvery { selected.execute("chapter-1", "pt-br") } returns null
+        coEvery { selected.options("chapter-1", "pt-br") } returns emptyList()
         val fixture = fixture(
             preference = null,
             providers = listOf(provider(option("other-addon"))),

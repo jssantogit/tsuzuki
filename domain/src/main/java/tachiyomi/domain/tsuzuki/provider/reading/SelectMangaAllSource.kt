@@ -25,6 +25,12 @@ interface MangaAllSourceSelectionRepository {
     /** Most recent explicit choice, used only to restore the user's active language. */
     suspend fun getLatest(canonicalTitleId: String): MangaAllSourceSelection? = null
 
+    /** Chapter-scoped release choice; never changes the title-wide source preference. */
+    suspend fun getRelease(canonicalChapterId: String, ref: ProviderBindingRef): String? = null
+
+    /** Persist only an already validated release within the exact saved work and facet. */
+    suspend fun selectRelease(canonicalTitleId: String, option: ProviderChapterReadingOption, at: Long): Boolean = false
+
     /** Stores an explicit preference only while the selected work is still associated to this title. */
     suspend fun select(choice: MangaAllSourceSelection): Boolean
 }

@@ -1113,8 +1113,25 @@ class ReaderViewModel(
                     resetPage = false,
                     recordPreviousHistory = hadActiveSession,
                 )
-                canonicalPreferredLanguage = null
-                savedState.remove<String>("canonical_language")
+                // Preserve a release chosen within the saved work. A chapter-specific
+                // choice from a different work must not overwrite title-wide preference.
+                val remembered = try {
+                    prepareCanonicalChapterForReader.rememberMangaAllRelease(
+                        option,
+                        System.currentTimeMillis(),
+                    )
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    logcat(LogPriority.WARN, error) { "Failed to persist explicit MangaAll release" }
+                    false
+                }
+                canonicalPreferredLanguage = option.facetId.takeIf { remembered }
+                if (canonicalPreferredLanguage == null) {
+                    savedState.remove<String>("canonical_language")
+                } else {
+                    savedState["canonical_language"] = canonicalPreferredLanguage
+                }
                 withUIContext {
                     mutableState.update { state ->
                         state.copy(

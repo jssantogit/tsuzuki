@@ -19,8 +19,30 @@ class ResolveMangaAllSelectedReadingOption(
         canonicalChapterId: String,
         requestedLanguage: String,
         verifiedOptions: List<ProviderChapterReadingOption>,
-    ): ProviderChapterReadingOption? =
-        options(canonicalTitleId, canonicalChapterId, requestedLanguage, verifiedOptions).singleOrNull()
+    ): ProviderChapterReadingOption? {
+        val eligible = options(canonicalTitleId, canonicalChapterId, requestedLanguage, verifiedOptions)
+        val ref = eligible.firstOrNull()?.bindingRef() ?: return null
+        val savedRelease = selections.getRelease(canonicalChapterId, ref)
+        return if (savedRelease == null) {
+            eligible.singleOrNull()
+        } else {
+            // An unavailable saved release is not permission to choose a different one.
+            eligible.singleOrNull { it.providerChapterId == savedRelease }
+        }
+    }
+
+    suspend fun remember(
+        canonicalTitleId: String,
+        option: ProviderChapterReadingOption,
+        verifiedOptions: List<ProviderChapterReadingOption>,
+        at: Long,
+    ): Boolean {
+        val language = option.facetId ?: return false
+        if (at < 0) return false
+        val eligible = options(canonicalTitleId, option.canonicalChapterId, language, verifiedOptions)
+        val exact = eligible.singleOrNull { it.readerSourceKey == option.readerSourceKey } ?: return false
+        return selections.selectRelease(canonicalTitleId, exact, at)
+    }
 
     /** Only eligible releases of the exact saved work and language, for explicit confirmation. */
     suspend fun options(

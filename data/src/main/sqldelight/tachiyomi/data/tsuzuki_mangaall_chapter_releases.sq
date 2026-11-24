@@ -1,0 +1,50 @@
+-- Chapter-specific user preference, independent of work association and progress.
+CREATE TABLE tsuzuki_mangaall_chapter_releases(
+    canonical_chapter_id TEXT NOT NULL,
+    language TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    provider_chapter_id TEXT NOT NULL,
+    selected_at INTEGER NOT NULL,
+    PRIMARY KEY(canonical_chapter_id, language, external_work_id),
+    FOREIGN KEY(canonical_chapter_id) REFERENCES tsuzuki_canonical_chapters(id) ON DELETE CASCADE
+);
+
+getMangaAllChapterRelease:
+SELECT release.provider_chapter_id
+FROM tsuzuki_mangaall_chapter_releases AS release
+JOIN tsuzuki_canonical_chapters AS chapter ON chapter.id = release.canonical_chapter_id
+JOIN tsuzuki_mangaall_source_selections AS choice ON choice.canonical_title_id = chapter.canonical_title_id
+    AND choice.language = release.language
+    AND choice.external_work_id = release.external_work_id
+WHERE release.canonical_chapter_id = :canonicalChapterId
+AND release.language = :language
+AND release.external_work_id = :externalWorkId
+LIMIT 1;
+
+selectMangaAllChapterRelease:
+INSERT INTO tsuzuki_mangaall_chapter_releases(
+    canonical_chapter_id, language, external_work_id, provider_chapter_id, selected_at
+)
+SELECT :canonicalChapterId, :language, :externalWorkId, :providerChapterId, :selectedAt
+WHERE EXISTS (
+    SELECT 1
+    FROM tsuzuki_canonical_chapters AS chapter
+    JOIN tsuzuki_mangaall_source_selections AS choice ON choice.canonical_title_id = chapter.canonical_title_id
+    WHERE chapter.id = :canonicalChapterId
+    AND chapter.canonical_title_id = :canonicalTitleId
+    AND choice.language = :language
+    AND choice.external_work_id = :externalWorkId
+)
+AND EXISTS (
+    SELECT 1 FROM tsuzuki_chapter_evidence
+    WHERE canonical_title_id = :canonicalTitleId
+    AND mapped_canonical_chapter_id = :canonicalChapterId
+    AND producer_kind = 'PROVIDER'
+    AND authority_class = 'PROVIDER_PROVISIONAL'
+    AND producer_id = :producerId
+    AND external_chapter_key = :providerChapterId
+)
+ON CONFLICT(canonical_chapter_id, language, external_work_id) DO UPDATE SET
+    provider_chapter_id = excluded.provider_chapter_id,
+    selected_at = excluded.selected_at
+WHERE excluded.selected_at >= tsuzuki_mangaall_chapter_releases.selected_at;
