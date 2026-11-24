@@ -3488,7 +3488,7 @@ class CollectProviderReadingEvidenceTest {
         val result = collector.execute(canonicalTitle.id)
         dexLookups shouldBe 1
         dotLookups shouldBe 1
-        dotReads shouldBe 2
+        dotReads shouldBe 1
         result.complete shouldBe false
         result.bindingCount shouldBe 0
         result.snapshots shouldBe emptyList()
@@ -3711,12 +3711,12 @@ class CollectProviderReadingEvidenceTest {
         )
         val result = collector.execute(canonicalTitle.id)
         if (mode == "resume") {
-            reads shouldBe listOf(cursor, cursor)
+            reads shouldBe listOf(cursor)
             result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:201"
             result.cursorProgress.single().expectedCursor shouldBe cursor
             result.cursorProgress.single().nextCursor shouldBe null
         } else if (mode == "expired") {
-            reads shouldBe listOf(cursor, null, null)
+            reads shouldBe listOf(cursor, null)
             result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:201"
             result.cursorProgress.single().expectedCursor shouldBe null
         } else {

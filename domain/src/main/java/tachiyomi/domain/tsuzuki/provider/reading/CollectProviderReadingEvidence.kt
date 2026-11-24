@@ -631,6 +631,7 @@ class CollectProviderReadingEvidence private constructor(
         if (canonicalCreators.isNullOrEmpty()) return ProviderReadingEvidenceCollection(complete = false)
         val descriptor = target.registration.descriptor
         val discovered = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssessment>()
+        val nativePreviews = mutableMapOf<ProviderBindingRef, NativeChapterPreview>()
         val initialCursor = ProviderCursor("""{"v":1,"remaining":{"$source":{"c":null,"o":0}}}""")
 
         // One page per independently observed title in round-robin order.
@@ -710,7 +711,15 @@ class CollectProviderReadingEvidence private constructor(
                                         DiagnosticOutcome.CANDIDATES,
                                     )
                                 }
-                                observeSourcePortfolio(canonicalTitleId, title, target, canonicalCreators, exact)
+                                nativePreviews.clear()
+                                observeSourcePortfolio(
+                                    canonicalTitleId,
+                                    title,
+                                    target,
+                                    canonicalCreators,
+                                    exact,
+                                    nativePreviews,
+                                )
                                     .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
                                     .forEach { discovered[it.ref] = it }
                             }
@@ -760,6 +769,7 @@ class CollectProviderReadingEvidence private constructor(
             sources = discovered.values.take(MAX_COVERAGE_CONTENDERS),
             onPageCollected = onPageCollected,
             onProvisionalCursorReady = onProvisionalCursorReady,
+            nativePreviews = nativePreviews,
         )
     }
 
@@ -1099,12 +1109,19 @@ class CollectProviderReadingEvidence private constructor(
      * through the actual gateway, validate native page rows, and keep the
      * result provisional. The ordinary injected app collector stays closed.
      */
+    private data class NativeChapterPreview(
+        val cursor: ProviderCursor?,
+        val page: ProviderPage<ProviderChapterObservation>,
+        val observedAt: Long,
+    )
+
     private suspend fun observeNativeMangaDotPreviews(
         canonicalTitleId: String,
         target: ReadingTarget,
         queryTitle: String,
         canonicalCreators: Set<String>?,
         candidates: List<ProviderWorkCandidate>,
+        nativePreviews: MutableMap<ProviderBindingRef, NativeChapterPreview>?,
     ): List<ProviderWorkCandidate> {
         val descriptor = target.registration.descriptor
         if (!nativeMangaDotPortfolioResearch || descriptor.id.value != "app.tsuzuki.mangaall" ||
@@ -1139,6 +1156,7 @@ class CollectProviderReadingEvidence private constructor(
                 descriptor.version.code,
                 target.registration.configurationFingerprint,
             )
+            val previewObservedAt = clock()
             val initial = gateway.chapters(
                 descriptor.id,
                 ProviderReadingChaptersRequest(assessment.ref, cursor = saved?.nextCursor),
@@ -1166,6 +1184,10 @@ class CollectProviderReadingEvidence private constructor(
                 // unwritten evidence. CAS protects a concurrently newer cursor.
                 provisionalCursorRepository?.discard(saved, clock())
             }
+            nativePreviews?.set(
+                assessment.ref,
+                NativeChapterPreview(if (restart) null else saved?.nextCursor, page, previewObservedAt),
+            )
             previews += preview
         }
         return previews
@@ -1177,6 +1199,7 @@ class CollectProviderReadingEvidence private constructor(
         target: ReadingTarget,
         canonicalCreators: Set<String>?,
         matches: List<ProviderWorkCandidate>,
+        nativePreviews: MutableMap<ProviderBindingRef, NativeChapterPreview>? = null,
     ): List<ProviderWorkSourceAssessment> {
         val repository = workSourceAssociationRepository ?: return emptyList()
         // Keep source-specific trust. MangaDex requires explicit details and
@@ -1187,7 +1210,14 @@ class CollectProviderReadingEvidence private constructor(
             providerId = target.registration.descriptor.id,
             facetId = target.facetId,
             candidates = matches,
-        ) + observeNativeMangaDotPreviews(canonicalTitleId, target, queryTitle, canonicalCreators, matches)
+        ) + observeNativeMangaDotPreviews(
+            canonicalTitleId,
+            target,
+            queryTitle,
+            canonicalCreators,
+            matches,
+            nativePreviews,
+        )
         if (trusted.isEmpty()) return emptyList()
         val assessed = ProviderWorkSourcePortfolio.assess(
             providerId = target.registration.descriptor.id,
@@ -1382,6 +1412,7 @@ class CollectProviderReadingEvidence private constructor(
         sources: List<ProviderWorkSourceAssessment>,
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
         onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
+        nativePreviews: Map<ProviderBindingRef, NativeChapterPreview> = emptyMap(),
     ): ProviderReadingEvidenceCollection {
         val evidence = mutableListOf<ChapterEvidence>()
         val progress = mutableListOf<ProviderProvisionalCursorProgress>()
@@ -1429,14 +1460,39 @@ class CollectProviderReadingEvidence private constructor(
             var activePage = 0
             var lastAcceptedCursor: ProviderCursor? = saved?.nextCursor
             var acceptedPages = 0
+            // The preview belongs to this invocation, exact HID/facet and request cursor.
+            // If a concurrent checkpoint changed, fetch its current page instead.
+            // Reuse the original observation timestamp, not the later collection time.
+            val preview = nativePreviews[source.ref]?.takeIf { it.cursor == saved?.nextCursor }
+            val chapterGateway = if (preview == null) {
+                gateway
+            } else {
+                object : ProviderReadingGateway by gateway {
+                    private var firstRequest = true
+
+                    override suspend fun chapters(
+                        providerId: ProviderId,
+                        request: ProviderReadingChaptersRequest,
+                    ): ProviderCallResult<ProviderPage<ProviderChapterObservation>> {
+                        val reuse = firstRequest && providerId == source.ref.providerId &&
+                            request.binding == source.ref && request.cursor == preview.cursor
+                        firstRequest = false
+                        return if (reuse) {
+                            ProviderCallResult.Success(preview.page)
+                        } else {
+                            gateway.chapters(providerId, request)
+                        }
+                    }
+                }
+            }
             val result = withTimeoutOrNull(MAX_WORK_SOURCE_COLLECTION_MILLIS) {
                 RefreshProviderReadingChapters(
-                    gateway = gateway,
+                    gateway = chapterGateway,
                     evidenceAdapter = evidenceAdapter,
                     // A complete technical page sequence is not an editorial
                     // snapshot. Never detach chapters from an unverified edition.
                     publishSnapshot = null,
-                    clock = clock,
+                    clock = { preview?.observedAt ?: clock() },
                     onPageAccepted = { nextCursor ->
                         lastAcceptedCursor = nextCursor
                         acceptedPages++
