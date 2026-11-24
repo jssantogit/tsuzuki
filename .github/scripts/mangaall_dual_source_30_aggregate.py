@@ -145,6 +145,9 @@ def check_shard(payload, index, works):
         require(row.get("id") == title_id(works[position]) and
                 row.get("title") == works[position], "WORK_IDENTITY_MISMATCH")
         require(row.get("format") == "manhwa", "MANHWA_SOURCE_FORMAT_NOT_RETAINED")
+        require(type(row.get("queryTitleCount")) is int and
+                1 <= row["queryTitleCount"] <= 3,
+                "UNBOUNDED_QUERY_TITLE_ALIASES")
         require(row.get("canonicalBinding") == "NOT_AUTHORIZED" and
                 row.get("readerPixels") == "NOT_TESTED",
                 "UNAUTHORIZED_CANONICAL_PROMOTION")
@@ -252,12 +255,14 @@ def aggregate(works, payloads):
             "sourceLookupFailuresObserved": 0,
             "sourceSearchPagesObserved": 0, "sourceSearchRowsObserved": 0,
             "noCandidateDespiteUpstreamSearchRows": 0,
+            "multiTitleAliasLookups": 0,
         },
         "works": [],
     }
     counts = output["counts"]
     for row in records:
         counts["completeLookup" if row.get("lookupComplete") else "incompleteLookup"] += 1
+        counts["multiTitleAliasLookups"] += int(row.get("queryTitleCount", 1) > 1)
         counts["noCandidate"] += int(row["candidateCount"] == 0)
         counts["crossSourceCandidates"] += int(len({
             x["source"] for x in row["candidates"] if x.get("exactMatch") is True
@@ -357,6 +362,7 @@ def aggregate(works, payloads):
         output["works"].append({
             "position": row["position"] + 1, "title": row["title"],
             "format": "manhwa", "cohort": COHORT,
+            "queryTitleCount": row.get("queryTitleCount", 1),
             "lookupComplete": bool(row.get("lookupComplete")),
             "lookupState": row.get("lookup"),
             "lookupError": row.get("lookupError"),
@@ -389,7 +395,7 @@ def fixture(works):
         for i in range(shard, 30, 3):
             rows.append({
                 "position": i, "id": title_id(works[i]), "title": works[i],
-                "format": "manhwa",
+                "format": "manhwa", "queryTitleCount": 1,
                 "lookupComplete": True, "lookupPages": 1, "candidateCount": 1,
                 "candidates": [{"source": "mangadex", "workId": "mangadex:valid"}],
                 "granularChapterPagination": "UNSIGNED_CI_EPHEMERAL_CACHE_48K_200",
@@ -508,6 +514,7 @@ def test_self():
     assert "UPSTREAM_SEARCH_ROWS_WITHOUT_EXACT_MATCH" in raw_search_report["works"][0]["issues"]
 
     cases = [
+        ("EXCESS_ALIAS_TERMS", lambda p: p[0]["results"][0].update(queryTitleCount=4)),
         ("OVERFLOW_RAW_ROW_COUNT", lambda p: p[0]["results"][0]["httpBySource"]["mangadot"].update(
             searchPagesObserved=1, searchRowsObserved=101)),
         ("FOREIGN_SOURCE", lambda p: p[0].update(sourceSet=["mangadex", "mangafire"])),
