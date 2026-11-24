@@ -28,6 +28,30 @@ class ResolveMangaAllSelectedReadingOptionTest {
     }
 
     @Test
+    fun `same language MangaDex and MangaDot alternatives stay independently selectable`() = runBlocking {
+        val dex = ProviderBindingRef(provider, "en", "mangadex:12345678-1234-1234-1234-123456789abc")
+        val dot = ProviderBindingRef(provider, "en", "mangadot:123")
+        val dexOption = option(dex, "mangadex:12345678-1234-1234-1234-123456789def")
+        val dotOption = option(dot, "mangadot:chapters:456")
+        val dexResolver = ResolveMangaAllSelectedReadingOption(
+            fakeSelection(MangaAllSourceSelection(title, dex, 10)),
+        )
+        val dotResolver = ResolveMangaAllSelectedReadingOption(
+            fakeSelection(MangaAllSourceSelection(title, dot, 10)),
+        )
+        dexResolver.select(title, "chapter-1", "en", listOf(dotOption, dexOption)) shouldBe dexOption
+        dotResolver.select(title, "chapter-1", "en", listOf(dotOption, dexOption)) shouldBe dotOption
+        dexResolver.select(title, "chapter-1", "en", listOf(dotOption)) shouldBe null
+        dotResolver.select(title, "chapter-1", "en", listOf(dexOption)) shouldBe null
+
+        val secondDot = option(dot, "mangadot:uploads:789")
+        // Two releases on the same selected HID are still ambiguous; a
+        // different internal source never rescues the explicit selection.
+        dotResolver.select(title, "chapter-1", "en", listOf(dexOption, dotOption, secondDot)) shouldBe null
+        dexResolver.select(title, "chapter-1", "en", listOf(dexOption, dotOption, secondDot)) shouldBe dexOption
+    }
+
+    @Test
     fun `duplicate chapters and forged source IDs fail closed`() = runBlocking {
         val resolver = ResolveMangaAllSelectedReadingOption(
             fakeSelection(MangaAllSourceSelection(title, refEn, 10)),
