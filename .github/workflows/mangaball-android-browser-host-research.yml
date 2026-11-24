@@ -1,8 +1,8 @@
-name: MangaBall Android Browser Host profile parity (one-shot)
+name: MangaBall Android Browser Host profile parity
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
 
 permissions:
   contents: read
