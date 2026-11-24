@@ -26,7 +26,7 @@ jobs:
           # Independent catalog native names observed in Shikimori; do not change the frozen identities.
           native={2: "전지적 독자 시점", 28: "그녀가 공작저로 가야 했던 사정", 29: "치즈인더트랩"}
           for index in (2,28,29):
-              for scope in ("MANHWA", "NATIVE_TITLE"):
+              for scope in ("NATIVE_TITLE",):
                   data = dict(search=works[index-1], page=1, perpage=25, filter_types=["drama cd","novel"])
                   data["type"] = ["Manhwa"]
                   if scope == "NATIVE_TITLE":
@@ -42,7 +42,22 @@ jobs:
                       with urllib.request.urlopen(request, timeout=15) as response:
                           raw = response.read(2*1024*1024+1)
                           if len(raw) > 2*1024*1024:
-                              print(f"MU_WIRE|index={index}|scope={scope}|outcome=BODY_LIMIT")
+                              candidates=[r for r in records if isinstance(r,dict) and str(r.get("title","")).strip().casefold()==works[index-1].casefold()]
+                      if len(candidates)==1:
+                          item_id=candidates[0].get("series_id")
+                          if type(item_id) is int and item_id>0:
+                              detail_req=urllib.request.Request(f"https://api.mangaupdates.com/v1/series/{item_id}",headers={"Accept":"application/json","User-Agent":"Tsuzuki-CI-catalog-contract-observation"})
+                              with urllib.request.urlopen(detail_req,timeout=15) as resp:
+                                  detail_raw=resp.read(512*1024+1)
+                              if len(detail_raw)>512*1024:
+                                  raise ValueError("detail bound")
+                              detail=json.loads(detail_raw)
+                              title_set=names(detail)
+                              detail_original=any(isinstance(v,str) and v.strip().casefold()==works[index-1].casefold() for v in title_set)
+                              detail_native=any(isinstance(v,str) and v.strip()==native[index] for v in title_set)
+                              creators=detail.get("authors") or []
+                              print(f"MU_DETAIL|index={index}|sameId={detail.get('series_id')==item_id}|format={str(detail.get('type','')).lower()=='manhwa'}|original={detail_original}|native={detail_native}|creatorCount={len(creators)}")
+                      print(f"MU_WIRE|index={index}|scope={scope}|outcome=BODY_LIMIT")
                               continue
                           obj = json.loads(raw)
                       rows = obj.get("results")
