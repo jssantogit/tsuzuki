@@ -188,6 +188,7 @@ class CollectProviderReadingEvidence private constructor(
             canonicalTitle.displayTitle,
             titleNameObservationRepository,
             integrationRegistry,
+            maxVariants = if (nativeMangaDotPortfolioResearch) 6 else 3,
         )
         // Bootstrap a missing canonical metadata snapshot once via ICE's
         // verified external IDs. The resolver pins active integration config,
