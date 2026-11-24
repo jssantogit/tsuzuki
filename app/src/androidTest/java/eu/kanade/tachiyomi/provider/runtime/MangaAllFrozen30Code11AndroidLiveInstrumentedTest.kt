@@ -64,7 +64,9 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
             args.getString("mangaAllDualCode11LiveOptIn"),
         )
         val shard = requireNotNull(args.getString("mangaAllFrozen30Shard")).toInt()
-        val readerProbe = args.getString("mangaAllReaderPagesProbe") == "1"
+        val readerMode = args.getString("mangaAllReaderPagesProbe") ?: "0"
+        assertTrue("Invalid Reader metadata probe opt-in", readerMode == "0" || readerMode == "1")
+        val readerProbe = readerMode == "1"
         assertTrue("Only three fixed 10-work shards are permitted", shard in 0..2)
         val cohort = instrumentation.context.assets.open(
             "mangaall-dual-source-30-cohort-lock.json",
@@ -287,9 +289,7 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                         "Reader metadata Host failure for frozen index ${index + 1}",
                         readerResponse.failure,
                     )
-                    val readerJson = Json.parseToJsonElement(
-                        requireNotNull(readerResponse.value),
-                    ).jsonObject
+                    val readerJson = Json.parseToJsonElement(requireNotNull(readerResponse.value)).jsonObject
                     assertEquals(
                         "Reader source pages not available for frozen index ${index + 1}",
                         "page_list",
