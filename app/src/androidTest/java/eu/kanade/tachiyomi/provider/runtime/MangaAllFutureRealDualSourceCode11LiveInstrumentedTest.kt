@@ -50,9 +50,11 @@ class MangaAllFutureRealDualSourceCode11LiveInstrumentedTest {
         assertEquals("app.tsuzuki.mangaall", manifest.id)
         assertEquals(11L, manifest.version.code)
         assertEquals(2, manifest.minHostApi)
-        assertFalse(manifest.permissions.network?.origins.orEmpty().any {
-            it.contains("mangafire", ignoreCase = true) || it.contains("mfcdn", ignoreCase = true)
-        })
+        assertFalse(
+            manifest.permissions.network?.origins.orEmpty().any {
+                it.contains("mangafire", ignoreCase = true) || it.contains("mfcdn", ignoreCase = true)
+            },
+        )
         val root = File(context.cacheDir, "mangaall-real-dual-code11-live").apply {
             deleteRecursively()
             mkdirs()
@@ -144,9 +146,12 @@ class MangaAllFutureRealDualSourceCode11LiveInstrumentedTest {
                 for (entry in items) {
                     val obj = entry.jsonObject
                     val id = requireNotNull(obj["providerChapterId"]?.jsonPrimitive?.content)
-                    assertTrue("unexpected source chapter identifier", Regex(
-                        "mangadot:(uploads|chapters):[1-9][0-9]{0,15}",
-                    ).matches(id))
+                    assertTrue(
+                        "unexpected source chapter identifier",
+                        Regex(
+                            "mangadot:(uploads|chapters):[1-9][0-9]{0,15}",
+                        ).matches(id),
+                    )
                     assertTrue("duplicate real chapter ID", ids.add(id))
                     val number = obj["rawNumber"]?.jsonPrimitive?.content?.toDoubleOrNull()
                     assertNotNull(number)
