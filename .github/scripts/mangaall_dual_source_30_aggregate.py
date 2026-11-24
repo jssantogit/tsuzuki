@@ -443,6 +443,19 @@ def fixture(works):
 def test_self():
     import copy
     works = ["Offline Manga " + str(i) for i in range(30)]
+    lock = json.loads(COHORT_LOCK.read_text(encoding="utf-8"))
+    validated = verify_works({"acknowledge": ACK, "works": lock["works"]})
+    assert len(validated) == 30 and validated == lock["works"]
+    for changed in (
+        lock["works"][1:] + lock["works"][:1],
+        [*lock["works"][:-1], "Unauthorized Replacement Work"],
+    ):
+        try:
+            verify_works({"acknowledge": ACK, "works": changed})
+        except ValueError as exc:
+            assert str(exc) == "MANHWA_COHORT_LOCK_MISMATCH"
+        else:
+            raise AssertionError("Frozen 30-manhwa cohort rotation accepted")
     data = fixture(works)
     assert aggregate(works, data)["outcome"] == "SOURCE_AUDIT_OBSERVED_NOT_CANONICAL"
     collision = copy.deepcopy(data)
