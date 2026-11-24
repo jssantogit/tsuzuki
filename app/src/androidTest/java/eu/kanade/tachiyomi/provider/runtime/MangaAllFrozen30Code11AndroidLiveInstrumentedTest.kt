@@ -58,7 +58,7 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
     @Test(timeout = 1_800_000L)
     fun frozen30_android_real_source_hid_chapter_continuations(): Unit = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val args = instrumentation.arguments
+        val args = InstrumentationRegistry.getArguments()
         assertEquals(
             "I_ACCEPT_MANGAALL_TWO_SOURCE_CODE11_ANDROID_LIVE",
             args.getString("mangaAllDualCode11LiveOptIn"),
