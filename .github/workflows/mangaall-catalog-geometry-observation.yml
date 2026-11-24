@@ -23,16 +23,14 @@ jobs:
           sys.path.insert(0, ".github/scripts")
           from run_mangaall_frozen30_independent_catalog import locked_works
           works = locked_works()
-          # Four previously saturated frozen titles; maximum 12 requests.
-          # No credentials, retries or raw records; verify exact-match recall.
-          for index in (4, 5, 9, 22):
-              for scope in ("MANHWA", "TITLE", "QUOTED_TITLE"):
+          # Independent catalog native names observed in Shikimori; do not change the frozen identities.
+          native={2: "전지적 독자 시점", 28: "그녀가 공작저로 가야 했던 사정", 29: "치즈인더트랩"}
+          for index in (2,28,29):
+              for scope in ("MANHWA", "NATIVE_TITLE"):
                   data = dict(search=works[index-1], page=1, perpage=25, filter_types=["drama cd","novel"])
                   data["type"] = ["Manhwa"]
-                  if scope in ("TITLE", "QUOTED_TITLE"):
-                      data["stype"] = "title"
-                  if scope == "QUOTED_TITLE":
-                      data["search"] = chr(34) + works[index-1] + chr(34)
+                  if scope == "NATIVE_TITLE":
+                      data["search"] = native[index]
                   request = urllib.request.Request(
                       "https://api.mangaupdates.com/v1/series/search",
                       data=json.dumps(data).encode(),
@@ -59,7 +57,12 @@ jobs:
                       valid = [i for i in ids if type(i) is int and i>0]
                       format_count = sum(isinstance(r, dict) and str(r.get("type","")).lower()=="manhwa" for r in records)
                       exact=sum(isinstance(r,dict) and str(r.get("title","")).strip().casefold()==works[index-1].casefold() for r in records)
-                      print(f"MU_WIRE|index={index}|scope={scope}|outcome=HTTP200|page={number('page')}|size={number('per_page')}|total={number('total_hits')}|rows={len(rows)}|positiveIds={len(valid)}|duplicateIds={len(valid)-len(set(valid))}|manhwaRows={format_count}|exactPrimary={exact}")
+                      # Observe associated names only for exact or native matches; retain counts, never fabricate aliases.
+                      def names(r):
+                          return [r.get("title","")]+[a.get("title","") for a in r.get("associated",[]) if isinstance(a,dict)]
+                      alias_exact=sum(any(isinstance(v,str) and v.strip().casefold()==works[index-1].casefold() for v in names(r)) for r in records)
+                      native_exact=sum(any(isinstance(v,str) and v.strip()==native[index] for v in names(r)) for r in records)
+                      print(f"MU_WIRE|index={index}|scope={scope}|outcome=HTTP200|page={number('page')}|size={number('per_page')}|total={number('total_hits')}|rows={len(rows)}|positiveIds={len(valid)}|duplicateIds={len(valid)-len(set(valid))}|manhwaRows={format_count}|exactPrimary={exact}|exactAnyTitle={alias_exact}|exactNative={native_exact}")
                   except urllib.error.HTTPError as error:
                       print(f"MU_WIRE|index={index}|scope={scope}|outcome=HTTP{error.code}")
                       if error.code in (403,429):
