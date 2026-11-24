@@ -203,3 +203,5 @@ jobs:
 # Independent source lookup lanes and same-owner catalog retries (2026-11-24).
 
 # Re-run after exact Spotless correction.
+
+# Preserve closed acquisition reason codes alongside strict canonical gate.
