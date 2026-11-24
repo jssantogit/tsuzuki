@@ -65,6 +65,38 @@ def parse_phase(log, shard, phase, process_ok, catalog="mangaupdates", owners=No
                        "status": rows.get(i, "NOT_OBSERVED")} for i in sorted(indices)]}
 
 
+READER_STATUS = {
+    "CHAPTER_MISSING", "SELECTED_OPTION_MISSING", "PREPARATION_FAILED",
+    "UNEXPECTED_DELIVERY", "INVALID_PAGE_AUTHORITY", "LOADER_FAILED",
+    "IMAGE_LIMIT", "BITMAP_FAILED", "FIRST_PAGE_DECODED",
+    "UNCLASSIFIED_FAILURE", "PERSISTENCE_NOT_VERIFIED",
+}
+
+
+def parse_reader(log, shard, restored, process_ok, catalog, owners):
+    indices = set(range(shard * 10 + 1, shard * 10 + 11))
+    rows = {}
+    invalid = 0
+    restored_by_index = {row["index"]: row["status"] for row in restored["works"]}
+    for match in re.finditer(
+        r"MANGAALL_CANONICAL_READER\|index=(\d+)\|outcome=([A-Z_0-9]+)\|catalog=(mangaupdates|shikimori)\|ui=NOT_TESTED",
+        log,
+    ):
+        index, status, owner = match.groups()
+        index = int(index)
+        if (index not in indices or index in rows or status not in READER_STATUS
+                or owner != (owners.get(index) if owners is not None else catalog)
+                or (status == "FIRST_PAGE_DECODED" and restored_by_index.get(index) != "RESTORED")):
+            invalid += 1
+            continue
+        rows[index] = status
+    return {"processOk": process_ok, "invalid": invalid,
+            "complete": process_ok and invalid == 0 and set(rows) == indices
+                and all(s == "FIRST_PAGE_DECODED" for s in rows.values()),
+            "works": [{"index": i, "catalog": owners.get(i) if owners is not None else catalog,
+                       "status": rows.get(i, "NOT_OBSERVED")} for i in sorted(indices)]}
+
+
 def scope(catalog):
     if catalog!="explicit_plan":
         return None, None
@@ -72,7 +104,7 @@ def scope(catalog):
     return {r["index"]:r["catalog"] for r in rows}, digest
 
 
-def invoke(shard, phase, catalog):
+def invoke(shard, phase, catalog, reader=False):
     owners, plan_digest=scope(catalog)
     args=["shell", "am", "instrument", "-w", "-r",
           "-e", "mangaAllCanonicalOptIn", "I_ACCEPT_FROZEN30_CANONICAL_RESEARCH",
@@ -81,17 +113,22 @@ def invoke(shard, phase, catalog):
           "-e", "mangaAllFrozen30Shard", str(shard)]
     if plan_digest:
         args.extend(["-e","mangaAllCanonicalPlanSha256",plan_digest])
+    args.extend(["-e","mangaAllCanonicalReaderProbe","1" if reader and phase == "RESTORE" else "0"])
     args.extend(["-e","class",TEST,RUNNER])
     try:
         result=adb(*args,check=False,timeout=1850)
         ok=(result.returncode==0 and "INSTRUMENTATION_CODE: -1" in result.stdout
             and "OK (1 test)" in result.stdout)
-        return parse_phase(result.stdout,shard,phase,ok,catalog,owners)
+        log = result.stdout
     except subprocess.SubprocessError:
-        return parse_phase("",shard,phase,False,catalog,owners)
+        log, ok = "", False
+    parsed = parse_phase(log,shard,phase,ok,catalog,owners)
+    if reader and phase == "RESTORE":
+        parsed["reader"] = parse_reader(log, shard, parsed, ok, catalog, owners)
+    return parsed
 
 
-def evaluate(shard, collect, restore, force_stopped, catalog="mangaupdates"):
+def evaluate(shard, collect, restore, force_stopped, catalog="mangaupdates", reader=False):
     restart = (force_stopped and collect["pid"] is not None and restore["pid"] is not None
                and collect["pid"] != restore["pid"])
     return {
@@ -99,14 +136,16 @@ def evaluate(shard, collect, restore, force_stopped, catalog="mangaupdates"):
         "catalogSource": catalog, "planSha256": scope(catalog)[1],
         "scope": "CANONICAL_COLLECTOR_SQLITE_SELECTED_OPTION_RESTART",
         "restartObserved": restart,
-        "outcome": "PASS" if restart and collect["complete"] and restore["complete"] else "RED",
+        "outcome": "PASS" if restart and collect["complete"] and restore["complete"]
+            and (not reader or restore.get("reader", {}).get("complete") is True) else "RED",
+        "readerProbe": "RESTORED_FIRST_PAGE" if reader else "NOT_TESTED",
         "collect": {k: v for k, v in collect.items() if k != "pid"},
         "restore": {k: v for k, v in restore.items() if k != "pid"},
         "signed": "NO", "readerUI": "NOT_TESTED", "editorialEditionEquivalence": "NOT_PROVEN",
     }
 
 
-def run(shard, catalog):
+def run(shard, catalog, reader=False):
     if adb("shell", "getprop", "ro.kernel.qemu").stdout.strip() != "1":
         raise SystemExit("EMULATOR_REQUIRED")
     target = [p for p in Path("app/build/outputs/apk/debug").rglob("*.apk")
@@ -128,12 +167,15 @@ def run(shard, catalog):
         adb("shell", "am", "force-stop", APP)
         force_stopped = not adb("shell", "pidof", APP, check=False).stdout.strip()
         # Do not clear application data between the two instrumentation runs.
-        restore = invoke(shard, "RESTORE", catalog)
-        report = evaluate(shard, collect, restore, force_stopped, catalog)
+        restore = invoke(shard, "RESTORE", catalog, reader)
+        report = evaluate(shard, collect, restore, force_stopped, catalog, reader)
         (output / "verdict.json").write_text(json.dumps(report, indent=2) + "\n")
         for phase in ("collect", "restore"):
             for row in report[phase]["works"]:
                 print(f"MANGAALL_CANONICAL_PERSISTENCE|phase={phase.upper()}|index={row['index']}|outcome={row['status']}")
+        if reader:
+            for row in report["restore"]["reader"]["works"]:
+                print(f"MANGAALL_CANONICAL_READER|index={row['index']}|outcome={row['status']}|ui=NOT_TESTED")
         print(f"MANGAALL_CANONICAL_PERSISTENCE|shard={shard}|outcome={report['outcome']}|restart={report['restartObserved']}")
         return report["outcome"] == "PASS"
     finally:
@@ -141,9 +183,10 @@ def run(shard, catalog):
         adb("shell", "pm", "clear", APP, check=False)
 
 
-def aggregate(catalog):
+def aggregate(catalog, reader=False):
     owners, plan_digest=scope(catalog)
     complete = True
+    decoded = 0
     for shard in range(3):
         path = OUT / f"shard-{shard}" / "verdict.json"
         if not path.is_file():
@@ -157,6 +200,15 @@ def aggregate(catalog):
                 or report.get("restartObserved") is not True
                 or report.get("scope") != "CANONICAL_COLLECTOR_SQLITE_SELECTED_OPTION_RESTART"):
             complete = False
+        if reader:
+            stage = report.get("restore", {}).get("reader", {})
+            rows = stage.get("works", [])
+            decoded += sum(r.get("status") == "FIRST_PAGE_DECODED" for r in rows)
+            if (report.get("readerProbe") != "RESTORED_FIRST_PAGE" or stage.get("complete") is not True
+                    or stage.get("processOk") is not True or stage.get("invalid") != 0
+                    or [r.get("index") for r in rows] != expected
+                    or any(r.get("status") != "FIRST_PAGE_DECODED" or r.get("catalog") != (owners.get(r["index"]) if owners is not None else catalog) for r in rows)):
+                complete = False
         for phase, success in (("collect", "COLLECTED"), ("restore", "RESTORED")):
             data = report.get(phase, {})
             rows = data.get("works", [])
@@ -164,6 +216,8 @@ def aggregate(catalog):
                     or data.get("invalid") != 0 or [r.get("index") for r in rows] != expected
                     or any(r.get("status") != success or r.get("catalog") != (owners.get(r["index"]) if owners is not None else catalog) for r in rows)):
                 complete = False
+    if reader:
+        print(f"MANGAALL_CANONICAL_READER|decoded={decoded}|expected=30|ui=NOT_TESTED")
     print(f"MANGAALL_CANONICAL_PERSISTENCE|outcome={'PASS' if complete else 'RED'}"
           "|expected=30|readerUI=NOT_TESTED|editorialEditionEquivalence=NOT_PROVEN|signed=NO")
     return complete
@@ -189,12 +243,20 @@ def selftest():
     assert not parse_phase(second.replace("index=10", "index=11"), 0, "RESTORE", True)["complete"]
     assert not parse_phase(second.replace("RESTORED", "NO_COLLECTED_RECEIPT"), 0, "RESTORE", True)["complete"]
     assert not parse_phase(first.replace("catalog=mangaupdates","catalog=shikimori"), 0, "COLLECT", True)["complete"]
+    reader_log = "\n".join(f"MANGAALL_CANONICAL_READER|index={i}|outcome=FIRST_PAGE_DECODED|catalog=mangaupdates|ui=NOT_TESTED" for i in range(1, 11))
+    r["reader"] = parse_reader(reader_log, 0, r, True, "mangaupdates", None)
+    assert evaluate(0, c, r, True, reader=True)["outcome"] == "PASS"
+    assert not parse_reader(reader_log+"\n"+reader_log, 0, r, True, "mangaupdates", None)["complete"]
+    assert not parse_reader(reader_log.replace("index=10", "index=11"), 0, r, True, "mangaupdates", None)["complete"]
+    assert not parse_reader(reader_log, 0, parse_phase(second.replace("RESTORED", "NO_COLLECTED_RECEIPT"), 0, "RESTORE", True), True, "mangaupdates", None)["complete"]
+    assert not parse_reader(reader_log.replace("FIRST_PAGE_DECODED", "LOADER_FAILED"), 0, r, True, "mangaupdates", None)["complete"]
     print("MANGAALL_CANONICAL_PERSISTENCE|selftest=PASS")
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--catalog", choices=("mangaupdates", "shikimori", "explicit_plan"), default="mangaupdates")
+    parser.add_argument("--reader", action="store_true")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--shard", type=int, choices=range(3))
     group.add_argument("--aggregate", action="store_true")
@@ -204,7 +266,7 @@ def main():
     if args.selftest:
         selftest()
         return
-    raise SystemExit(0 if (aggregate(args.catalog) if args.aggregate else run(args.shard, args.catalog)) else 1)
+    raise SystemExit(0 if (aggregate(args.catalog, args.reader) if args.aggregate else run(args.shard, args.catalog, args.reader)) else 1)
 
 
 if __name__ == "__main__":
