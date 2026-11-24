@@ -1,0 +1,56 @@
+name: MangaALL — MangaDex native original-language filter observation (NONSHIPPING)
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths: ['.github/workflows/mangaall-mangadex-native-filter-observation.yml']
+permissions:
+  contents: read
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Observe documented original-language filter on bounded frozen controls
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-mangadex-native-filter-observation.yml'
+          python3 - <<'PY'
+          import hashlib, json, time, unicodedata, urllib.parse, urllib.request
+          from pathlib import Path
+          lock=json.loads(Path(".github/mangaall-dual-source-30-cohort-lock.json").read_text())
+          works=lock["works"]
+          assert hashlib.sha256(json.dumps(works,ensure_ascii=False,separators=(",",":")).encode()).hexdigest()=="19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1"
+          def normalized(text):
+              return " ".join("".join(c if c.isalnum() else " " for c in unicodedata.normalize("NFKC",text).casefold()).split())
+          def names(item):
+              a=item["attributes"]
+              return [v for entry in [a.get("title",{})]+a.get("altTitles",[]) for v in entry.values() if isinstance(v,str)]
+          for index in (10,11,16,22):
+              prior=None
+              for mode in ("UNFILTERED","NATIVE_KO"):
+                  params=[("title",works[index-1]),("limit",25),("offset",0)]
+                  if mode=="NATIVE_KO":
+                      params.append(("originalLanguage[]","ko"))
+                  req=urllib.request.Request("https://api.mangadex.org/manga?"+urllib.parse.urlencode(params),
+                      headers={"Accept":"application/json","User-Agent":"Tsuzuki-CI/1.0 (github.com/jssantogit/tsuzuki)"})
+                  with urllib.request.urlopen(req,timeout=15) as response:
+                      raw=response.read(192*1024+1)
+                      assert response.status==200 and len(raw)<=192*1024
+                  doc=json.loads(raw)
+                  rows=doc["data"]
+                  assert doc["result"]=="ok" and doc["offset"]==0 and 0<=len(rows)<=25 and doc["total"]>=len(rows)
+                  assert len({r["id"] for r in rows})==len(rows) and all(r["type"]=="manga" for r in rows)
+                  ko=[r for r in rows if r["attributes"]["originalLanguage"]=="ko"]
+                  exact=[r for r in ko if any(normalized(v)==normalized(works[index-1]) for v in names(r))]
+                  if mode=="NATIVE_KO":
+                      assert len(ko)==len(rows)
+                  print(f"DEX_NATIVE_FILTER|index={index}|scope={mode}|total={doc['total']}|rows={len(rows)}|ko={len(ko)}|exact={len(exact)}|bytes={len(raw)}")
+                  if prior is not None:
+                      print(f"DEX_NATIVE_FILTER|index={index}|unfilteredTotal={prior}|filteredTotal={doc['total']}|nativeLanguageOnly=True")
+                  prior=doc["total"]
+                  time.sleep(2)
+          PY
