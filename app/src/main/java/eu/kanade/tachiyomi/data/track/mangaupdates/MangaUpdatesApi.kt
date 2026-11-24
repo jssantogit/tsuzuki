@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.track.mangaupdates
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates.Companion.READING_LIST
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates.Companion.WISH_LIST
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUAuthorDetail
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUContext
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUCurrentUser
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUListItem
@@ -37,6 +38,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.domain.tsuzuki.integration.CatalogCreatorAliasEvidence
+import tachiyomi.domain.tsuzuki.integration.CreatorCreditRole
 import uy.kohesive.injekt.injectLazy
 import tachiyomi.domain.track.model.Track as DomainTrack
 
@@ -500,6 +503,55 @@ class MangaUpdatesApi(
                     response.parseAs<MURecord>()
                 }
             }
+        }
+    }
+
+    /**
+     * Follow only creator IDs actually linked by the exact work detail.
+     * Never search for a person by a similar name or use another work's credits.
+     */
+    suspend fun getVerifiedCreatorAliases(workId: Long): List<CatalogCreatorAliasEvidence> = withIOContext {
+        require(workId > 0)
+        val series = with(json) {
+            client.newCall(GET("$BASE_URL/v1/series/$workId"))
+                .awaitSuccess()
+                .parseAs<MURecord>()
+        }
+        check(series.seriesId == workId)
+        val credits = series.authors.filter {
+            it.authorId != null && it.authorId > 0 && it.type in setOf("Author", "Artist") &&
+                it.name.isNotBlank() && it.name.length <= 128
+        }
+        val ids = credits.mapNotNull { it.authorId }.distinct()
+        if (ids.size > 8 || credits.size > 32) return@withIOContext emptyList()
+        val people = ids.associateWith { id ->
+            val person = with(json) {
+                client.newCall(GET("$BASE_URL/v1/authors/$id"))
+                    .awaitSuccess()
+                    .parseAs<MUAuthorDetail>()
+            }
+            check(person.authorId == id)
+            person
+        }
+        credits.mapNotNull { credit ->
+            val id = requireNotNull(credit.authorId)
+            val person = requireNotNull(people[id])
+            val aliases = person.associated.map { it.name.trim() }.filter(String::isNotBlank).distinct()
+            val primary = person.name.trim()
+            if (aliases.size > 32 || primary.isBlank() || primary.length > 128 ||
+                aliases.any { it.length > 128 } ||
+                (listOf(primary) + aliases).none { it.equals(credit.name.trim(), ignoreCase = true) }
+            ) {
+                return@mapNotNull null
+            }
+            CatalogCreatorAliasEvidence(
+                workExternalId = workId.toString(),
+                creatorExternalId = id.toString(),
+                role = if (credit.type == "Author") CreatorCreditRole.AUTHOR else CreatorCreditRole.ARTIST,
+                creditedName = credit.name,
+                primaryName = primary,
+                aliases = aliases,
+            )
         }
     }
 
