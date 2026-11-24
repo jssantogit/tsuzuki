@@ -75,10 +75,10 @@ suspend fun resolveVerifiedCreatorAliases(
                 }
                 val names = listOf(entry.primaryName) + entry.aliases
                 if (names.any { it.isBlank() || it.length > 128 }) continue
-                val creditKey = creditKey(entry.creditedName)
-                if (creditKey.isEmpty() || names.none { creditKey(it) == creditKey }) continue
+                val creditedKey = creditKey(entry.creditedName)
+                if (creditedKey.isEmpty() || names.none { creditKey(it) == creditedKey }) continue
                 val credited = fields.any { (role, field) ->
-                    role == entry.role && field.value.any { creditKey(it) == creditKey }
+                    role == entry.role && field.value.any { creditKey(it) == creditedKey }
                 }
                 if (credited) expanded += names.map(String::trim)
             }
