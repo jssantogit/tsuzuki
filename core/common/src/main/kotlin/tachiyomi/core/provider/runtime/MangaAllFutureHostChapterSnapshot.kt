@@ -25,8 +25,9 @@ import java.util.UUID
  *
  * This is bounded acquisition, not incremental HTTP streaming. Author/edition
  * identity and Reader permissions must be checked separately by the canonical
- * engine. Single active snapshot/provider; concurrent requests are serialized
- * inside this process. Multi-process locking is NOT implemented.
+ * engine. Snapshots are isolated by exact work and language within the shared
+ * Provider quota. Concurrent requests are serialized inside this process;
+ * storage operations also use a cross-process lock.
  */
 internal class MangaAllFutureHostChapterSnapshot(
     private val owner: ProviderResourceOwner,
@@ -108,20 +109,16 @@ internal class MangaAllFutureHostChapterSnapshot(
             fail("SNAPSHOT_EXCEEDS_PROVIDER_STORAGE_QUOTA")
         }
 
-        // The typed Host-private storage operation checks the full provider
-        // state (including unrelated keys) and atomically replaces all reserved
-        // snapshot keys. Rejected new data cannot evict an older valid snapshot.
+        // Atomically replace only this scope; prune expired snapshots without
+        // evicting active foreign scopes or unrelated Provider storage.
         try {
-            storage.replaceFutureMangaAllChapterSnapshot(index, values)
+            storage.replaceFutureMangaAllChapterSnapshot(workId, language, now, index, values)
         } catch (_: ProviderHostServiceException) {
             fail("SNAPSHOT_STORAGE_WRITE_FAILED")
         }
-        // A second Android process could publish a newer (possibly foreign
-        // work/facet) snapshot between our atomic replacement and the first
-        // page read. Never return its rows under the original workId. The
-        // storage layer uses process-wide + OS locks per operation; a later
-        // replacement between index/part reads still fails by generation.
-        val committed = readIndex()
+        // Another Android process could replace this exact scope between
+        // index/part reads. Never return rows from a different generation.
+        val committed = readIndex(workId, language)
         if (committed.workId != workId ||
             committed.language != language ||
             committed.generation != nonce
@@ -137,7 +134,7 @@ internal class MangaAllFutureHostChapterSnapshot(
         cursor: String,
     ): MangaAllFutureChapterPage = lock.withLock {
         requireScope(workId, language)
-        val index = readIndex()
+        val index = readIndex(workId, language)
         if (index.workId != workId || index.language != language) {
             fail("STALE_OR_FOREIGN_CHAPTER_CURSOR")
         }
@@ -215,7 +212,8 @@ internal class MangaAllFutureHostChapterSnapshot(
                     JsonArray(emptyList())
                 }
                 val actual = if (rows.isEmpty()) {
-                    val raw = storage.get(PART_PREFIX + part)
+                    val prefix = futureMangaAllChapterSnapshotPrefix(index.workId, index.language)
+                    val raw = storage.get(prefix + "part_" + part)
                         ?: fail("MISSING_SNAPSHOT_PART")
                     if (raw.length > MAX_STORAGE_VALUE || byteSize(raw) > MAX_STORAGE_VALUE) {
                         fail("CORRUPT_SNAPSHOT_PART")
@@ -240,8 +238,9 @@ internal class MangaAllFutureHostChapterSnapshot(
         fail("CORRUPT_SNAPSHOT_INDEX")
     }
 
-    private suspend fun readIndex(): Index {
-        val raw = storage.get(INDEX_KEY) ?: fail("MISSING_CHAPTER_SNAPSHOT")
+    private suspend fun readIndex(expectedWorkId: String, expectedLanguage: String): Index {
+        val prefix = futureMangaAllChapterSnapshotPrefix(expectedWorkId, expectedLanguage)
+        val raw = storage.get(prefix + "index") ?: fail("MISSING_CHAPTER_SNAPSHOT")
         if (raw.length > MAX_STORAGE_VALUE || byteSize(raw) > MAX_STORAGE_VALUE) {
             fail("CORRUPT_SNAPSHOT_INDEX")
         }
@@ -250,6 +249,7 @@ internal class MangaAllFutureHostChapterSnapshot(
         val workId = obj["workId"]?.primitiveText() ?: fail("CORRUPT_SNAPSHOT_INDEX")
         val language = obj["language"]?.primitiveText() ?: fail("CORRUPT_SNAPSHOT_INDEX")
         requireScope(workId, language)
+        if (workId != expectedWorkId || language != expectedLanguage) fail("CORRUPT_SNAPSHOT_INDEX")
         val nonce = obj["generation"]?.primitiveText() ?: fail("CORRUPT_SNAPSHOT_INDEX")
         if (!NONCE.matches(nonce)) fail("CORRUPT_SNAPSHOT_INDEX")
         val expiresAt = obj["expiresAt"]?.primitiveLong() ?: fail("CORRUPT_SNAPSHOT_INDEX")
@@ -517,8 +517,6 @@ internal class MangaAllFutureHostChapterSnapshot(
         val NUMBER = Regex("[0-9]{1,6}(?:\\.[0-9]{1,3})?")
         val NONCE = Regex("[a-f0-9]{16}")
         val CURSOR = Regex("m1:([1-9][0-9]{0,15}):(en|pt-br):([a-f0-9]{16}):([0-9]{1,5})")
-        const val INDEX_KEY = "mangaall_private_chapters_index"
-        const val PART_PREFIX = "mangaall_private_chapters_part_"
         const val MAX_SOURCE_BYTES = 16 * 1024 * 1024
         const val MAX_ROWS = 16000
         const val MAX_PART = 48 * 1024
