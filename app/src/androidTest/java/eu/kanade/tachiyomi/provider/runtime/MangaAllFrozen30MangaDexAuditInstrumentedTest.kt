@@ -7,6 +7,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -158,7 +159,7 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                 var cursor: String? = null
                 var terminal = false
                 for (page in 1..48) {
-                    val input = mutableMapOf<String, kotlinx.serialization.json.JsonElement>("binding" to binding)
+                    val input = mutableMapOf<String, JsonElement>("binding" to binding)
                     cursor?.let { input["cursor"] = JsonPrimitive(it) }
                     val reply = call("reading.chapters", JsonObject(input))
                     if (reply.failure != null || reply.value == null) break
@@ -205,7 +206,9 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                         "page_list" -> {
                             val pages = body.getValue("pages").jsonArray
                             check(pages.isNotEmpty() && pages.size <= 5000)
-                            check(pages.all { it.jsonObject["url"]?.jsonPrimitive?.content?.startsWith("https://") == true })
+                            check(pages.all {
+                                it.jsonObject["url"]?.jsonPrimitive?.content?.startsWith("https://") == true
+                            })
                             facts.pageLists++
                         }
                         "page_failure" -> {
