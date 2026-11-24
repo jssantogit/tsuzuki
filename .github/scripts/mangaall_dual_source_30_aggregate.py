@@ -17,6 +17,7 @@ ORIGIN_SHA = "195502f981bd776a68feebde3efc6d20f55cca65"
 SOURCE_IDS = {"mangadex", "mangadot"}
 KIND = "MANGAALL_TWO_SOURCE_UNSIGNED_CI_PREVIEW"
 COHORT = "MANHWA_30_FIXED_20261123"
+COHORT_SHA256 = "19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1"
 COHORT_LOCK = Path(".github/mangaall-dual-source-30-cohort-lock.json")
 SINGLE = 10
 VALID_AUDITS = {
@@ -98,6 +99,11 @@ def verify_works(request):
         lock.get("freezeUntil") != "THIRTY_OF_THIRTY_VERIFIED_AND_EXPLICITLY_APPROVED"
     ) or works != lock.get("works"):
         raise ValueError("MANHWA_COHORT_LOCK_MISMATCH")
+    digest = hashlib.sha256(json.dumps(
+        works, ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    if digest != COHORT_SHA256:
+        raise ValueError("MANHWA_PINNED_COHORT_HASH_MISMATCH")
     return works
 
 
