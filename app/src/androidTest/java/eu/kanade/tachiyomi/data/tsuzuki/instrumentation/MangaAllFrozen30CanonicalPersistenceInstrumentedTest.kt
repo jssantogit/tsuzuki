@@ -258,11 +258,17 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 addAll(credits.flatMap { it.value }.sorted())
                 add(one.id)
                 add(option.readerSourceKey)
-                addAll(chapterRows.map { listOf(it.id, it.sortKey, it.confirmation.name).joinToString("\u0000") }.sorted())
-                addAll(rows.map {
-                    listOf(it.evidence.producerId, it.evidence.externalChapterKey, it.mappedCanonicalChapterId)
-                        .joinToString("\u0000")
-                }.sorted())
+                addAll(
+                    chapterRows.map {
+                        listOf(it.id, it.sortKey, it.confirmation.name).joinToString("\u0000")
+                    }.sorted(),
+                )
+                addAll(
+                    rows.map {
+                        listOf(it.evidence.producerId, it.evidence.externalChapterKey, it.mappedCanonicalChapterId)
+                            .joinToString("\u0000")
+                    }.sorted(),
+                )
             }
             return hash(JsonArray(parts.map { JsonPrimitive(it) }).toString())
         }
