@@ -29,7 +29,11 @@ class ResolveMangaAllSelectedReadingOption(
         requestedLanguage: String,
         verifiedOptions: List<ProviderChapterReadingOption>,
     ): List<ProviderChapterReadingOption> {
-        if (canonicalTitleId.isBlank() || canonicalChapterId.isBlank() || requestedLanguage.isBlank()) return emptyList()
+        if (canonicalTitleId.isBlank() || canonicalChapterId.isBlank() ||
+            requestedLanguage.isBlank()
+        ) {
+            return emptyList()
+        }
         val language = requestedLanguage.lowercase()
         val saved = selections.get(canonicalTitleId, language) ?: return emptyList()
         if (saved.canonicalTitleId != canonicalTitleId ||
