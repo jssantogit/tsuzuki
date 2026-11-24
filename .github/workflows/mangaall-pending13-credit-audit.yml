@@ -187,3 +187,5 @@ jobs:
 
 # Independently published Hangul comparison; no reader acceptance or inventory changes.
 # All creator regressions must pass before real lookup-only observations.
+
+# Retry after the exact Spotless-only correction to native-credit romanization.
