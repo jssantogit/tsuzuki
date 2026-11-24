@@ -610,6 +610,7 @@ class CollectProviderReadingEvidence private constructor(
         // earlier matches. They never cross a source, title, edition or facet.
         var ambiguousCandidates: List<ProviderWorkCandidate>? = null
         var unresolved = false
+        var incompleteResearchLookup = false
         val collectedWorkSources = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssessment>()
         for ((queryIndex, title) in titles.withIndex()) {
             val queryStarted = System.nanoTime()
@@ -666,7 +667,7 @@ class CollectProviderReadingEvidence private constructor(
             // Reader authority merely because their authors/title match.
             observeSourcePortfolio(canonicalTitleId, title, target, canonicalCreators, matches)
                 .forEach { assessment -> collectedWorkSources[assessment.ref] = assessment }
-            if (!lookup.complete) {
+            if (!lookup.complete || incompleteResearchLookup) {
                 // MangaAll can have more upstream source pages than the Host's
                 // bounded lookup permits. Retain verified work evidence, but
                 // never choose an edition from a non-exhaustive candidate set.
@@ -689,13 +690,20 @@ class CollectProviderReadingEvidence private constructor(
                     exactMatches = matches.size,
                     bindings = 0,
                 )
+                val confirmedSources = collectedWorkSources.values
+                    .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
+                    .take(MAX_COVERAGE_CONTENDERS)
+                // An incomplete primary-name search must not suppress independently
+                // published aliases in the bounded research collector. Once any
+                // query is incomplete, later aliases can contribute provisional
+                // evidence only; they cannot create an exact edition binding.
+                if (nativeMangaDotPortfolioResearch && confirmedSources.isEmpty()) {
+                    incompleteResearchLookup = true
+                    unresolved = true
+                    continue
+                }
                 return ProviderCallResult.Success(
-                    BindingDiscovery(
-                        unresolved = true,
-                        workSources = collectedWorkSources.values
-                            .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
-                            .take(MAX_COVERAGE_CONTENDERS),
-                    ),
+                    BindingDiscovery(unresolved = true, workSources = confirmedSources),
                 )
             }
             val sourcePrimaryMatches = matches.filter { normalize(it.title) == normalizedTitle }
@@ -907,7 +915,18 @@ class CollectProviderReadingEvidence private constructor(
             }
             return ProviderCallResult.Success(BindingDiscovery(binding = binding))
         }
-        return ProviderCallResult.Success(BindingDiscovery(unresolved = unresolved))
+        return ProviderCallResult.Success(
+            BindingDiscovery(
+                unresolved = unresolved,
+                workSources = if (incompleteResearchLookup) {
+                    collectedWorkSources.values
+                        .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
+                        .take(MAX_COVERAGE_CONTENDERS)
+                } else {
+                    emptyList()
+                },
+            ),
+        )
     }
 
     /**
