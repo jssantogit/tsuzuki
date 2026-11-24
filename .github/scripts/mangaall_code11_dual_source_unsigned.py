@@ -31,7 +31,8 @@ def change_one(blob: bytes, old: bytes, new: bytes, label: str) -> bytes:
     return blob.replace(old, new, 1)
 
 
-def candidate_bytes(source_root: Path, manhwa_only: bool = False) -> bytes:
+def candidate_bytes(source_root: Path, manhwa_only: bool = False,
+                    mangadot_creators: bool = False) -> bytes:
     sys.path.insert(0, str(source_root / "tooling"))
     from mangaall_future_code11_candidate import unsigned_candidate_zip
     origin = unsigned_candidate_zip(source_root)
@@ -138,6 +139,26 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False) -> bytes:
             b'const page = pageNumber(input?.cursor, title);',
             "MANHWA_DOT_BIND_PAGE_TITLE",
         )
+    if mangadot_creators:
+        # Separate opt-in; the five previous source-only live probes keep
+        # exactly their original package shape. No authority or chapter
+        # coverage is fabricated by the detail enrichment.
+        creator_module = Path(__file__).with_name("mangaall_mangadot_creator_evidence.mjs")
+        files["modules/sources/mangadot/modules/creator-evidence.js"] = creator_module.read_bytes()
+        files[dot_name] = (
+            b'import { observeMangaDotCreators, mangaDotExactTitle } from "./creator-evidence.js";\n'
+            + files[dot_name]
+        )
+        files[dot_name] = change_one(
+            files[dot_name],
+            b'  return { items, nextCursor: hasNext ? String(page + 1) : null };',
+            b'  if (input?.editorialEvidenceVersion === 1) {\n'
+            b'    const exact = items.filter(item => mangaDotExactTitle(item, title)).slice(0, 3);\n'
+            b'    for (const item of exact) Object.assign(item, await observeMangaDotCreators(item));\n'
+            b'  }\n'
+            b'  return { items, nextCursor: hasNext ? String(page + 1) : null };',
+            "MANGADOT_CREATOR_ENRICHMENT",
+        )
     for name in tuple(files):
         if name.startswith("modules/sources/mangafire/"):
             del files[name]
@@ -190,9 +211,12 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--manhwa-only", action="store_true",
                         help="CI-only original-ko and scoped search for frozen manhwa cohort")
+    parser.add_argument("--mangadot-creators", action="store_true",
+                        help="Research-only exact MangaDot JSON-LD creator evidence")
     args = parser.parse_args()
     source = args.source.resolve()
-    raw = candidate_bytes(source, manhwa_only=args.manhwa_only)
+    raw = candidate_bytes(source, manhwa_only=args.manhwa_only,
+                          mangadot_creators=args.mangadot_creators)
     if args.output is not None:
         destination = args.output.resolve()
         if "androidTest/assets" not in str(destination):
