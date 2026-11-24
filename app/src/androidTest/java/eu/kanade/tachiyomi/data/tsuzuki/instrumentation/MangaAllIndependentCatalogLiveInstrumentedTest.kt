@@ -24,6 +24,8 @@ import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
 import tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentity
 import tachiyomi.domain.tsuzuki.catalog.interactor.toCanonicalReadingMetadata
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
@@ -72,8 +74,34 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         // tracker/network adapter, not a fake provider or a test HTTP client.
         val app = target.applicationContext as App
         val catalog = MangaUpdatesIntegrationProvider(app.graph.trackerManager)
+        // Emit only closed failure codes and pagination counts from the
+        // actual adapter; never send its exception, query, or response body.
+        var activeIndex = -1
+        val observedSearch = object : SearchProvider by catalog {
+            override suspend fun search(query: CatalogQuery): Result<CatalogPage> {
+                val result = catalog.search(query)
+                val error = result.exceptionOrNull()
+                val contract = error?.message?.let {
+                    Regex("""MU_SEARCH_CONTRACT\|reason=(FIRST_GEOMETRY|PAGE_GEOMETRY|ROW_COUNT|INVALID_OR_REPEATED_ID)\|page=-?\d+\|size=-?\d+\|total=-?\d+\|rows=\d+""")
+                        .matchEntire(it)?.value
+                }
+                val facts = if (error != null) {
+                    contract ?: "MU_SEARCH_CONTRACT|reason=OTHER_FAILURE"
+                } else {
+                    val page = result.getOrThrow()
+                    "MU_SEARCH_CONTRACT|reason=OK|total=${page.totalCount ?: -1}|rows=${page.items.size}"
+                }
+                instrument.sendStatus(
+                    1,
+                    Bundle().apply {
+                        putString("stream", "MANGAALL_CATALOG_DIAGNOSTIC|index=$activeIndex|offset=${query.offset}|$facts")
+                    },
+                )
+                return result
+            }
+        }
         val registry = object : IntegrationRegistry {
-            override fun searchProviders(): List<SearchProvider> = listOf(catalog)
+            override fun searchProviders(): List<SearchProvider> = listOf(observedSearch)
             override fun metadataProviders(): List<MetadataProvider> = listOf(catalog)
             override fun discoveryProviders(): List<DiscoveryProvider> = emptyList()
             override fun chapterEvidenceProviders(): List<ChapterEvidenceProvider> = emptyList()
@@ -84,6 +112,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         val selected = works.withIndex().filter { it.index % shardCount == shardIndex }
         var conclusive = 0
         for ((index, line) in selected) {
+            activeIndex = index
             val work = parseWork(line)
             val report = if (work.format == CatalogItemFormat.NOVEL) {
                 // Production MangaUpdates search explicitly excludes 'novel'.
