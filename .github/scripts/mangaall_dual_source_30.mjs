@@ -542,8 +542,24 @@ globalThis.tsuzuki = { http: { async request(method,url,headers,body) {
   }
   const encoded = await bridge.request(method,url,headers,body);
   const response = JSON.parse(encoded);
+  // Keep ONLY bounded row counts, never upstream titles, URLs, query terms,
+  // response JSON or source IDs in the diagnostic telemetry. Missing/malformed
+  // arrays are unknown, not evidence of a genuinely empty source catalog.
+  let observedSearchRows = null;
+  const searchPath = new URL(url).pathname;
+  const source = ORIGINS[origin];
+  const isSearch = method === 'GET' && (
+    (source === 'mangadot' && searchPath === '/api/search') ||
+    (source === 'mangadex' && searchPath === '/manga'));
+  if (isSearch && response.statusCode === 200 && typeof response.body === 'string') {
+    try {
+      const payload = JSON.parse(response.body);
+      const rows = source === 'mangadot' ? payload.manga_list ?? payload.results : payload.data;
+      if (Array.isArray(rows) && rows.length <= 100) observedSearchRows = rows.length;
+    } catch { /* unknown upstream schema is never claimed empty */ }
+  }
   wireRecords.push({
-    source: ORIGINS[origin],
+    source, searchRows: observedSearchRows,
     bytes: typeof response.body === 'string' ? Buffer.byteLength(response.body, 'utf8') : 0,
   });
   return encoded;
@@ -586,6 +602,9 @@ for (const [index, work] of assigned.entries()) {
   const bySource = Object.fromEntries(SOURCES.map(source => [source, {
     maxUpstreamBodyBytes: Math.max(0, ...wireObserved.filter(x => x.source === source).map(x => x.bytes)),
     upstreamOver192KiB: wireObserved.filter(x => x.source === source && x.bytes > 192 * 1024).length,
+    searchPagesObserved: wireObserved.filter(x => x.source === source && x.searchRows !== null).length,
+    searchRowsObserved: wireObserved.filter(x => x.source === source && x.searchRows !== null)
+      .reduce((sum, x) => sum + x.searchRows, 0),
     requests: observations.filter(x => x.source === source).length,
     http200: observations.filter(x => x.source === source && x.status === 200).length,
     http403: observations.filter(x => x.source === source && x.status === 403).length,
