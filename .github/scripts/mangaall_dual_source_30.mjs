@@ -162,8 +162,17 @@ assert.equal(originalDexSource.split(dexImport).length, 2,
 const dexHttpModuleUri = pathToFileURL(path.join(
   sourceRoot, 'modules/sources/mangadex/modules/http.js',
 )).href;
+// Original-language is supplied in the MangaDex API work attributes.
+// A manhwa-only probe must never count the Japanese manga sharing the
+// "Wind Breaker" title as a Korean candidate. Missing original language is
+// unknown, not evidence of Korean origin. Keep the signed adapter untouched.
+const dexSourceWorkGuard = 'if (item?.type !== "manga" || !ID_PATTERN.test(item.id || "") || seen.has(item.id)) continue;';
+assert.equal(originalDexSource.split(dexSourceWorkGuard).length, 2,
+  'MangaDex original-language work guard anchor changed; re-audit required');
+const koreanSourceGuard = 'if (item?.type !== "manga" || !ID_PATTERN.test(item.id || "") || item?.attributes?.originalLanguage !== "ko" || seen.has(item.id)) continue;';
 const experimentalDexCode = originalDexSource
   .replace(dexPageSize, 'const CHAPTER_PAGE_SIZE = 50;')
+  .replace(dexSourceWorkGuard, koreanSourceGuard)
   .replace(dexImport, 'from "' + dexHttpModuleUri + '"');
 const extendedMangaDex = await import('data:text/javascript;base64,' +
   Buffer.from(experimentalDexCode, 'utf8').toString('base64'));
@@ -240,7 +249,7 @@ const tracedLookup = (source, originalLookup) => async input => {
 };
 const dualReading = router.createMangaAllReading({
   mangadex: { ...dexModule.default.reading,
-    lookup: tracedLookup('mangadex', dexModule.default.reading.lookup),
+    lookup: tracedLookup('mangadex', extendedMangaDex.lookup),
     chapters: extendedMangaDex.chapters },
   mangadot: { ...granularMangaDotAdapter,
     lookup: tracedLookup('mangadot', extendedMangaDot.lookup) },
@@ -389,6 +398,11 @@ async function offlineContracts() {
   assert.throws(() => granularPage(syntheticChapters, 600, cursorMark));
   assert.equal(safeChapterId('mangadot:uploads:123', 'mangadot'), true);
   assert.equal(safeChapterId('mangadot:123', 'mangadot'), false);
+  // Regression: original-language metadata is required for Korean manhwa.
+  // The source adapter must continue to reject unverified Japanese-language
+  // works even when the translated English title is identical.
+  assert.ok(experimentalDexCode.includes('originalLanguage !== "ko"'));
+  assert.ok(!originalDexSource.includes('originalLanguage !== "ko"'));
   const called = [];
   const candidate = (source, id) => ({
     externalWorkId: source + ':' + id, title: 'Akame ga Kill!',
