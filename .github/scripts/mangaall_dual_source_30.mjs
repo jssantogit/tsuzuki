@@ -552,6 +552,32 @@ async function offlineContracts() {
   assert.equal(rival.unresolvedCandidates, true);
   assert.equal(rival.candidateSummaries[1].workId, alias.externalWorkId);
   assert.equal(rival.chapters, 'AMBIGUOUS_NOT_AUTHORIZED');
+  // Reproduce the observed real Raeliana false negative: the router accepts
+  // U+2019 curly apostrophe, but the unadapted journey mistakenly discards it.
+  // Matching punctuation MUST NOT be interpreted as authority to bind a HID.
+  const raelianaOriginal = "Why Raeliana Ended Up at the Duke's Mansion";
+  const curly = "Why Raeliana Ended Up at the Duke’s Mansion";
+  assert.equal(router.lookupTitleMatches([raelianaOriginal],
+    {title:curly,aliases:[]}), true);
+  const punctuationFixture = async title => probeJourney({
+    async lookup() { return {items:[{
+      externalWorkId:'mangadot:12345', title, aliases:[],
+      authors:[],language:null,
+    }],nextCursor:null}; },
+    async chapters() { throw Error('SOURCE_NOT_CANONICAL'); },
+  }, {...works[0], names:[raelianaOriginal], format:'manhwa'},[],{
+    lookupContract:'v1', lookupPageLimit:32, chapterPageLimit:8,
+    includeCandidates:true, includeCandidateCoverage:false,
+  });
+  const punctuationHit = await punctuationFixture(curly);
+  assert.equal(punctuationHit.lookupComplete, true);
+  assert.equal(punctuationHit.lookup, 'DISCOVERY_OBSERVED');
+  assert.equal(punctuationHit.matchingWorkCount, 1);
+  assert.equal(punctuationHit.candidateSummaries[0].exactMatch, true);
+  const unrelated = await punctuationFixture(curly + ' Part 2');
+  assert.equal(unrelated.matchingWorkCount, 0);
+  assert.equal(unrelated.lookup, 'NO_MATCH');
+  assert.equal(unrelated.candidateSummaries[0].exactMatch, false);
   console.log('MANGAALL_DUAL30_OFFLINE|outcome=PASS|sources=MANGADEX_MANGADOT' +
     '|mangafire=NOT_CALLED|router=ORIGINAL_MODULE_ADAPTED_IN_MEMORY|signedPackage=UNTOUCHED');
 }
