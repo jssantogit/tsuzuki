@@ -27,9 +27,15 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
       - name: Validate locked cohort, restored Reader verdicts and independent MangaDex pixel reporter
+        env:
+          LIVE_REQUEST: ${{ contains(github.event.head_commit.message, 'RUN_FROZEN30_PENDING14_LIVE') }}
         run: |
           set -euo pipefail
-          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-frozen30-pending14-canonical-persistence.yml'
+          # Preparation commits run offline checks only; live is a separate,
+          # workflow-only commit with its explicit marker.
+          if [[ "$LIVE_REQUEST" == 'true' ]]; then
+            test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-frozen30-pending14-canonical-persistence.yml'
+          fi
           python3 -m py_compile .github/scripts/run_mangaall_frozen30_canonical_persistence.py
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
           python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
@@ -194,3 +200,6 @@ jobs:
           test '${{ needs.build-once.result }}' = 'success'
           test '${{ needs.canonical-restart.result }}' = 'success'
 
+
+# Explicit bounded rerun of the 14 non-decoded indices in CI 45422407838.
+# The 16 previously successful works remain in the original frozen lock.
