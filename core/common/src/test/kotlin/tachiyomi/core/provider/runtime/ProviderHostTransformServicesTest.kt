@@ -46,7 +46,7 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
-    fun `ordinary DOM text keeps its existing character bound independently of structured metadata bytes`(): Unit = runBlocking {
+    fun `ordinary DOM text retains its character bound`(): Unit = runBlocking {
         val value = "é".repeat(40 * 1024)
         val handle = store.put(owner, ProviderResourceKind.HTML, "<h1>$value</h1>".encodeToByteArray())
         val dom = DefaultProviderDomHostService(owner, store)
