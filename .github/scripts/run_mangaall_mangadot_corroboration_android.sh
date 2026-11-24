@@ -3,7 +3,7 @@
 set -euo pipefail
 umask 077
 catalog="${1:?Select one independently verified catalog scope}"
-[[ "$catalog" == "mangaupdates" || "$catalog" == "shikimori" ]]
+[[ "$catalog" == "mangaupdates" || "$catalog" == "shikimori" || "$catalog" == "explicit_controls" ]]
 app=app.tsuzuki.dev
 test "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" = 1
 adb shell pm clear "$app" | grep -q Success
@@ -33,5 +33,6 @@ for index,catalog,outcome in rows:
     if outcome in allowed:
         print(f"MANGAALL_DOT_CORROBORATION|index={index}|catalog={catalog}|outcome={outcome}|sqlite=NOT_TESTED|reader=NOT_TESTED")
 assert sys.argv[2]=="0" and "INSTRUMENTATION_CODE: -1" in raw and "OK (1 test)" in raw
-assert rows==[(str(i),sys.argv[3],"WORK_CORROBORATED_PREVIEW") for i in (1,3,10,12)]
+expected=[(str(i),("shikimori" if i==12 else "mangaupdates") if sys.argv[3]=="explicit_controls" else sys.argv[3],"WORK_CORROBORATED_PREVIEW") for i in (1,3,10,12)]
+assert rows==expected
 PY
