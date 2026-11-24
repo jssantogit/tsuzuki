@@ -101,7 +101,9 @@ class PrepareCanonicalChapterForReader(
                 } else {
                     emptyList()
                 }
-                if (releases.size > 1) {
+                // Even one remaining release requires confirmation when the saved
+                // exact release no longer resolves. Never silently substitute it.
+                if (releases.isNotEmpty()) {
                     trace.event(
                         subsystem = DiagnosticSubsystem.READER,
                         name = DiagnosticEventName.READER_SOURCE_SELECTED,

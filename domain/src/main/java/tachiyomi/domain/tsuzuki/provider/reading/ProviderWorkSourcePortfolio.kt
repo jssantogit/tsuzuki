@@ -61,7 +61,7 @@ object ProviderWorkSourcePortfolio {
         val normalizedQuery = normalizeTitle(queryTitle)
         require(normalizedQuery.isNotEmpty()) { "Portfolio query title cannot be empty" }
         val expectedAuthors = independentlyVerifiedAuthors
-            ?.mapNotNull(::normalizeCreator)
+            ?.flatMap(::creatorKeys)
             ?.toSet()
             ?.takeIf { it.isNotEmpty() }
 
@@ -70,7 +70,7 @@ object ProviderWorkSourcePortfolio {
                 .plus(candidate.aliases.asSequence())
                 .any { normalizeTitle(it) == normalizedQuery }
             val detailVerified = candidate.detailOutcome in VERIFIED_SOURCE_DETAILS
-            val sourceAuthors = candidate.authors.mapNotNull(::normalizeCreator).toSet()
+            val sourceAuthors = candidate.authors.flatMap(::creatorKeys).toSet()
             val verification = when {
                 !exactTitle -> ProviderWorkVerification.TITLE_UNVERIFIED
                 expectedAuthors == null -> ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED
@@ -118,6 +118,20 @@ object ProviderWorkSourcePortfolio {
             .plus(candidate.aliases.asSequence())
             .any { explicitlyQualifiedEdition(it, normalizedBase) } ||
             mangaFireUrlAttestsEditionVariant(providerId, candidate, normalizedBase)
+    }
+
+    private fun creatorKeys(name: String): Set<String> = buildSet {
+        val normalized = Normalizer.normalize(name, Normalizer.Form.NFC)
+        normalizeCreator(normalized)?.let(::add)
+        // Romanized full names may spell one explicitly hyphenated token
+        // with or without a hyphen. Do not concatenate independent words,
+        // infer a missing surname or alter single-token pseudonyms.
+        if (normalized.trim().split(WHITESPACE).size >= 2) {
+            val joined = EXPLICIT_NAME_HYPHEN.replace(normalized) {
+                it.groupValues[1] + it.groupValues[2]
+            }
+            if (joined != normalized) normalizeCreator(joined)?.let(::add)
+        }
     }
 
     private fun normalizeCreator(name: String): String? {
@@ -221,6 +235,7 @@ object ProviderWorkSourcePortfolio {
     private val WHITESPACE = Regex("\\s+")
     private val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
     private val CREATOR_COMBINING_MARKS = Regex("\\p{M}+")
+    private val EXPLICIT_NAME_HYPHEN = Regex("([A-Za-z])[-‐‑]([A-Za-z])")
     private val JAPANESE_LONG_YO = Regex("(?:ry|ky|gy|sh|ch|j|ny|hy|by|py|my)ou")
     private val EDITION_MARKERS = listOf(
         "colored",

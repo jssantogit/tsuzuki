@@ -66,6 +66,26 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
+    fun `full names tolerate explicit hyphen spelling and decomposed Unicode without merging pseudonyms`() {
+        fun check(credit: String, source: String, expected: ProviderWorkVerification) {
+            ProviderWorkSourcePortfolio.assess(
+                ProviderId("app.tsuzuki.mangaall"),
+                "en",
+                "Chainsaw Man",
+                setOf(credit),
+                listOf(original.copy(authors = listOf(source))),
+            ).single().workVerification shouldBe expected
+        }
+        check("Kim, Yong-Hwan", "Yonghwan Kim", ProviderWorkVerification.AUTHOR_CORROBORATED)
+        check("Yonghwan Kim", "Kim Yong-Hwan", ProviderWorkVerification.AUTHOR_CORROBORATED)
+        check("Ryo\u0304ko Kui", "Ryoko Kui", ProviderWorkVerification.AUTHOR_CORROBORATED)
+        check("Kim Yong Hwan", "Kim Yonghwan", ProviderWorkVerification.AUTHOR_CONFLICT)
+        check("Kim Yong-Hwan", "Yonghwan Lee", ProviderWorkVerification.AUTHOR_CONFLICT)
+        check("Kim", "Kim Yong-Hwan", ProviderWorkVerification.AUTHOR_CONFLICT)
+        check("A-B", "AB", ProviderWorkVerification.AUTHOR_CONFLICT)
+    }
+
+    @Test
     fun `typographic apostrophes do not reject exact titles but suffix differences remain distinct`() {
         val observed = original.copy(
             title = "An Author’s Work",

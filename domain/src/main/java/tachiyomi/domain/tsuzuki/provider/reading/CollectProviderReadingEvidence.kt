@@ -229,13 +229,13 @@ class CollectProviderReadingEvidence private constructor(
                         credit.externalId != null &&
                             resolved.externalIds[credit.providerId] == credit.externalId
                     }
-                    ?.value.orEmpty().mapNotNull(::normalizedCreator).toSet()
+                    ?.value.orEmpty().filter { normalizedCreator(it) != null }.toSet()
                 val verifiedArtists = resolved.artists
                     ?.takeIf { credit ->
                         credit.externalId != null &&
                             resolved.externalIds[credit.providerId] == credit.externalId
                     }
-                    ?.value.orEmpty().mapNotNull(::normalizedCreator).toSet()
+                    ?.value.orEmpty().filter { normalizedCreator(it) != null }.toSet()
                 canonicalCreditBasis = when {
                     verifiedAuthors.isNotEmpty() && verifiedArtists.isNotEmpty() ->
                         DiagnosticProviderCanonicalCreditBasis.AUTHOR_AND_ARTIST
@@ -257,7 +257,7 @@ class CollectProviderReadingEvidence private constructor(
                                 entries.map { it.externalId }.distinct().singleOrNull()?.let { provider to it }
                             }.toMap()
                         resolveVerifiedCreatorAliases(resolved, verifiedIds, providers)
-                            .mapNotNull(::normalizedCreator)
+                            .filter { normalizedCreator(it) != null }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (_: Exception) {
@@ -847,6 +847,7 @@ class CollectProviderReadingEvidence private constructor(
             // only when every rival supplies positive, contradictory authors.
             // A missing creator, two same-author HIDs, or an explicit edition
             // qualifier remains unresolved.
+            val strictCreatorKeys = canonicalCreators?.mapNotNull(::normalizedCreator)?.toSet()
             val authorCorroborated = matches.takeIf { it.size > 1 }?.singleOrNull { contender ->
                 canonicalCreators != null &&
                     !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
@@ -854,10 +855,10 @@ class CollectProviderReadingEvidence private constructor(
                         contender,
                         title,
                     ) &&
-                    contender.authors.any { normalizedCreator(it) in canonicalCreators } &&
+                    contender.authors.any { normalizedCreator(it) in strictCreatorKeys.orEmpty() } &&
                     matches.filter { it.externalWorkId != contender.externalWorkId }.all { rival ->
                         rival.authors.isNotEmpty() &&
-                            rival.authors.none { normalizedCreator(it) in canonicalCreators }
+                            rival.authors.none { normalizedCreator(it) in strictCreatorKeys.orEmpty() }
                     }
             }
             // Only one currently readable English source may be selected when
@@ -876,7 +877,7 @@ class CollectProviderReadingEvidence private constructor(
                             title,
                         ) &&
                             work.authors.isNotEmpty() &&
-                            work.authors.any { normalizedCreator(it) in canonicalCreators }
+                            work.authors.any { normalizedCreator(it) in strictCreatorKeys.orEmpty() }
                     }
                 }
                 ?.singleOrNull { work ->

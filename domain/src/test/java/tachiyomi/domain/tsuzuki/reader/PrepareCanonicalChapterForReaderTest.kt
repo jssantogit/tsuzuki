@@ -362,6 +362,32 @@ class PrepareCanonicalChapterForReaderTest {
         coVerify(exactly = 0) { reader.preparedContent(any()) }
     }
 
+    @Test
+    fun `stale MangaAll release requires confirmation even with just one verified replacement`() = runTest {
+        val selected = mockk<ResolveMangaAllSelectedChapter>()
+        val reader = mockk<ResolveProviderChapterReading>()
+        val release = ProviderChapterReadingOption(
+            canonicalChapterId = "chapter-1",
+            bindingId = "work-source:verified",
+            providerId = ProviderId("app.tsuzuki.mangaall"),
+            facetId = "en",
+            externalWorkId = "mangadot:123",
+            providerChapterId = "mangadot:uploads:2",
+        )
+        coEvery { selected.execute("chapter-1", "en") } returns null
+        coEvery { selected.options("chapter-1", "en") } returns listOf(release)
+        val fixture = fixture(
+            preference = null,
+            providers = listOf(provider(option("other-addon"))),
+            mangaAllSource = selected,
+            providerReader = reader,
+        )
+        val result = fixture.prepare.execute("chapter-1", requestedMangaAllLanguage = "en")
+        result.shouldBeInstanceOf<CanonicalReaderPreparation.ProviderEditionConfirmationRequired>()
+        result.candidateCount shouldBe 1
+        coVerify(exactly = 0) { reader.preparedContent(any()) }
+    }
+
     private fun fixture(
         preference: ContentPreference?,
         providers: List<ContentProvider>,
