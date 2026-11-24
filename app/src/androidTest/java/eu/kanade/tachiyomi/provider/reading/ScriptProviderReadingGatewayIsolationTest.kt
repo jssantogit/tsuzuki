@@ -9,6 +9,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.data.tsuzuki.instrumentation.MangaAllInstrumentationVerdict
 import eu.kanade.tachiyomi.provider.runtime.AndroidProviderBrowserHostService
+import eu.kanade.tachiyomi.provider.runtime.MangaBallCiBrowserWarmupActivity
+import eu.kanade.tachiyomi.provider.runtime.MangaBallCiBrowserWarmupGate
 import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestActivity
 import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestGate
 import eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupActivity
@@ -4108,6 +4110,153 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
         assertTrue(deniedGateway.lookup(provider, ProviderReadingLookupRequest(listOf(titles.first()))) is ProviderCallResult.Failure)
         assertEquals(1, deniedCalls.get())
+    }
+
+
+    /**
+     * Real unsigned development package generates the lookup in Android QuickJS.
+     * Capture uses an offline empty fixture; normal WebView navigation is a
+     * separate measurement. No fallback after a rejection or session export.
+     * Replay only the received body into the same adapter; no further HTTP.
+     */
+    @Test(timeout = 300_000L)
+    fun mangaBallDevelopmentArchive_browserTransportComparison() = runBlocking {
+        val instrument = InstrumentationRegistry.getInstrumentation()
+        assertEquals("I_ACCEPT_MANGABALL_PACKAGE_BROWSER", InstrumentationRegistry.getArguments().getString("mangaBallPackageBrowserOptIn"))
+        val context = instrument.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        val archive = instrument.context.assets.open("mangaball/development-unsigned.tsz")
+            .use { it.readBytes() }
+        assertEquals(
+            "524849196f9cbe1e3f5bf4ce5dc943e58c6dfdc70d52d2f63ea7992019642260",
+            tachiyomi.core.provider.supplychain.sha256Hex(archive),
+        )
+        val manifest = ProviderPackageParser().parse(archive).manifest
+        val provider = ProviderId(manifest.id)
+        assertEquals("app.tsuzuki.mangaall.mangaball", provider.value)
+        assertEquals(1L, manifest.version.code)
+        assertEquals("0.1.0-dev", manifest.version.name)
+        val origins = requireNotNull(manifest.permissions.network).origins
+        assertEquals(setOf("https://mangaball.com"), origins)
+        assertTrue(manifest.permissions.browser?.origins.orEmpty().isEmpty())
+
+        fun publish(record: String) {
+            instrument.sendStatus(0, android.os.Bundle().apply { putString("stream", record) })
+        }
+
+        val titles = listOf("Oyasumi Punpun", "Akame ga Kill!", "Koe no Katachi")
+        val captured = AtomicReference<String?>(null)
+        val captureClient = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            val url = request.url
+            check(request.method == "GET" && url.scheme == "https" &&
+                url.host == "mangaball.com" && url.encodedPath == "/api/v1/title/search-advanced")
+            check(captured.compareAndSet(null, url.toString()))
+            Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(200)
+                .message("Offline request capture only")
+                .body("""{"code":200,"data":[],"pagination":{"page":1,"total_pages":0}}""".toResponseBody())
+                .build()
+        }.build()
+        val captureGateway = gateway(
+            main = "",
+            providerId = provider,
+            networkOrigins = origins,
+            localNetwork = false,
+            includePages = false,
+            packageBytesOverride = archive,
+            baseHttpClient = captureClient,
+            packageVersionName = manifest.version.name,
+            packageVersionCode = manifest.version.code,
+        )
+        val urls = titles.map { title ->
+            val lookup = captureGateway.lookup(provider, ProviderReadingLookupRequest(listOf(title)))
+            assertTrue(lookup is ProviderCallResult.Success)
+            assertTrue((lookup as ProviderCallResult.Success).value.items.isEmpty())
+            val url = requireNotNull(captured.getAndSet(null))
+            assertEquals(title, android.net.Uri.parse(url).getQueryParameter("keyword"))
+            url
+        }
+        publish("MANGABALL_PACKAGE_BROWSER_CAPTURE|requests=3|runtime=QUICKJS|network=OFFLINE")
+
+        MangaBallCiBrowserWarmupGate.reset()
+        val activity = instrument.startActivitySync(
+            Intent(context, MangaBallCiBrowserWarmupActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        val warmup = withContext(Dispatchers.IO) { MangaBallCiBrowserWarmupGate.await(30L) }
+        instrument.runOnMainSync { activity.finish() }
+        publish("MANGABALL_PACKAGE_BROWSER_WARMUP|outcome=$warmup")
+        // Do not continue after an explicit homepage rejection.
+        assertEquals("PAGE_FINISHED", warmup)
+
+        var valid = 0
+        var candidateWorks = 0
+        for ((index, title) in titles.withIndex()) {
+            val url = urls[index]
+            val response = withContext(Dispatchers.IO) {
+                runCatching {
+                    AndroidProviderBrowserHostService(
+                        context = context,
+                        policy = ProviderNetworkPolicy(origins),
+                        providerProfileName = ProviderBrowserProfiles.nameFor(manifest.id),
+                        timeoutSeconds = 25L,
+                    ).use { it.readText(url, "body") }
+                }
+            }
+            val body = response.getOrNull()
+            if (body == null) {
+                val reason = when (response.exceptionOrNull()?.message) {
+                    "Provider browser upstream challenge" -> "UPSTREAM_CHALLENGE"
+                    "Provider browser HTTP response rejected" -> "HTTP_REJECTED"
+                    "Provider browser operation timed out" -> "TIMEOUT"
+                    else -> "BROWSER_FAILED"
+                }
+                publish("MANGABALL_PACKAGE_BROWSER|index=${index + 1}|outcome=$reason|candidates=0")
+                break
+            }
+
+            // Real adapter validates the response; any additional detail lookup
+            // is deliberately rejected locally, never sent to the source.
+            val replayCalls = AtomicInteger(0)
+            val replayClient = OkHttpClient.Builder().addInterceptor { chain ->
+                val request = chain.request()
+                val primary = request.url.toString() == url &&
+                    request.method == "GET" && replayCalls.getAndIncrement() == 0
+                Response.Builder()
+                    .request(request)
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(if (primary) 200 else 403)
+                    .message("Local replay only")
+                    .body((if (primary) body else """{"error":"offline detail not tested"}""").toResponseBody())
+                    .build()
+            }.build()
+            val replayGateway = gateway(
+                main = "",
+                providerId = provider,
+                networkOrigins = origins,
+                localNetwork = false,
+                includePages = false,
+                packageBytesOverride = archive,
+                baseHttpClient = replayClient,
+                packageVersionName = manifest.version.name,
+                packageVersionCode = manifest.version.code,
+            )
+            val replay = replayGateway.lookup(provider, ProviderReadingLookupRequest(listOf(title)))
+            val parsed = replay as? ProviderCallResult.Success
+            val count = parsed?.value?.items?.count { it.externalWorkId.startsWith("mangaball:") } ?: 0
+            val accepted = parsed != null && replayCalls.get() == 1
+            val outcome = if (accepted) "VALID_JSON" else "INVALID_JSON"
+            publish("MANGABALL_PACKAGE_BROWSER|index=${index + 1}|outcome=$outcome|candidates=$count")
+            if (!accepted) break
+            valid++
+            if (count > 0) candidateWorks++
+        }
+        publish("MANGABALL_PACKAGE_BROWSER_SUMMARY|accepted=$valid|candidateWorks=$candidateWorks|expected=3|chapters=NOT_TESTED|reader=NOT_TESTED")
+        assertEquals(3, valid)
+        assertEquals(3, candidateWorks)
     }
 
     private fun gateway(
