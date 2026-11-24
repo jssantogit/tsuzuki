@@ -52,13 +52,23 @@ class MangaAllMangaDotCreatorLiveInstrumentedTest {
         assertTrue(manifest.permissions.network?.origins.orEmpty().none { it.contains("mangafire", true) })
         val context = instrument.targetContext
         val root = File(context.cacheDir, "mangaall-dot-creator-probe")
+        val httpFacts = java.util.Collections.synchronizedList(mutableListOf<String>())
         val client = ProviderRuntimeClient(
             context = context,
-            hostInvocationFactory = ProviderHostInvocationFactory(context = context, storageRoot = root),
+            hostInvocationFactory = ProviderHostInvocationFactory(
+                context = context,
+                storageRoot = root,
+                httpDiagnosticSink = { _, event ->
+                    if (event.host == "mangadot.net") {
+                        httpFacts += "${event.phase.name}:${event.statusCode ?: 0}:${event.failureFamily?.name ?: "NONE"}"
+                    }
+                },
+            ),
         )
         val results = mutableListOf<Boolean>()
         try {
             for (index in listOf(1, 3, 10, 12)) {
+                httpFacts.clear()
                 val title = works[index - 1].jsonPrimitive.content
                 val invocationId = "mangaall-dot-creators:" + UUID.randomUUID().toString()
                 val policy = ProviderHostInvocationPolicy.fromManifest(manifest, invocationId)
@@ -101,6 +111,14 @@ class MangaAllMangaDotCreatorLiveInstrumentedTest {
                             author.jsonPrimitive.content.isNotBlank()
                         } == true
                 }
+                val detail = rows.singleOrNull()?.get("detailOutcome")?.jsonPrimitive?.content
+                    ?.takeIf { it in setOf("VERIFIED_NO_ALIASES", "DETAIL_FAILED", "INVALID_RESPONSE", "IDENTITY_MISMATCH") }
+                    ?: "NOT_OBSERVED"
+                val facts = synchronized(httpFacts) { httpFacts.toList() }
+                val succeeded = facts.count { it.startsWith("SUCCEEDED:200:") }
+                val failed = facts.count { it.startsWith("FAILED:") }
+                val forbidden = facts.count { it.startsWith("FAILED:403:") }
+                val throttled = facts.count { it.startsWith("FAILED:429:") }
                 val passed = response.failure == null && rows.size == 1 && verified.size == 1
                 results += passed
                 instrument.sendStatus(
@@ -109,7 +127,8 @@ class MangaAllMangaDotCreatorLiveInstrumentedTest {
                         putString(
                             "stream",
                             "MANGAALL_DOT_CREATOR|index=$index|outcome=${if (passed) "PASS" else "RED"}" +
-                                "|exact=${rows.size}|verified=${verified.size}|canonical=NOT_TESTED",
+                                "|exact=${rows.size}|verified=${verified.size}|canonical=NOT_TESTED" +
+                                "|detail=$detail|http200=$succeeded|httpFailed=$failed|http403=$forbidden|http429=$throttled",
                         )
                     },
                 )
