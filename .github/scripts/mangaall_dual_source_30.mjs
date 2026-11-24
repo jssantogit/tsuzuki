@@ -478,8 +478,12 @@ const originalSummaryOrder = `const observed = [...candidates.values()].sort((a,
       a.externalWorkId.localeCompare(b.externalWorkId));`;
 assert.equal(originalJourney.split(originalSummaryOrder).length, 2,
   'Pinned journey candidate summary order changed; audit required');
-const prioritySummaryOrder = `const observed = [...candidates.values()].sort((a, b) =>
-      Number(exact(b, titles)) - Number(exact(a, titles)) ||
+const prioritySummaryOrder = `const exactPrimary = candidate => titles.some(title =>
+      normalize(candidate.title) === normalize(title));
+    const matchRank = candidate => exactPrimary(candidate) ? 2 :
+      exact(candidate, titles) ? 1 : 0;
+    const observed = [...candidates.values()].sort((a, b) =>
+      matchRank(b) - matchRank(a) ||
       a.externalWorkId.localeCompare(b.externalWorkId));`;
 const extendedJourneyCode = originalJourney
   .replace(oldJourneyCeiling, 'lookupPageLimit > 32')
