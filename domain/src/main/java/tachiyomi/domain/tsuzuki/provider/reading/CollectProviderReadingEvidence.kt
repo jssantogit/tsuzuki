@@ -1531,7 +1531,9 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 is ProviderCallResult.Success -> result.value
             }
-            if (expectedSourcePrefix != null && page.items.any { !it.externalWorkId.startsWith(expectedSourcePrefix) }) {
+            if (expectedSourcePrefix != null &&
+                page.items.any { !it.externalWorkId.startsWith(expectedSourcePrefix) }
+            ) {
                 return malformed()
             }
             items += page.items
