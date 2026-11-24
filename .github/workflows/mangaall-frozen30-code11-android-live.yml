@@ -87,7 +87,29 @@ jobs:
         with:
           cache-read-only: true
       - name: Spotless, app and Android instrumentation compile ONCE
-        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          for attempt in 1 2 3; do
+            if ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+              cat "$log"
+              echo 'MANGAALL_FROZEN30_ANDROID|build=PASS|compiler=VERIFIED'
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log"; then
+              cat "$log"
+              echo 'MANGAALL_FROZEN30_ANDROID|build=RED|reason=NON_429_GRADLE_FAILURE'
+              exit 1
+            fi
+            echo "MANGAALL_FROZEN30_ANDROID|build=RETRYABLE_INFRA_429|attempt=$attempt|max=3"
+            if [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              echo 'MANGAALL_FROZEN30_ANDROID|build=RED|reason=EXHAUSTED_MAVEN_HTTP_429'
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
       - name: Share unsigned APKs with three emulator shards, without signing
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
