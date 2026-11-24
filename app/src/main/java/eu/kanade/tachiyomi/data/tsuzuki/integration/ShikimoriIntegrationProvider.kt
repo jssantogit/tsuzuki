@@ -53,7 +53,7 @@ class ShikimoriIntegrationProvider private constructor(
         return PageOffsetNormalizer.load(
             rawOffset = query.offset.coerceAtLeast(0),
             limit = query.limit,
-            upstreamPageSize = SHIKIMORI_PAGE_SIZE,
+            upstreamPageSize = query.limit.coerceAtMost(SHIKIMORI_PAGE_SIZE),
             pageOrigin = PageIndexOrigin.ONE,
             fetcher = PageCatalogFetcher { page, pageSize ->
                 capture {
