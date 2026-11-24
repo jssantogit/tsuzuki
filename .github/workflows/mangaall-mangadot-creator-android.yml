@@ -21,6 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-mangadot-creator-android.yml'
+          bash -n .github/scripts/run_mangaall_mangadot_creator_android.sh
           node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
           python3 -m py_compile .github/scripts/mangaall_code11_dual_source_unsigned.py
           python3 .github/scripts/run_mangaall_frozen30_independent_catalog.py --check-lock
