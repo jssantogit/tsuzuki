@@ -475,6 +475,10 @@ for (const [index, work] of assigned.entries()) {
   const record = {
     id: work.id, title: work.names[0], position: works.findIndex(x => x.id === work.id),
     format: 'manga', verdict, failure, lookup: probe.lookup,
+    // Preserve only the journey's closed error category. Never log raw upstream
+    // messages, cookies, URLs, response bodies or an unverified failure claim.
+    lookupError: typeof probe.lookupError === 'string' &&
+      /^[A-Z0-9_]{1,45}$/.test(probe.lookupError) ? probe.lookupError : null,
     lookupPages: probe.lookupPages ?? 0, lookupComplete: probe.lookupComplete === true,
     candidateCount: probe.candidateCount ?? 0,
     candidateSummariesTruncated: probe.candidateSummariesTruncated === true,
