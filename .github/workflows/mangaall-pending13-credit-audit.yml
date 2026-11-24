@@ -189,3 +189,5 @@ jobs:
 # All creator regressions must pass before real lookup-only observations.
 
 # Retry after the exact Spotless-only correction to native-credit romanization.
+
+# Retry with valid empty-coverage regression fixture; production logic unchanged.
