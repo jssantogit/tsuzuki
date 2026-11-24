@@ -40,7 +40,7 @@ class MangaAllFutureRealDualSourceCode11LiveInstrumentedTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         assertEquals(
             "I_ACCEPT_MANGAALL_TWO_SOURCE_CODE11_ANDROID_LIVE",
-            instrumentation.arguments.getString("mangaAllDualCode11LiveOptIn"),
+            InstrumentationRegistry.getArguments().getString("mangaAllDualCode11LiveOptIn"),
         )
         val context: Context = instrumentation.targetContext
         val candidate = instrumentation.context.assets.open(
