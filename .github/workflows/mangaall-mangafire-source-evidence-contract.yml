@@ -57,7 +57,17 @@ jobs:
           assert 'MANGAALL_CI_BROWSER_FALLBACK|work=$id' in scope
           assert 'sourceJson = if (' in scope
           assert 'phase=API|signedUrl=$urlSeen' in scope
-          assert 'AndroidProviderBrowserHostService(' not in scope
+          # The native opt-in replaces the original HTTP GET; ordinary
+          # mode still cannot issue a second independent live API request.
+          native_start=scope.index('if (nativeBrowserTransport && url.host == "mangafire.to")')
+          native_end=scope.index('val response = chain.proceed(chain.request())', native_start)
+          native=scope[native_start:native_end]
+          assert scope.count('AndroidProviderBrowserHostService(') == 1
+          assert 'AndroidProviderBrowserHostService(' in native
+          assert 'chain.proceed(' not in native
+          assert 'return@addInterceptor Response.Builder()' in native
+          assert 'nativeOriginRejected.set(true)' in native
+          assert 'classifyProviderBrowserFailure(error)' in native
           assert 'directBody' not in scope
           assert 'signedApi.getAndSet(null)' in scope
           assert 'sourceCandidates["mangafire"]' in scope

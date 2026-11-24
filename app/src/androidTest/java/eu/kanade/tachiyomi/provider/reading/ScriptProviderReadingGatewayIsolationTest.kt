@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
+import eu.kanade.tachiyomi.provider.runtime.classifyProviderBrowserFailure
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.CanonicalLocalReaderFormat
 import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
@@ -2400,6 +2401,8 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=0|outcome=NOT_USED",
             "MANGAALL_CI_BROWSER_FALLBACK|work=koe|attempts=1|outcome=UPSTREAM_CHALLENGE",
             "MANGAALL_CI_BROWSER_FALLBACK|work=akame|attempts=1|outcome=SUCCEEDED",
+            "MANGAALL_CI_NATIVE|work=punpun|search=1|chapterReads=2|rejected=NO",
+            "MANGAALL_CI_NATIVE|work=koe|search=0|chapterReads=0|rejected=YES",
             "MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=HTTP_REJECTED",
             "MANGAALL_CI_FIRE_403|work=punpun|kind=SHAPE_REQUIRED",
             "MANGAALL_CI_FIRE_403|work=koe|kind=OTHER_JSON",
@@ -2472,6 +2475,8 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=10|outcome=SUCCEEDED",
             "MANGAALL_CI_BROWSER_FALLBACK|work=unknown|attempts=0|outcome=NOT_USED",
             "MANGAALL_CI_BROWSER_FALLBACK|work=koe|attempts=1|outcome=COOKIE_ACCEPTED",
+            "MANGAALL_CI_NATIVE|work=koe|search=100|chapterReads=0|rejected=YES",
+            "MANGAALL_CI_NATIVE|work=koe|search=0|chapterReads=0|rejected=YES|url=secret",
             "MANGAALL_CI_FIRE_SOURCE|outcome=SOURCE_CHAPTERS_ACCEPTED" +
                 "|ready=3|works=3|canonical=NOT_TESTED|unified=READY",
             "MANGAALL_CI_LOOKUP_BLOCKER|work=koe|source=MANGADOT" +
@@ -3289,12 +3294,21 @@ class ScriptProviderReadingGatewayIsolationTest {
                                 ).use { it.readText(url.toString(), "body") }
                             }.also {
                                 val json = JSONObject(it)
-                                if (json.has("error")) throw IOException("Native browser rejected response")
+                                if (json.has("error")) {
+                                    browserFailure.set(
+                                        if (json.optString("error") == "captcha_required") {
+                                            "UPSTREAM_CHALLENGE"
+                                        } else {
+                                            "UNKNOWN"
+                                        },
+                                    )
+                                    throw IOException("Native browser rejected response")
+                                }
                             }
-                        } catch (_: Exception) {
+                        } catch (error: Exception) {
                             nativeFailed.set(true)
                             nativeOriginRejected.set(true)
-                            browserFailure.set("NO_RESULT")
+                            browserFailure.compareAndSet("NONE", classifyProviderBrowserFailure(error).name)
                             throw IOException("Native browser source unavailable")
                         }
                         browserSuccess.incrementAndGet()

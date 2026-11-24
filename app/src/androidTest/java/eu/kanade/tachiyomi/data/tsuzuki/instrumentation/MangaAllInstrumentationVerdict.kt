@@ -111,6 +111,11 @@ internal object MangaAllInstrumentationVerdict {
                 """HTTP_REJECTED|TIMEOUT|NAVIGATION|TLS|RENDERER_GONE|WEBVIEW_UNSUPPORTED|""" +
                 """SELECTOR_MISSING|CANCELLED|UNKNOWN|NO_RESULT)""",
         ),
+        // Direct native transport reports only bounded counts and rejection.
+        Regex(
+            """MANGAALL_CI_NATIVE\|work=(punpun|koe|akame)""" +
+                """\|search=[0-9]{1,2}\|chapterReads=[0-9]{1,2}\|rejected=(YES|NO)""",
+        ),
         // MangaFire-source chapter evidence is deliberately independent of
         // global completion: another source's bounded search cannot certify
         // or invalidate a MangaFire chapter, and cannot promote unified READY.
