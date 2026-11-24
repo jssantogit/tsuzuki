@@ -51,28 +51,26 @@ jobs:
             if [[ "${GITHUB_EVENT_NAME}" == "pull_request" &&
                   "${GITHUB_HEAD_REF:-}" == 'probe/mangaall-dual-source-scale30-20261123' &&
                   "${GITHUB_HEAD_REPO:-}" == "${GITHUB_REPOSITORY}" ]]; then
-              cat > /tmp/mangaall-research-app-allowed.txt <<'EOF'
-              app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllFrozen30CanonicalPersistenceInstrumentedTest.kt
-              app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllIndependentCatalogLiveInstrumentedTest.kt
-              app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllMangaDotCorroborationInstrumentedTest.kt
-              app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFrozen30Code11AndroidLiveInstrumentedTest.kt
-              app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFrozen30MangaDexAuditInstrumentedTest.kt
-              app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureRealDualSourceCode11InstrumentedTest.kt
-              app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureRealDualSourceCode11LiveInstrumentedTest.kt
-              app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllMangaDotCreatorLiveInstrumentedTest.kt
-              app/src/main/java/eu/kanade/tachiyomi/data/track/mangaupdates/MangaUpdates.kt
-              app/src/main/java/eu/kanade/tachiyomi/data/track/mangaupdates/MangaUpdatesApi.kt
-              app/src/main/java/eu/kanade/tachiyomi/data/track/mangaupdates/dto/MUAuthor.kt
-              app/src/main/java/eu/kanade/tachiyomi/data/track/shikimori/ShikimoriApi.kt
-              app/src/main/java/eu/kanade/tachiyomi/data/track/shikimori/dto/SMManga.kt
-              app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/integration/MangaUpdatesIntegrationProvider.kt
-              app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/integration/ShikimoriIntegrationProvider.kt
-              app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt
-              app/src/test/java/eu/kanade/tachiyomi/data/track/shikimori/ShikimoriApiTest.kt
-              app/src/test/java/eu/kanade/tachiyomi/data/tsuzuki/integration/MangaUpdatesIntegrationProviderTest.kt
-              app/src/test/java/eu/kanade/tachiyomi/data/tsuzuki/integration/ShikimoriIntegrationProviderTest.kt
-              EOF
-              sed -i 's/^ *//' /tmp/mangaall-research-app-allowed.txt
+              printf '%s\n' \
+                'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllFrozen30CanonicalPersistenceInstrumentedTest.kt' \
+                'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllIndependentCatalogLiveInstrumentedTest.kt' \
+                'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllMangaDotCorroborationInstrumentedTest.kt' \
+                'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFrozen30Code11AndroidLiveInstrumentedTest.kt' \
+                'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFrozen30MangaDexAuditInstrumentedTest.kt' \
+                'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureRealDualSourceCode11InstrumentedTest.kt' \
+                'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureRealDualSourceCode11LiveInstrumentedTest.kt' \
+                'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllMangaDotCreatorLiveInstrumentedTest.kt' \
+                'app/src/main/java/eu/kanade/tachiyomi/data/track/mangaupdates/MangaUpdates.kt' \
+                'app/src/main/java/eu/kanade/tachiyomi/data/track/mangaupdates/MangaUpdatesApi.kt' \
+                'app/src/main/java/eu/kanade/tachiyomi/data/track/mangaupdates/dto/MUAuthor.kt' \
+                'app/src/main/java/eu/kanade/tachiyomi/data/track/shikimori/ShikimoriApi.kt' \
+                'app/src/main/java/eu/kanade/tachiyomi/data/track/shikimori/dto/SMManga.kt' \
+                'app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/integration/MangaUpdatesIntegrationProvider.kt' \
+                'app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/integration/ShikimoriIntegrationProvider.kt' \
+                'app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt' \
+                'app/src/test/java/eu/kanade/tachiyomi/data/track/shikimori/ShikimoriApiTest.kt' \
+                'app/src/test/java/eu/kanade/tachiyomi/data/tsuzuki/integration/MangaUpdatesIntegrationProviderTest.kt' \
+                'app/src/test/java/eu/kanade/tachiyomi/data/tsuzuki/integration/ShikimoriIntegrationProviderTest.kt' > /tmp/mangaall-research-app-allowed.txt
               unexpected="$(grep '^app/' /tmp/mangaall-future-host-changed.txt | grep -Fxv -f /tmp/mangaall-research-app-allowed.txt || true)"
               if [[ -n "$unexpected" ]]; then
                 printf '%s\n' "$unexpected"
