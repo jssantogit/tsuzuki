@@ -5,6 +5,11 @@
 set -euo pipefail
 umask 077
 readonly shard="${1:?Provide frozen 30-work shard (0, 1 or 2)}"
+readonly reader_mode="${2:-0}"
+if [[ "$reader_mode" != '0' && "$reader_mode" != '1' ]]; then
+  echo 'MANGAALL_FROZEN30_ANDROID|outcome=DENIED|reason=INVALID_READER_MODE'
+  exit 2
+fi
 if [[ ! "$shard" =~ ^[012]$ ]]; then
   echo 'MANGAALL_FROZEN30_ANDROID|outcome=DENIED|reason=INVALID_SHARD'
   exit 2
@@ -44,6 +49,7 @@ status=0
 timeout --foreground 1900s adb shell am instrument -w -r \
   -e mangaAllDualCode11LiveOptIn "$consent" \
   -e mangaAllFrozen30Shard "$shard" \
+  -e mangaAllReaderPagesProbe "$reader_mode" \
   -e class "$test_class" "$runner" >"$log" 2>&1 || status=$?
 if [[ "$status" -ne 0 ]] ||
    ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$log" ||
@@ -51,7 +57,7 @@ if [[ "$status" -ne 0 ]] ||
   echo "MANGAALL_FROZEN30_ANDROID|outcome=RED|shard=$shard|reason=INSTRUMENTATION_FAILURE|processStatus=$status|canonical=NOT_TESTED|reader=NOT_TESTED|signed=NO" | tee "$out/verdict.txt"
   # Log only allowlisted failure stages and locked work indices; no raw
   # source payload, chapter ID, URL, cookie or Android exception is retained.
-  safe_failure="$(grep -oE 'No exact-source candidate for frozen manhwa index [0-9]+|No terminal source-HID chapter-one proof for locked work [0-9]+; inspected=[0-9]+|Android source lookup failed for locked index [0-9]+ page [0-9]+|Host output exceeds 48KiB at work [0-9]+|Repeated chapter HID for frozen index [0-9]+|Repeated chapter cursor for frozen index [0-9]+|Android lookup cursor loop at locked index [0-9]+' "$log" | head -n 1 || true)"
+  safe_failure="$(grep -oE 'No exact-source candidate for frozen manhwa index [0-9]+|No terminal source-HID chapter-one proof for locked work [0-9]+; inspected=[0-9]+|Android source lookup failed for locked index [0-9]+ page [0-9]+|Host output exceeds 48KiB at work [0-9]+|Repeated chapter HID for frozen index [0-9]+|Repeated chapter cursor for frozen index [0-9]+|Android lookup cursor loop at locked index [0-9]+|Reader metadata Host failure for frozen index [0-9]+|Reader source pages not available for frozen index [0-9]+|Reader metadata pages empty for frozen index [0-9]+|Reader image URL not HTTPS at frozen index [0-9]+' "$log" | head -n 1 || true)"
   if [[ -n "$safe_failure" ]]; then
     printf 'MANGAALL_FROZEN30_ANDROID|shard=%s|failure=%s\n' "$shard" "${safe_failure// /_}" >"$out/diagnostic.txt"
   fi
@@ -61,5 +67,14 @@ if [[ "$status" -ne 0 ]] ||
     sed -E 's/\|rivalCandidates=[0-9]+/|rivalCandidates=REDACTED/g' |
     head -n 10 >"$out/progress.txt" || true
   exit 6
+fi
+if [[ "$reader_mode" == '1' ]]; then
+  grep -E 'MANGAALL_FROZEN30_READER\|index=[0-9]+\|shard=[012]\|' "$log" |
+    head -n 10 >"$out/reader-progress.txt" || true
+  if [[ "$(wc -l < "$out/reader-progress.txt")" -ne 10 ]]; then
+    echo "MANGAALL_FROZEN30_READER|outcome=RED|shard=$shard|reason=READER_PROBE_COUNT|pixels=NOT_TESTED" | tee "$out/verdict.txt"
+    exit 7
+  fi
+  echo "MANGAALL_FROZEN30_READER|outcome=PASS|shard=$shard|works=10|sourceHid=TESTED|pageList=TESTED|pixels=NOT_TESTED|canonical=NOT_TESTED|signed=NO" | tee "$out/reader-verdict.txt"
 fi
 echo "MANGAALL_FROZEN30_ANDROID|outcome=PASS|shard=$shard|works=10|scope=SOURCE_HID_ONLY|chapterOne=TESTED|terminal=TESTED|canonical=NOT_TESTED|reader=NOT_TESTED|signed=NO|mangafire=NOT_CALLED" | tee "$out/verdict.txt"
