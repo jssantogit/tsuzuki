@@ -1,6 +1,7 @@
 name: MangaALL — unsigned two-source code11 REAL Android Host chapters (OPT-IN)
 # Real GitHub-hosted Android emulator, pinned code11 research ZIP, MangaDot Bleach
-# chapter snapshot across isolated QuickJS Binder invocations. Spotless clean. Not a 30-work
+# and Raeliana chapter snapshots across isolated QuickJS Binder invocations.
+# Spotless clean. Source-HID evidence only; not a 30-work
 # reader/canonical validation. Opt-in uses InstrumentationRegistry.getArguments().
 # No signing, merging or publishing.
 on:
@@ -79,7 +80,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run real MangaDot 4341-capable native snapshot over Android QuickJS Binder
+      - name: Run real Bleach and Raeliana native MangaDot snapshots through Android Binder
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 35
