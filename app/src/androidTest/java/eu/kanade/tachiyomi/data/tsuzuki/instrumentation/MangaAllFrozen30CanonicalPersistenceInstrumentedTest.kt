@@ -498,7 +498,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                                         verifiedNames,
                                         listOf(candidate),
                                     ).single()
-                                    if (assessment.workVerification == ProviderWorkVerification.TITLE_UNVERIFIED) continue
+                                    if (assessment.workVerification ==
+                                        ProviderWorkVerification.TITLE_UNVERIFIED
+                                    ) {
+                                        continue
+                                    }
                                     val key = listOf(
                                         candidate.externalWorkId,
                                         candidate.authors.joinToString("|"),
