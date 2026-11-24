@@ -1936,6 +1936,7 @@ class CollectProviderReadingEvidence private constructor(
     }
 
     private fun normalize(value: String): String = value
+        .replace('’', '\'').replace('‘', '\'').replace('ʼ', '\'')
         .trim()
         .lowercase()
         .replace(WHITESPACE, " ")
