@@ -130,8 +130,10 @@ object ProviderWorkSourcePortfolio {
         verifiedNames: Set<String>,
     ): Boolean {
         if (providerId.value != MANGAALL_PROVIDER_ID ||
-            (!candidate.externalWorkId.startsWith(MANGAALL_MANGADEX_PREFIX) &&
-                !candidate.externalWorkId.startsWith("mangadot:"))
+            (
+                !candidate.externalWorkId.startsWith(MANGAALL_MANGADEX_PREFIX) &&
+                    !candidate.externalWorkId.startsWith("mangadot:")
+                )
         ) {
             return false
         }

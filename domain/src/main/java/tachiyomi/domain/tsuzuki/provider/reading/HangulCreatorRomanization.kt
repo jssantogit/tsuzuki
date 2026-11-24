@@ -67,6 +67,7 @@ internal object HangulCreatorRomanization {
     private val SPACE = Regex("""\s+""")
     private val WORD_SEPARATOR = Regex("[ ,]+")
     private val HYPHENS = Regex("[-‐‑]")
+
     // Hangul syllable decomposition order (19 initials, 21 vowels, 28 finals).
     // Alternatives are bounded common spelling variants of individual
     // graphemes, not arbitrary sound substitutions or a creator dictionary.
