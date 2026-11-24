@@ -6,6 +6,15 @@ set -euo pipefail
 umask 077
 readonly shard="${1:?Provide frozen 30-work shard (0, 1 or 2)}"
 readonly reader_mode="${2:-0}"
+readonly pixel_mode="${3:-0}"
+if [[ "$pixel_mode" != '0' && "$pixel_mode" != '1' ]]; then
+  echo 'MANGAALL_FROZEN30_ANDROID|outcome=DENIED|reason=INVALID_PIXEL_MODE'
+  exit 2
+fi
+if [[ "$pixel_mode" == '1' && "$reader_mode" != '1' ]]; then
+  echo 'MANGAALL_FROZEN30_ANDROID|outcome=DENIED|reason=PIXELS_REQUIRE_READER_PROBE'
+  exit 2
+fi
 if [[ "$reader_mode" != '0' && "$reader_mode" != '1' ]]; then
   echo 'MANGAALL_FROZEN30_ANDROID|outcome=DENIED|reason=INVALID_READER_MODE'
   exit 2
@@ -50,6 +59,7 @@ timeout --foreground 1900s adb shell am instrument -w -r \
   -e mangaAllDualCode11LiveOptIn "$consent" \
   -e mangaAllFrozen30Shard "$shard" \
   -e mangaAllReaderPagesProbe "$reader_mode" \
+  -e mangaAllPixelDecodeProbe "$pixel_mode" \
   -e class "$test_class" "$runner" >"$log" 2>&1 || status=$?
 if [[ "$status" -ne 0 ]] ||
    ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$log" ||
@@ -57,7 +67,7 @@ if [[ "$status" -ne 0 ]] ||
   echo "MANGAALL_FROZEN30_ANDROID|outcome=RED|shard=$shard|reason=INSTRUMENTATION_FAILURE|processStatus=$status|canonical=NOT_TESTED|reader=NOT_TESTED|signed=NO" | tee "$out/verdict.txt"
   # Log only allowlisted failure stages and locked work indices; no raw
   # source payload, chapter ID, URL, cookie or Android exception is retained.
-  safe_failure="$(grep -oE 'No exact-source candidate for frozen manhwa index [0-9]+|No terminal source-HID chapter-one proof for locked work [0-9]+; inspected=[0-9]+|Android source lookup failed for locked index [0-9]+ page [0-9]+|Host output exceeds 48KiB at work [0-9]+|Repeated chapter HID for frozen index [0-9]+|Repeated chapter cursor for frozen index [0-9]+|Android lookup cursor loop at locked index [0-9]+|Reader metadata Host failure for frozen index [0-9]+|Reader source pages not available for frozen index [0-9]+|Reader metadata pages empty for frozen index [0-9]+|Reader image URL not HTTPS at frozen index [0-9]+' "$log" | head -n 1 || true)"
+  safe_failure="$(grep -oE 'No exact-source candidate for frozen manhwa index [0-9]+|No terminal source-HID chapter-one proof for locked work [0-9]+; inspected=[0-9]+|Android source lookup failed for locked index [0-9]+ page [0-9]+|Host output exceeds 48KiB at work [0-9]+|Repeated chapter HID for frozen index [0-9]+|Repeated chapter cursor for frozen index [0-9]+|Android lookup cursor loop at locked index [0-9]+|Reader metadata Host failure for frozen index [0-9]+|Reader source pages not available for frozen index [0-9]+|Reader metadata pages empty for frozen index [0-9]+|Reader image URL not HTTPS at frozen index [0-9]+|Reader pixel source origin not allowed at frozen index [0-9]+|Reader image header not allowed at frozen index [0-9]+|Reader image header malformed at frozen index [0-9]+|Reader pixel HTTP failure for frozen index [0-9]+|Reader pixel exceeds 12MiB at frozen index [0-9]+|Reader pixel response empty at frozen index [0-9]+|Reader pixel decode failed at frozen index [0-9]+' "$log" | head -n 1 || true)"
   if [[ -n "$safe_failure" ]]; then
     printf 'MANGAALL_FROZEN30_ANDROID|shard=%s|failure=%s\n' "$shard" "${safe_failure// /_}" | tee "$out/diagnostic.txt"
   fi
@@ -73,8 +83,14 @@ if [[ "$reader_mode" == '1' ]]; then
     head -n 10 >"$out/reader-progress.txt" || true
   # JUnit stdout is not guaranteed in 'am instrument' output. All 10
   # per-work Kotlin reader assertions, NOT println-count, gate success.
-  echo "MANGAALL_FROZEN30_READER|outcome=PASS|shard=$shard|works=10|sourceHid=TESTED|pageList=TESTED|pixels=NOT_TESTED|canonical=NOT_TESTED|signed=NO" | tee "$out/reader-verdict.txt"
+  pixels='NOT_TESTED'
+  if [[ "$pixel_mode" == '1' ]]; then pixels='ANDROID_FIRST_PAGE_DECODED_UI_NOT_TESTED'; fi
+  echo "MANGAALL_FROZEN30_READER|outcome=PASS|shard=$shard|works=10|sourceHid=TESTED|pageList=TESTED|pixels=$pixels|canonical=NOT_TESTED|signed=NO" | tee "$out/reader-verdict.txt"
+  if [[ "$pixel_mode" == '1' ]]; then
+    echo "MANGAALL_FROZEN30_PIXEL|outcome=PASS|shard=$shard|works=10|firstPageBitmap=DECODED|uiReader=NOT_TESTED|canonical=NOT_TESTED|signed=NO" | tee "$out/pixel-verdict.txt"
+  fi
 fi
 reader_status='NOT_TESTED'
 if [[ "$reader_mode" == '1' ]]; then reader_status='PAGE_METADATA_TESTED_PIXELS_NOT_TESTED'; fi
+if [[ "$pixel_mode" == '1' ]]; then reader_status='ANDROID_FIRST_PAGE_DECODED_UI_NOT_TESTED'; fi
 echo "MANGAALL_FROZEN30_ANDROID|outcome=PASS|shard=$shard|works=10|scope=SOURCE_HID_ONLY|chapterOne=TESTED|terminal=TESTED|canonical=NOT_TESTED|reader=$reader_status|signed=NO|mangafire=NOT_CALLED" | tee "$out/verdict.txt"
