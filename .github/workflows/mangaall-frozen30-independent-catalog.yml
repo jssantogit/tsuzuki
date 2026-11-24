@@ -1,0 +1,124 @@
+name: MangaALL — frozen 30 independent Android catalog (OPT-IN)
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/workflows/mangaall-frozen30-independent-catalog.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-frozen30-independent-catalog
+  cancel-in-progress: true
+
+jobs:
+  build-once:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Validate exact workflow-only opt-in and corpus
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-frozen30-independent-catalog.yml'
+          python3 -m py_compile .github/scripts/run_mangaall_frozen30_independent_catalog.py
+          python3 .github/scripts/run_mangaall_frozen30_independent_catalog.py --check-lock
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Build the app and existing production catalog instrumentation once
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          for attempt in 1 2 3; do
+            if ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+              cat "$log"
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log" || [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-frozen30-catalog-apks
+          path: app/build/outputs/apk/
+          if-no-files-found: error
+          retention-days: 1
+
+  independent-catalog:
+    needs: build-once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mangaall-frozen30-catalog-apks
+          path: app/build/outputs/apk/
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Resolve independent catalog identities for shard ${{ matrix.shard }}
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: python3 .github/scripts/run_mangaall_frozen30_independent_catalog.py --shard ${{ matrix.shard }}
+      - name: Upload only sanitized indexed catalog verdicts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-catalog-shard-${{ matrix.shard }}
+          path: .github/results/mangaall-frozen30-independent-catalog/shard-${{ matrix.shard }}/
+          if-no-files-found: ignore
+          retention-days: 2
+
+  strict-catalog-verdict:
+    if: always()
+    needs: [build-once, independent-catalog]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          pattern: mangaall-catalog-shard-*
+          path: .github/results/mangaall-frozen30-independent-catalog
+      - name: Require 30 distinct independently attested identities, fail closed
+        run: |
+          set -euo pipefail
+          root=.github/results/mangaall-frozen30-independent-catalog
+          for shard in 0 1 2; do
+            if [[ -d "$root/mangaall-catalog-shard-$shard" ]]; then
+              mv "$root/mangaall-catalog-shard-$shard" "$root/shard-$shard"
+            fi
+          done
+          python3 .github/scripts/run_mangaall_frozen30_independent_catalog.py --aggregate
+          test '${{ needs.build-once.result }}' = 'success'
+          test '${{ needs.independent-catalog.result }}' = 'success'
