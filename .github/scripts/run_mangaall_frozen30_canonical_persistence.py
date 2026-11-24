@@ -62,11 +62,12 @@ def parse_phase(log, shard, phase, process_ok):
             "works": [{"index": i, "status": rows.get(i, "NOT_OBSERVED")} for i in sorted(indices)]}
 
 
-def invoke(shard, phase):
+def invoke(shard, phase, catalog):
     try:
         result = adb("shell", "am", "instrument", "-w", "-r",
                      "-e", "mangaAllCanonicalOptIn", "I_ACCEPT_FROZEN30_CANONICAL_RESEARCH",
                      "-e", "mangaAllCanonicalPhase", phase,
+                     "-e", "mangaAllCanonicalCatalog", catalog,
                      "-e", "mangaAllFrozen30Shard", str(shard),
                      "-e", "class", TEST, RUNNER, check=False, timeout=1850)
         ok = (result.returncode == 0 and "INSTRUMENTATION_CODE: -1" in result.stdout
@@ -76,11 +77,12 @@ def invoke(shard, phase):
         return parse_phase("", shard, phase, False)
 
 
-def evaluate(shard, collect, restore, force_stopped):
+def evaluate(shard, collect, restore, force_stopped, catalog="mangaupdates"):
     restart = (force_stopped and collect["pid"] is not None and restore["pid"] is not None
                and collect["pid"] != restore["pid"])
     return {
         "schemaVersion": 1, "corpusSha256": DIGEST, "shard": shard,
+        "catalogSource": catalog,
         "scope": "CANONICAL_COLLECTOR_SQLITE_SELECTED_OPTION_RESTART",
         "restartObserved": restart,
         "outcome": "PASS" if restart and collect["complete"] and restore["complete"] else "RED",
@@ -90,7 +92,7 @@ def evaluate(shard, collect, restore, force_stopped):
     }
 
 
-def run(shard):
+def run(shard, catalog):
     if adb("shell", "getprop", "ro.kernel.qemu").stdout.strip() != "1":
         raise SystemExit("EMULATOR_REQUIRED")
     target = [p for p in Path("app/build/outputs/apk/debug").rglob("*.apk")
@@ -108,12 +110,12 @@ def run(shard):
         adb("shell", "cmd", "connectivity", "airplane-mode", "disable")
         if adb("shell", "settings", "get", "global", "airplane_mode_on").stdout.strip() != "0":
             raise SystemExit("NETWORK_UNAVAILABLE")
-        collect = invoke(shard, "COLLECT")
+        collect = invoke(shard, "COLLECT", catalog)
         adb("shell", "am", "force-stop", APP)
         force_stopped = not adb("shell", "pidof", APP, check=False).stdout.strip()
         # Do not clear application data between the two instrumentation runs.
-        restore = invoke(shard, "RESTORE")
-        report = evaluate(shard, collect, restore, force_stopped)
+        restore = invoke(shard, "RESTORE", catalog)
+        report = evaluate(shard, collect, restore, force_stopped, catalog)
         (output / "verdict.json").write_text(json.dumps(report, indent=2) + "\n")
         for phase in ("collect", "restore"):
             for row in report[phase]["works"]:
@@ -125,7 +127,7 @@ def run(shard):
         adb("shell", "pm", "clear", APP, check=False)
 
 
-def aggregate():
+def aggregate(catalog):
     complete = True
     for shard in range(3):
         path = OUT / f"shard-{shard}" / "verdict.json"
@@ -135,6 +137,7 @@ def aggregate():
         report = json.loads(path.read_text())
         expected = list(range(shard * 10 + 1, shard * 10 + 11))
         if (report.get("schemaVersion") != 1 or report.get("corpusSha256") != DIGEST
+                or report.get("catalogSource") != catalog
                 or report.get("shard") != shard or report.get("outcome") != "PASS"
                 or report.get("restartObserved") is not True
                 or report.get("scope") != "CANONICAL_COLLECTOR_SQLITE_SELECTED_OPTION_RESTART"):
@@ -175,6 +178,7 @@ def selftest():
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--catalog", choices=("mangaupdates", "shikimori"), default="mangaupdates")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--shard", type=int, choices=range(3))
     group.add_argument("--aggregate", action="store_true")
@@ -184,7 +188,7 @@ def main():
     if args.selftest:
         selftest()
         return
-    raise SystemExit(0 if (aggregate() if args.aggregate else run(args.shard)) else 1)
+    raise SystemExit(0 if (aggregate(args.catalog) if args.aggregate else run(args.shard, args.catalog)) else 1)
 
 
 if __name__ == "__main__":
