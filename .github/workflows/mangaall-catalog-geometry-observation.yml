@@ -1,0 +1,66 @@
+name: MangaALL — bounded MangaUpdates pagination wire observation (NONSHIPPING)
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths: ['.github/workflows/mangaall-catalog-geometry-observation.yml']
+permissions:
+  contents: read
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Observe public catalog pagination for fixed corpus indices, never store raw records
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-catalog-geometry-observation.yml'
+          python3 - <<'PY'
+          import json, sys, time, urllib.request, urllib.error
+          sys.path.insert(0, ".github/scripts")
+          from run_mangaall_frozen30_independent_catalog import locked_works
+          works = locked_works()
+          # 4 existing frozen works; maximum 8 requests, no credential or retry.
+          # Index 3 is the previously attested control; 12,23 are diagnostic.
+          for index in (1, 3, 12, 23):
+              for scope in ("BROAD", "MANHWA"):
+                  data = dict(search=works[index-1], page=1, perpage=25, filter_types=["drama cd","novel"])
+                  if scope == "MANHWA":
+                      data["type"] = ["Manhwa"]
+                  request = urllib.request.Request(
+                      "https://api.mangaupdates.com/v1/series/search",
+                      data=json.dumps(data).encode(),
+                      headers={"Content-Type":"application/json","Accept":"application/json",
+                               "User-Agent":"Tsuzuki-CI-catalog-contract-observation"},
+                      method="POST",
+                  )
+                  try:
+                      with urllib.request.urlopen(request, timeout=15) as response:
+                          raw = response.read(2*1024*1024+1)
+                          if len(raw) > 2*1024*1024:
+                              print(f"MU_WIRE|index={index}|scope={scope}|outcome=BODY_LIMIT")
+                              continue
+                          obj = json.loads(raw)
+                      rows = obj.get("results")
+                      if not isinstance(rows, list):
+                          print(f"MU_WIRE|index={index}|scope={scope}|outcome=INVALID_ROWS")
+                          continue
+                      def number(key):
+                          v=obj.get(key)
+                          return v if type(v) is int else -1
+                      records = [r.get("record", {}) for r in rows if isinstance(r, dict)]
+                      ids = [r.get("series_id") for r in records if isinstance(r, dict)]
+                      valid = [i for i in ids if type(i) is int and i>0]
+                      format_count = sum(isinstance(r, dict) and str(r.get("type","")).lower()=="manhwa" for r in records)
+                      print(f"MU_WIRE|index={index}|scope={scope}|outcome=HTTP200|page={number('page')}|size={number('per_page')}|total={number('total_hits')}|rows={len(rows)}|positiveIds={len(valid)}|duplicateIds={len(valid)-len(set(valid))}|manhwaRows={format_count}")
+                  except urllib.error.HTTPError as error:
+                      print(f"MU_WIRE|index={index}|scope={scope}|outcome=HTTP{error.code}")
+                      if error.code in (403,429):
+                          sys.exit(1)
+                  except (OSError,ValueError,AttributeError):
+                      print(f"MU_WIRE|index={index}|scope={scope}|outcome=TRANSPORT_OR_SCHEMA_ERROR")
+                  time.sleep(1)
+          PY
