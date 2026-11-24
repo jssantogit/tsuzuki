@@ -25,13 +25,16 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
-      - name: Validate locked cohort, restored Reader verdicts and numeric source diagnostics
+      - name: Validate locked cohort, restored Reader verdicts and independent MangaDex pixel reporter
         run: |
           set -euo pipefail
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-frozen30-canonical-persistence.yml'
           python3 -m py_compile .github/scripts/run_mangaall_frozen30_canonical_persistence.py
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
           python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
+          bash -n .github/scripts/run_mangaall_frozen30_mangadex_audit.sh
+          python3 -m py_compile .github/scripts/verify_mangaall_frozen30_mangadex_audit.py
+          python3 .github/scripts/verify_mangaall_frozen30_mangadex_audit.py --selftest
 
   build-once:
     needs: preflight
