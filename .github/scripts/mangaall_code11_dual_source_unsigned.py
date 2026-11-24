@@ -107,6 +107,15 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False,
         # Reproduce source-side language and exact-title recall corrections
         # already evidenced in the independent 30-manhwa Node live suite.
         dex_name = "modules/sources/mangadex/modules/mangadex.js"
+        # Real CI wire observation #45396414321 confirmed the native API
+        # filter preserves all four exact Korean controls while shrinking
+        # unrelated results. Keep the existing response-language guard too.
+        files[dex_name] = change_one(
+            files[dex_name],
+            b'["title", title], ["limit", SEARCH_PAGE_SIZE], ["offset", offset],',
+            b'["title", title], ["originalLanguage[]", "ko"], ["limit", SEARCH_PAGE_SIZE], ["offset", offset],',
+            "MANHWA_MANGADEX_NATIVE_ORIGINAL_KO",
+        )
         files[dex_name] = change_one(
             files[dex_name],
             b'if (item?.type !== "manga" || !ID_PATTERN.test(item.id || "") || seen.has(item.id)) continue;',
