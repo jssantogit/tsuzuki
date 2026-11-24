@@ -121,6 +121,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 put("provider", attested.identity?.provider.orEmpty())
                 put("providerId", attested.identity?.providerId.orEmpty())
                 put("title", attested.identity?.title.orEmpty())
+                put("format", attested.identity?.format?.name.orEmpty())
                 putJsonArray("authors") { attested.identity?.authors?.forEach { add(it) } }
                 putJsonArray("artists") { attested.identity?.artists?.forEach { add(it) } }
                 putJsonObject("externalIds") {
