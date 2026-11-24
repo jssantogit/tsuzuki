@@ -4,6 +4,8 @@ set -euo pipefail
 umask 077
 shard="${1:?Provide shard 0, 1 or 2}"
 [[ "$shard" =~ ^[012]$ ]]
+pixels="${2:-0}"
+[[ "$pixels" =~ ^[01]$ ]]
 app=app.tsuzuki.dev
 out=".github/results/mangaall-frozen30-mangadex-audit/shard-$shard"
 mkdir -p "$out"
@@ -20,20 +22,23 @@ status=0
 timeout --foreground 1900s adb shell am instrument -w -r \
   -e mangaDexAuditOptIn I_ACCEPT_FROZEN30_MANGADEX_AUDIT \
   -e mangaAllFrozen30Shard "$shard" \
+  -e mangaDexAuditPixels "$pixels" \
   -e class 'eu.kanade.tachiyomi.provider.runtime.MangaAllFrozen30MangaDexAuditInstrumentedTest#auditMangaDexIndependently' \
   "$app.test/androidx.test.runner.AndroidJUnitRunner" >"$log" 2>&1 || status=$?
-python3 - "$log" "$status" "$shard" "$out" <<'PY'
+python3 - "$log" "$status" "$shard" "$out" "$pixels" <<'PY'
 import json,re,sys
 from pathlib import Path
 raw=Path(sys.argv[1]).read_text(errors="replace")
 shard=int(sys.argv[3])
 fields=("candidates","credited","lookupIncomplete","terminal","empty","inventoryIncomplete","chapterOne","external","pageLists","pageFailures")
 pattern=(r"MANGAALL_DEX_AUDIT\|index=(\d+)\|outcome=(CONTRACT_FAILED|INCOMPLETE|NO_EXACT_HID|EMPTY_EN|NO_CHAPTER_ONE_EN|SOURCE_PAGE_LIST_READY|EXTERNAL_ONLY|PAGE_LIST_UNAVAILABLE)"
-         +"".join(r"\|"+f+r"=(\d+)" for f in fields)+r"\|canonical=NOT_TESTED")
+         +"".join(r"\|"+f+r"=(\d+)" for f in fields)+r"\|canonical=NOT_TESTED"
+         +r"\|readableHids=(\d+)\|pixelAttempts=(\d+)\|pixelDecoded=(\d+)\|pixelFailures=(\d+)\|pixelMode=([01])")
+pixel_fields=("readableHids","pixelAttempts","pixelDecoded","pixelFailures","pixelMode")
 rows=[]
 for match in re.finditer(pattern,raw):
     index,outcome,*counts=match.groups()
-    row=dict(index=int(index),outcome=outcome,**dict(zip(fields,map(int,counts))))
+    row=dict(index=int(index),outcome=outcome,**dict(zip(fields+pixel_fields,map(int,counts))))
     rows.append(row)
     print(match.group(0))
 expected=list(range(shard*10+1,shard*10+11))
@@ -44,6 +49,11 @@ integrity=complete and all(r["outcome"] not in ("CONTRACT_FAILED","INCOMPLETE") 
     r["empty"]<=r["terminal"] and r["external"]+r["pageLists"]+r["pageFailures"]==r["chapterOne"]
     for r in rows)
 ready=sum(r["outcome"]=="SOURCE_PAGE_LIST_READY" for r in rows)
+pixel_mode=int(sys.argv[5])
+pixel_contract=complete and all(r["pixelMode"]==pixel_mode and r["readableHids"]<=r["pageLists"] and
+    r["readableHids"]<=r["terminal"] and r["pixelDecoded"]+r["pixelFailures"]==r["pixelAttempts"] and
+    r["pixelAttempts"]==(r["readableHids"] if pixel_mode else 0) for r in rows)
+pixel_healthy=pixel_contract and all(r["pixelFailures"]==0 for r in rows)
 # Known externally hosted chapters are coverage observations, not failures.
 # Unexpected errors from reading.pages must not be certified as healthy.
 transport_healthy=integrity and all(r["pageFailures"]==0 for r in rows)
@@ -52,10 +62,12 @@ transport_healthy=integrity and all(r["pageFailures"]==0 for r in rows)
 report=dict(schemaVersion=1,scope="MANGADEX_EN_ONLY",shard=shard,
     corpusSha256="19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1",
     instrumentationPassed=process_ok,completeReport=complete,integrity=integrity,
-    transportHealthy=transport_healthy,
-    sourcePageListReady=ready,works=rows,canonical="NOT_TESTED",readerPixels="NOT_TESTED")
+    transportHealthy=transport_healthy, pixelProbe="FIRST_PAGE_PER_READABLE_HID" if pixel_mode else "NOT_TESTED",
+    pixelContract=pixel_contract, pixelHealthy=pixel_healthy,
+    sourcePageListReady=ready,works=rows,canonical="NOT_TESTED",readerPixels="FIRST_PAGE_PER_READABLE_HID" if pixel_mode else "NOT_TESTED")
 Path(sys.argv[4],"verdict.json").write_text(json.dumps(report,indent=2)+"\n")
 print(f"MANGAALL_DEX_AUDIT|shard={shard}|reports={len(rows)}|integrity={integrity}|transportHealthy={transport_healthy}|ready={ready}|expected=10|canonical=NOT_TESTED")
 assert integrity, "Incomplete or invalid independent source audit"
 assert transport_healthy, "Unexpected MangaDex page preparation failure"
+assert pixel_healthy, "Unexpected MangaDex pixel failure or invalid per-HID observation"
 PY
