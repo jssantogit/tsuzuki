@@ -1,0 +1,70 @@
+name: MangaALL — identity, pagination and Reader regression audit (OFFLINE)
+# No live provider requests or frozen-30 restart. Synthetic inputs exercise
+# exact work/creator, source-scoped pagination and saved-release recovery.
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/workflows/mangaall-canonical-audit-offline.yml'
+      - '.github/scripts/mangaall_mangadot_creator_evidence.mjs'
+      - '.github/scripts/test_mangaall_mangadot_creator_evidence.mjs'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/provider/reading/**'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/reader/**'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/provider/reading/**'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/reader/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-canonical-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline strict creator and receipt contracts
+        run: |
+          set -euo pipefail
+          node --check .github/scripts/mangaall_mangadot_creator_evidence.mjs
+          node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --self-test
+          python3 -m py_compile .github/scripts/mangaall_code11_dual_source_unsigned.py
+          test "$(sha256sum .github/mangaall-dual-source-30-cohort-lock.json | cut -d' ' -f1)" = 19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1
+  domain-data-app:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          cache-read-only: true
+      - name: Compile and exercise identity, continuation, SQLite and Reader
+        run: |
+          ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck \
+            :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' \
+            --tests '*ProviderWorkSourcePortfolioTest' --tests '*MangaAllMangaDotNativeCoverageTest' \
+            --tests '*CollectProviderReadingEvidenceTest' --tests '*CollectProviderReadingEvidenceEligibilityTest' \
+            --tests '*RefreshProviderReadingChaptersTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' \
+            --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' \
+            :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' \
+            :app:testDebugUnitTest --tests '*ShikimoriApiTest' \
+            --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' \
+            --tests '*ReaderSourceCardRecoveryTest' \
+            :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Explicit scope
+        run: echo 'MANGAALL_CANONICAL_AUDIT|offline=PASS|live=NOT_STARTED|readerUI=NOT_TESTED|corpus=UNCHANGED|signed=UNCHANGED'
