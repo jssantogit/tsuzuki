@@ -175,6 +175,94 @@ class MangaAllFutureRealDualSourceCode11LiveInstrumentedTest {
                     "|duplicates=0|sourceHid=REDACTED|canonical=NOT_TESTED" +
                     "|reader=NOT_TESTED|signed=NO|mangafire=NOT_CALLED",
             )
+
+            // Frozen 30-manhwa cohort follow-up: one real Korean-title source
+            // HID, never an editorial/canonical association. The earlier
+            // source-only CI found a typographic-apostrophe false negative;
+            // this verifies native Host chapter continuation independently.
+            val raelianaQuery = "Why Raeliana Ended Up at the Duke's Mansion"
+            val raelianaMatches = mutableListOf<String>()
+            val checkedHids = mutableSetOf<String>()
+            var raelianaSearchCursor: String? = null
+            for (page in 1..8) {
+                val request = mutableMapOf<String, kotlinx.serialization.json.JsonElement>(
+                    "titles" to kotlinx.serialization.json.JsonArray(listOf(JsonPrimitive(raelianaQuery))),
+                    "requestedLanguage" to JsonPrimitive("en"),
+                )
+                if (raelianaSearchCursor != null) request["cursor"] = JsonPrimitive(raelianaSearchCursor)
+                val response = invoke("reading.lookup", JsonObject(request).toString())
+                assertNull("Raeliana Android source lookup failed at page $page", response.failure)
+                val result = Json.parseToJsonElement(requireNotNull(response.value)).jsonObject
+                for (entry in result["items"]!!.jsonArray) {
+                    val item = entry.jsonObject
+                    val id = item["externalWorkId"]?.jsonPrimitive?.content ?: continue
+                    val title = item["title"]?.jsonPrimitive?.content ?: continue
+                    val folded = title.replace('’', '\'').replace('‘', '\'')
+                    if (Regex("mangadot:[1-9][0-9]{0,15}").matches(id) &&
+                        folded.equals(raelianaQuery, ignoreCase = true) &&
+                        checkedHids.add(id)
+                    ) {
+                        raelianaMatches.add(id)
+                    }
+                }
+                val next = result["nextCursor"] ?: JsonNull
+                raelianaSearchCursor = if (next == JsonNull) null else next.jsonPrimitive.content
+                if (raelianaMatches.isNotEmpty() || raelianaSearchCursor == null) break
+            }
+            assertTrue(
+                "Raeliana MangaDot exact-title source HID not observed; no canonical fallback allowed",
+                raelianaMatches.isNotEmpty(),
+            )
+            val raelianaBinding = JsonObject(
+                mapOf(
+                    "providerId" to JsonPrimitive("app.tsuzuki.mangaall"),
+                    "externalWorkId" to JsonPrimitive(raelianaMatches.first()),
+                    "facetId" to JsonPrimitive("en"),
+                ),
+            )
+            val raelianaChapterIds = mutableSetOf<String>()
+            val raelianaCursors = mutableSetOf<String>()
+            var raelianaChapterCursor: String? = null
+            var raelianaChapterOne = false
+            var raelianaPages = 0
+            for (page in 1..32) {
+                val input = mutableMapOf<String, kotlinx.serialization.json.JsonElement>(
+                    "binding" to raelianaBinding,
+                )
+                if (raelianaChapterCursor != null) input["cursor"] = JsonPrimitive(raelianaChapterCursor)
+                val response = invoke("reading.chapters", JsonObject(input).toString())
+                assertNull("Raeliana native snapshot rejected page $page", response.failure)
+                val raw = requireNotNull(response.value)
+                assertTrue("Raeliana Host output exceeds 48 KiB", raw.encodeToByteArray().size <= 48 * 1024)
+                val pageObj = Json.parseToJsonElement(raw).jsonObject
+                val chapters = pageObj["items"]!!.jsonArray
+                assertTrue("Raeliana empty/non-granular chapter page", chapters.size in 1..256)
+                for (item in chapters) {
+                    val chapter = item.jsonObject
+                    val id = requireNotNull(chapter["providerChapterId"]?.jsonPrimitive?.content)
+                    assertTrue(
+                        "Raeliana foreign chapter ID",
+                        Regex("mangadot:(uploads|chapters):[1-9][0-9]{0,15}").matches(id),
+                    )
+                    assertTrue("Raeliana duplicate chapter ID", raelianaChapterIds.add(id))
+                    val number = chapter["rawNumber"]?.jsonPrimitive?.content?.toDoubleOrNull()
+                    if (number == 1.0) raelianaChapterOne = true
+                }
+                raelianaPages++
+                val next = pageObj["nextCursor"] ?: JsonNull
+                raelianaChapterCursor = if (next == JsonNull) null else next.jsonPrimitive.content
+                if (raelianaChapterCursor == null) break
+                assertTrue("Raeliana chapter cursor repeated", raelianaCursors.add(raelianaChapterCursor))
+            }
+            assertNull("Raeliana native snapshot did not reach terminal cursor", raelianaChapterCursor)
+            assertTrue("Raeliana has no numbered chapter 1 in inspected source HID", raelianaChapterOne)
+            assertTrue("Raeliana chapter inventory empty", raelianaChapterIds.isNotEmpty())
+            println(
+                "MANGAALL_DUAL_ANDROID_LIVE|work=raeliana|source=MANGADOT" +
+                    "|chapters=${raelianaChapterIds.size}|pages=$raelianaPages" +
+                    "|chapterOne=YES|terminal=YES|duplicates=0|sourceHid=REDACTED" +
+                    "|canonical=NOT_TESTED|reader=NOT_TESTED|signed=NO",
+            )
         } finally {
             root.deleteRecursively()
         }
