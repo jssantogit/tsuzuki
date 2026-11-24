@@ -73,6 +73,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ResolveMangaAllSelectedChapter
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveMangaAllSelectedReadingOption
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.provider.reading.SelectMangaAllSource
+import tachiyomi.domain.tsuzuki.provider.reading.evidenceProducerId
 import java.io.File
 import java.security.MessageDigest
 
@@ -107,7 +108,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         assertEquals("manhwa", lock["format"]?.jsonPrimitive?.content)
         assertEquals(30, works.size)
         assertEquals(30, works.toSet().size)
-        assertEquals(CORPUS_SHA, hash(JsonArray(works.map(::JsonPrimitive)).toString()))
+        assertEquals(CORPUS_SHA, hash(JsonArray(works.map { JsonPrimitive(it) }).toString()))
         val bytes = instrument.context.assets.open("mangaall-dual-source-code11-unsigned-research.zip")
             .use { it.readBytes() }
         val parsed = ProviderPackageParser().parse(bytes)
@@ -232,6 +233,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             val rows = evidence.getByCanonicalTitleId(titleId)
             if (rows.isEmpty() || rows.none {
                     it.mappedCanonicalChapterId == one.id &&
+                        it.evidence.producerId == option.bindingRef().evidenceProducerId() &&
                         it.evidence.externalChapterKey == option.providerChapterId
                 }
             ) {
@@ -241,7 +243,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 add(title.id)
                 add(owner.provider)
                 add(owner.externalId)
-                add(snapshot.metadata.externalIds.toString())
+                addAll(snapshot.metadata.externalIds.entries.map { "${it.key.value}:${it.value}" }.sorted())
                 add(one.id)
                 add(option.readerSourceKey)
                 addAll(chapterRows.map { it.id }.sorted())
@@ -250,7 +252,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                         .joinToString("\u0000")
                 }.sorted())
             }
-            return hash(JsonArray(parts.map(::JsonPrimitive)).toString())
+            return hash(JsonArray(parts.map { JsonPrimitive(it) }).toString())
         }
 
         suspend fun collect(index: Int, titleId: String): String {
@@ -314,7 +316,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             } catch (_: Exception) {
                 "UNCLASSIFIED_FAILURE"
             }
-            if (result == if (phase == "COLLECT") "COLLECTED" else "RESTORED") passed++
+            val expectedOutcome = if (phase == "COLLECT") "COLLECTED" else "RESTORED"
+            if (result == expectedOutcome) passed++
             instrument.sendStatus(
                 1,
                 Bundle().apply {
@@ -325,7 +328,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         instrument.sendStatus(
             1,
             Bundle().apply {
-                putString("stream", "MANGAALL_CANONICAL_PERSISTENCE|phase=$phase|shard=$shard|passed=$passed|expected=10")
+                putString(
+                    "stream",
+                    "MANGAALL_CANONICAL_PERSISTENCE|phase=$phase|shard=$shard|passed=$passed|expected=10",
+                )
             },
         )
         // Runner validates every outcome, including the failures, after restart.
