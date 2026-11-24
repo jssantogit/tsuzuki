@@ -639,6 +639,27 @@ class CollectProviderReadingEvidence private constructor(
                 suspend fun inspect(candidates: List<ProviderWorkCandidate>): Boolean {
                     val exact = exactFacetMatches(title, target.facetId, candidates).filter(seen::add)
                     if (exact.isNotEmpty()) {
+                        traceLookupCandidates(
+                            canonicalTitleId,
+                            target,
+                            queryIndex,
+                            title,
+                            exact,
+                            exact,
+                            selected = null,
+                            primary = null,
+                        )
+                        // Record the identity gate before native coverage. A
+                        // missing author must be distinguishable from no hit.
+                        ProviderWorkSourcePortfolio.assess(
+                            descriptor.id,
+                            target.facetId,
+                            title,
+                            canonicalCreators,
+                            exact,
+                        ).forEach {
+                            traceWorkSourceAssociation(canonicalTitleId, target, it, DiagnosticOutcome.CANDIDATES)
+                        }
                         observeSourcePortfolio(canonicalTitleId, title, target, canonicalCreators, exact)
                             .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
                             .forEach { discovered[it.ref] = it }
@@ -1615,6 +1636,11 @@ class CollectProviderReadingEvidence private constructor(
                     put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
                 }
                 put("query_index", DiagnosticAttributeValue.Number((queryIndex + 1).toLong()))
+                when (target.researchSource) {
+                    "mangadex" -> DiagnosticMangaAllNetworkSource.MANGADEX
+                    "mangadot" -> DiagnosticMangaAllNetworkSource.MANGADOT
+                    else -> null
+                }?.let { put("mangaall_network_source", DiagnosticAttributeValue.Code(it)) }
                 if (target.registration.descriptor.id.value == "app.tsuzuki.mangafire") {
                     put("provider_lookup_title", DiagnosticAttributeValue.Text(queryTitle.take(256)))
                 }
