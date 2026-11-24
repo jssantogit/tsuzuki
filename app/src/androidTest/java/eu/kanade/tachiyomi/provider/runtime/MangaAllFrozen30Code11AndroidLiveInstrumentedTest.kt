@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.provider.runtime
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
@@ -24,7 +25,11 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.net.URI
+import java.net.URL
+import javax.net.ssl.HttpsURLConnection
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -67,6 +72,10 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
         val readerMode = args.getString("mangaAllReaderPagesProbe") ?: "0"
         assertTrue("Invalid Reader metadata probe opt-in", readerMode == "0" || readerMode == "1")
         val readerProbe = readerMode == "1"
+        val pixelMode = args.getString("mangaAllPixelDecodeProbe") ?: "0"
+        assertTrue("Invalid pixel decode opt-in", pixelMode == "0" || pixelMode == "1")
+        val pixelProbe = pixelMode == "1"
+        assertTrue("Pixel probe requires source Reader metadata probe", !pixelProbe || readerProbe)
         assertTrue("Only three fixed 10-work shards are permitted", shard in 0..2)
         val cohort = instrumentation.context.assets.open(
             "mangaall-dual-source-30-cohort-lock.json",
@@ -306,6 +315,80 @@ class MangaAllFrozen30Code11AndroidLiveInstrumentedTest {
                             "Reader image URL not HTTPS at frozen index ${index + 1}",
                             imageUrl?.startsWith("https://") == true,
                         )
+                    }
+                    if (pixelProbe) {
+                        // Android HTTPS transport and BitmapFactory decoding ONLY:
+                        // not a production Reader UI/policy or canonical guarantee.
+                        // Never upload source image bytes, URL or raster pixels.
+                        val page = readerPages.first().jsonObject
+                        val imageUrl = requireNotNull(page["url"]?.jsonPrimitive?.content)
+                        val uri = URI(imageUrl)
+                        val imageHost = uri.host?.lowercase() ?: ""
+                        val permittedHost = imageHost == "mangadot.net" ||
+                            imageHost == "uploads.mangadex.org" ||
+                            imageHost.endsWith(".mangadex.network")
+                        assertTrue(
+                            "Reader pixel source origin not allowed at frozen index ${index + 1}",
+                            uri.scheme == "https" && uri.userInfo == null &&
+                                (uri.port == -1 || uri.port == 443) && permittedHost,
+                        )
+                        val connection = URL(imageUrl).openConnection() as HttpsURLConnection
+                        connection.instanceFollowRedirects = false
+                        connection.connectTimeout = 12_000
+                        connection.readTimeout = 18_000
+                        val imageHeaders = page["headers"] as? JsonObject ?: JsonObject(emptyMap())
+                        for ((name, header) in imageHeaders) {
+                            assertTrue(
+                                "Reader image header not allowed at frozen index ${index + 1}",
+                                name in setOf("Referer", "Origin", "User-Agent"),
+                            )
+                            val value = header.jsonPrimitive.content
+                            assertTrue(
+                                "Reader image header malformed at frozen index ${index + 1}",
+                                value.length in 1..2048 && '\r' !in value && '\n' !in value,
+                            )
+                            connection.setRequestProperty(name, value)
+                        }
+                        try {
+                            assertEquals(
+                                "Reader pixel HTTP failure for frozen index ${index + 1}",
+                                200,
+                                connection.responseCode,
+                            )
+                            val output = ByteArrayOutputStream()
+                            val buffer = ByteArray(16 * 1024)
+                            connection.inputStream.use { stream ->
+                                while (true) {
+                                    val bytesRead = stream.read(buffer)
+                                    if (bytesRead < 0) break
+                                    assertTrue(
+                                        "Reader pixel exceeds 12MiB at frozen index ${index + 1}",
+                                        output.size() + bytesRead <= 12 * 1024 * 1024,
+                                    )
+                                    output.write(buffer, 0, bytesRead)
+                                }
+                            }
+                            val image = output.toByteArray()
+                            assertTrue(
+                                "Reader pixel response empty at frozen index ${index + 1}",
+                                image.isNotEmpty(),
+                            )
+                            val options = BitmapFactory.Options().apply { inSampleSize = 8 }
+                            val bitmap = BitmapFactory.decodeByteArray(image, 0, image.size, options)
+                            assertTrue(
+                                "Reader pixel decode failed at frozen index ${index + 1}",
+                                bitmap != null && bitmap.width > 0 && bitmap.height > 0,
+                            )
+                            bitmap!!.getPixel(0, 0)
+                            bitmap.recycle()
+                            println(
+                                "MANGAALL_FROZEN30_PIXEL|index=${index + 1}|shard=$shard" +
+                                    "|firstPage=DECODED|host=ANDROID_HTTP|uiReader=NOT_TESTED" +
+                                    "|canonical=NOT_TESTED|signed=NO",
+                            )
+                        } finally {
+                            connection.disconnect()
+                        }
                     }
                     println(
                         "MANGAALL_FROZEN30_READER|index=${index + 1}|shard=$shard" +
