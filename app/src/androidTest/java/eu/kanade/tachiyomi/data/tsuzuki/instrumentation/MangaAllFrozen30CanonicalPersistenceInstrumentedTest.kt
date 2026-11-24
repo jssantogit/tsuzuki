@@ -400,17 +400,36 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 },
             )
             if (one == null) return "CANONICAL_CHAPTER_ONE_MISSING_OR_AMBIGUOUS"
-            // No synthetic user-confirmed edition and no first-HID fallback.
-            val option = options.singleOrNull() ?: return "READER_OPTION_MISSING_OR_AMBIGUOUS"
-            val association = associations.get(option.bindingRef()) ?: return "SOURCE_ASSOCIATION_MISSING"
-            if (association.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED ||
-                association.editionQualification != ProviderSourceEditionQualification.UNRESOLVED
+            // Distinct content sources are separate explicit picker choices.
+            // Never select among rival editions or releases of the same source.
+            val bySource = options.groupBy { it.contentSourceId }
+            if (bySource.isEmpty() || bySource.keys.any { it !in setOf("mangadex", "mangadot") } ||
+                bySource.values.any { it.size != 1 }
             ) {
-                return "SOURCE_AUTHOR_OR_EDITION_UNVERIFIED"
+                return "READER_OPTION_MISSING_OR_AMBIGUOUS"
             }
-            // Simulate the picker only for a unique, already validated option.
-            if (select.select(titleId, option.bindingRef(), now) != MangaAllSourceSelectionResult.SELECTED) {
-                return "SOURCE_SELECTION_FAILED"
+            // Validate every choice before changing the saved preference.
+            for (option in options) {
+                val association = associations.get(option.bindingRef()) ?: return "SOURCE_ASSOCIATION_MISSING"
+                if (association.canonicalTitleId != titleId ||
+                    association.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED ||
+                    association.editionQualification != ProviderSourceEditionQualification.UNRESOLVED
+                ) {
+                    return "SOURCE_AUTHOR_OR_EDITION_UNVERIFIED"
+                }
+            }
+            // Exercise each explicit source choice in stable test order, not
+            // a production preference or automatic fallback. The last choice
+            // is the one whose exact receipt must survive process restart.
+            for (option in options.sortedBy { it.contentSourceId }) {
+                if (select.select(titleId, option.bindingRef(), System.currentTimeMillis()) !=
+                    MangaAllSourceSelectionResult.SELECTED
+                ) {
+                    return "SOURCE_SELECTION_FAILED"
+                }
+                if (selected.execute(one.id, "en")?.readerSourceKey != option.readerSourceKey) {
+                    return "SOURCE_SELECTION_FAILED"
+                }
             }
             val receipt = fingerprint(titleId, catalogName) ?: return "SQLITE_INVARIANT_FAILED"
             File(receipts, "$index.sha256").writeText(receipt)
