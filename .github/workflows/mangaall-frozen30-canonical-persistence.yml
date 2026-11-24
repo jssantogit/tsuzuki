@@ -193,3 +193,5 @@ jobs:
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --catalog "$CATALOG_SCOPE" $READER_PROBE --aggregate
           test '${{ needs.build-once.result }}' = 'success'
           test '${{ needs.canonical-restart.result }}' = 'success'
+
+# Frozen cohort repeat: bounded alias discovery and incremental refresh (2026-11-24).
