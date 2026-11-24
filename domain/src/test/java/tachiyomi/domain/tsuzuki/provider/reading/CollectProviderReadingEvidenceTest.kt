@@ -3499,6 +3499,183 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `research checks observed aliases before another broad primary search page`() = runTest {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Kim Yong-Hwan"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val names = mockk<TitleNameObservationRepository>()
+        coEvery { names.getByTitle(canonicalTitle.id) } returns listOf(
+            TitleNameObservation(canonicalTitle.id, "mal", "english", "Verified Alias", 42L),
+        )
+        val integrations = mockk<IntegrationRegistry>(relaxed = true)
+        every {
+            integrations.isGlobalCapabilityActive(metadataId, IntegrationCapability.METADATA_BASIC)
+        } returns true
+        val dotQueries = mutableListOf<String>()
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll, versionCode = 11),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    val cursor = requireNotNull(request.cursor).value
+                    if (cursor.contains("mangadex")) {
+                        ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
+                    } else {
+                        val query = request.titles.single()
+                        dotQueries += query
+                        if (query == canonicalTitle.displayTitle) {
+                            ProviderCallResult.Success(
+                                ProviderPage(emptyList(), nextCursor = ProviderCursor("broad-page-two")),
+                            )
+                        } else {
+                            ProviderCallResult.Success(
+                                ProviderPage(
+                                    listOf(
+                                        ProviderWorkCandidate(
+                                            externalWorkId = "mangadot:317",
+                                            title = "Verified Alias",
+                                            url = "https://mangadot.net/manga/317",
+                                            authors = listOf("Yonghwan Kim"),
+                                            detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                        ),
+                                    ),
+                                    nextCursor = null,
+                                ),
+                            )
+                        }
+                    }
+                },
+                chaptersHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "mangadot:chapters:111",
+                                    rawLabel = "Chapter 1",
+                                    rawNumber = 1.0,
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            titleNameObservationRepository = names,
+            integrationRegistry = integrations,
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = MemoryWorkSourceAssociationRepository(),
+            nativeMangaDotPortfolioResearch = true,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        dotQueries shouldBe listOf(canonicalTitle.displayTitle, "Verified Alias")
+        result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:111"
+        result.snapshots shouldBe emptyList()
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
+    @Test
+    fun `native preview resumes saved cursor without recreating the snapshot`() = runTest {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val ref = ProviderBindingRef(mangaAll, "en", "mangadot:317")
+        val cursor = ProviderCursor("m1:317:en:aaaaaaaaaaaaaaaa:200")
+        val cursors = mockk<ProviderProvisionalCursorRepository>(relaxed = true)
+        coEvery { cursors.get(canonicalTitle.id, ref, 11, any()) } answers {
+            ProviderProvisionalCursorCheckpoint(
+                canonicalTitle.id,
+                ref,
+                11L,
+                arg<String>(3),
+                cursor,
+                1,
+            )
+        }
+        val reads = mutableListOf<ProviderCursor?>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll, versionCode = 11),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    if (requireNotNull(request.cursor).value.contains("mangadex")) {
+                        ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
+                    } else {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                listOf(
+                                    ProviderWorkCandidate(
+                                        externalWorkId = ref.externalWorkId,
+                                        title = canonicalTitle.displayTitle,
+                                        url = "https://mangadot.net/manga/317",
+                                        authors = listOf("Arakawa Hiromu"),
+                                        detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    }
+                },
+                chaptersHandler = { request ->
+                    reads += request.cursor
+                    request.cursor shouldBe cursor
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "mangadot:chapters:201",
+                                    rawLabel = "Chapter 1",
+                                    rawNumber = 1.0,
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = MemoryWorkSourceAssociationRepository(),
+            provisionalCursorRepository = cursors,
+            nativeMangaDotPortfolioResearch = true,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        reads shouldBe listOf(cursor, cursor)
+        result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:201"
+        result.cursorProgress.single().expectedCursor shouldBe cursor
+        result.cursorProgress.single().nextCursor shouldBe null
+        coVerify(exactly = 0) { cursors.discard(any(), any()) }
+    }
+
+    @Test
     fun `MangaAll incomplete lookup retains provisional chapters without binding`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
