@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 from run_mangaall_frozen30_canonical_persistence import (
-    APP, RUNNER, TEST, PENDING14, adb, expected_indices, scope,
+    APP, RUNNER, TEST, PENDING14, STATUS, adb, expected_indices, scope,
 )
 from run_mangaall_frozen30_independent_catalog import DIGEST, locked_works
 
@@ -38,6 +38,15 @@ def parse(log, shard, owners):
     expected = expected_indices(shard, True) - {16}
     rows = {}
     invalid = 0
+    outcomes = {}
+    for match in re.finditer(
+            r"MANGAALL_CANONICAL_PERSISTENCE\|phase=CREDIT_AUDIT\|index=(\d+)\|outcome=([A-Z_0-9]+)\|catalog=(mangaupdates|shikimori)(?=\s|$)", log):
+        index, outcome, owner = int(match[1]), match[2], match[3]
+        if (index not in expected or index in outcomes or owner != owners.get(index)
+                or outcome not in STATUS | {"IDENTITY_AUDITED"}):
+            invalid += 1
+            continue
+        outcomes[index] = outcome
     for match in re.finditer(r"MANGAALL_PUBLIC_CREDIT_AUDIT\|index=(\d+)\|payload=([0-9a-f]+)(?=\s|$)", log):
         index = int(match[1])
         try:
@@ -61,6 +70,7 @@ def parse(log, shard, owners):
             invalid += 1
     return {"scope": "PUBLIC_CREDITS_ONLY_NO_READER", "corpusSha256": DIGEST,
             "shard": shard, "expected": sorted(expected), "invalid": invalid,
+            "outcomes": [{"index": i, "status": outcomes.get(i, "NOT_OBSERVED")} for i in sorted(expected)],
             "works": [rows[i] for i in sorted(rows)]}
 
 
@@ -94,11 +104,14 @@ def run(shard):
         report["processOk"] = (result.returncode == 0 and "INSTRUMENTATION_CODE: -1" in result.stdout
                                and "OK (1 test)" in result.stdout)
         (out / "public-credit-audit.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        for outcome in report["outcomes"]:
+            print(f"MANGAALL_CREDIT_AUDIT_STATUS|index={outcome['index']}|outcome={outcome['status']}")
         for row in report["works"]:
             print(f"MANGAALL_CREDIT_AUDIT|index={row['index']}|candidates={len(row['candidates'])}"
                   f"|authorAliases={len(row['aliases'])}|dex={row['sources']['mangadex']}|dot={row['sources']['mangadot']}")
         return (report["processOk"] and report["invalid"] == 0
-                and [row["index"] for row in report["works"]] == report["expected"])
+                and [row["index"] for row in report["works"]] == report["expected"]
+                and all(row["status"] == "IDENTITY_AUDITED" for row in report["outcomes"]))
     finally:
         adb("shell", "am", "force-stop", APP, check=False)
         adb("shell", "pm", "clear", APP, check=False)
@@ -114,6 +127,10 @@ def selftest():
                            "verification": "AUTHOR_CORROBORATED", "edition": "UNRESOLVED"}]}
     line = "MANGAALL_PUBLIC_CREDIT_AUDIT|index=5|payload=" + json.dumps(row).encode().hex()
     assert parse(line, 0, owners)["works"] == [row]
+    failure = "MANGAALL_CANONICAL_PERSISTENCE|phase=CREDIT_AUDIT|index=5|outcome=CATALOG_UNAVAILABLE|catalog=shikimori"
+    assert parse(failure, 0, owners)["outcomes"][0]["status"] == "CATALOG_UNAVAILABLE"
+    assert parse(failure + "\n" + failure, 0, owners)["invalid"] == 1
+    assert parse("", 0, owners)["outcomes"][0]["status"] == "NOT_OBSERVED"
     assert parse(line + "\n" + line, 0, owners)["invalid"] == 1
     assert parse(line, 1, owners)["invalid"] == 1
     row["authors"] = ["https://example.com"]
