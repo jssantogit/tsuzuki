@@ -32,6 +32,7 @@ import org.junit.runner.RunWith
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
 import tachiyomi.data.tsuzuki.CanonicalChapterRepositoryImpl
 import tachiyomi.data.tsuzuki.CanonicalTitleRepositoryImpl
+import tachiyomi.data.tsuzuki.TitleNameObservationRepositoryImpl
 import tachiyomi.data.tsuzuki.chapter.ChapterEvidenceRepositoryImpl
 import tachiyomi.data.tsuzuki.integration.CanonicalMetadataSnapshotRepositoryImpl
 import tachiyomi.data.tsuzuki.provider.MangaAllSourceSelectionRepositoryImpl
@@ -55,10 +56,12 @@ import tachiyomi.domain.tsuzuki.integration.MetadataProvider
 import tachiyomi.domain.tsuzuki.integration.RatingsProvider
 import tachiyomi.domain.tsuzuki.integration.SearchProvider
 import tachiyomi.domain.tsuzuki.integration.TrackingProvider
+import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshot
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
+import tachiyomi.domain.tsuzuki.model.TitleNameObservation
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
@@ -199,6 +202,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val app = context.applicationContext as App
         val database = app.graph.database
         val titles = CanonicalTitleRepositoryImpl(database)
+        val titleNames = TitleNameObservationRepositoryImpl(database)
         val metadata = CanonicalMetadataSnapshotRepositoryImpl(database)
         val chapters = CanonicalChapterRepositoryImpl(database)
         val evidence = ChapterEvidenceRepositoryImpl(database)
@@ -213,6 +217,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         fun catalogRegistry(names: Set<String>): IntegrationRegistry {
             val selectedCatalogs = names.map(catalogs::getValue)
             return object : IntegrationRegistry {
+                override fun isGlobalCapabilityActive(
+                    integrationId: IntegrationId,
+                    capability: IntegrationCapability,
+                ): Boolean = integrationId.value in names && capability == IntegrationCapability.METADATA_BASIC
+
                 override fun searchProviders(): List<SearchProvider> = selectedCatalogs
                 override fun metadataProviders(): List<MetadataProvider> = selectedCatalogs.map {
                     it as MetadataProvider
@@ -233,6 +242,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             clock = System::currentTimeMillis,
             canonicalMetadataSnapshotRepository = metadata,
             integrationRegistry = metadataRegistry,
+            titleNameObservationRepository = titleNames,
             workSourceAssociationRepository = associations,
             provisionalCursorRepository = cursors,
             nativeMangaDotPortfolioResearch = catalogScope == "explicit_plan",
@@ -304,6 +314,9 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 add(owner.externalId)
                 addAll(snapshot.metadata.externalIds.entries.map { "${it.key.value}:${it.value}" }.sorted())
                 addAll(credits.flatMap { it.value }.sorted())
+                addAll(titleNames.getByTitle(titleId).map {
+                    listOf(it.provider, it.sourceKey, it.value).joinToString("\u0000")
+                }.sorted())
                 add(one.id)
                 add(option.readerSourceKey)
                 addAll(
@@ -346,6 +359,14 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             )
             if (canonical.id != titleId) return "DUPLICATE_CATALOG_OWNER"
             metadata.upsertIfNewer(CanonicalMetadataSnapshot(titleId, "frozen30-catalog", provenance, now))
+            // Store only names published by the independently verified detail
+            // owner, through the same repository used by normal app lookup.
+            // Names remain retrieval hints; the collector still checks authors.
+            val observedNames = owner.titles + ("source:primary" to owner.title)
+            for ((key, value) in observedNames) {
+                if (key.isBlank() || key.length > 128 || value.isBlank() || value.length > 1024) continue
+                titleNames.upsert(TitleNameObservation(titleId, owner.provider, key, value, now))
+            }
             if (refresh.execute(titleId, forceRefresh = true).isFailure) return "REFRESH_FAILED"
             val one = chapters.getByCanonicalTitleId(titleId).filter {
                 it.type == CanonicalChapterType.REGULAR && it.displayNumber == "1" &&
