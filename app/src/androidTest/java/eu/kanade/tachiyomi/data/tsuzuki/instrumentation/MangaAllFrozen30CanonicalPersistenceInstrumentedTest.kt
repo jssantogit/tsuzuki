@@ -7,6 +7,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.App
 import eu.kanade.tachiyomi.data.tsuzuki.integration.MangaUpdatesIntegrationProvider
+import eu.kanade.tachiyomi.data.tsuzuki.integration.ShikimoriIntegrationProvider
+import eu.kanade.tachiyomi.data.tsuzuki.integration.ShikimoriRequestGate
 import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackage
 import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackageSource
 import eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGateway
@@ -92,6 +94,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val instrument = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
         assertEquals("I_ACCEPT_FROZEN30_CANONICAL_RESEARCH", args.getString("mangaAllCanonicalOptIn"))
+        val catalogName = args.getString("mangaAllCanonicalCatalog") ?: "mangaupdates"
+        require(catalogName in setOf("mangaupdates", "shikimori"))
         val phase = requireNotNull(args.getString("mangaAllCanonicalPhase"))
         require(phase in setOf("COLLECT", "RESTORE"))
         val shard = requireNotNull(args.getString("mangaAllFrozen30Shard")).toInt()
@@ -169,10 +173,15 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val associations = ProviderWorkSourceAssociationRepositoryImpl(database)
         val cursors = ProviderProvisionalCursorRepositoryImpl(database)
         val selections = MangaAllSourceSelectionRepositoryImpl(database)
-        val catalog = MangaUpdatesIntegrationProvider(app.graph.trackerManager)
+        val catalog: SearchProvider = when (catalogName) {
+            "mangaupdates" -> MangaUpdatesIntegrationProvider(app.graph.trackerManager)
+            "shikimori" -> ShikimoriIntegrationProvider(app.graph.trackerManager, ShikimoriRequestGate())
+            else -> error("Unknown independent catalog scope")
+        }
+        val metadataCatalog = catalog as MetadataProvider
         val catalogRegistry = object : IntegrationRegistry {
             override fun searchProviders(): List<SearchProvider> = listOf(catalog)
-            override fun metadataProviders(): List<MetadataProvider> = listOf(catalog)
+            override fun metadataProviders(): List<MetadataProvider> = listOf(metadataCatalog)
             override fun discoveryProviders(): List<DiscoveryProvider> = emptyList()
             override fun chapterEvidenceProviders(): List<ChapterEvidenceProvider> = emptyList()
             override fun ratingsProviders(): List<RatingsProvider> = emptyList()
@@ -209,7 +218,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             ResolveMangaAllSelectedReadingOption(selections),
         )
         val select = SelectMangaAllSource(associations, selections)
-        val receipts = File(context.filesDir, "mangaall-frozen30-canonical-receipts").apply { mkdirs() }
+        val receipts = File(context.filesDir, "mangaall-frozen30-canonical-receipts-$catalogName").apply { mkdirs() }
 
         suspend fun fingerprint(titleId: String): String? {
             val title = titles.getById(titleId) ?: return null
@@ -217,6 +226,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             val identities = titles.getExternalIdentities(titleId)
             if (identities.size != 1 || !identities.single().verified) return null
             val owner = identities.single()
+            if (owner.provider != catalogName) return null
             val ownerIntegration = IntegrationId(owner.provider)
             if (snapshot.metadata.externalIds[ownerIntegration] != owner.externalId) return null
             val credits = listOfNotNull(snapshot.metadata.authors, snapshot.metadata.artists)
@@ -280,7 +290,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             val owner = requireNotNull(identity.identity)
             val provenance = identity.toCanonicalReadingMetadata()
                 ?: return "CATALOG_PROVENANCE_MISSING"
-            if (owner.format != CatalogItemFormat.MANHWA || !identity.creatorsAttested) {
+            if (owner.provider != catalogName || owner.format != CatalogItemFormat.MANHWA || !identity.creatorsAttested) {
                 return "CATALOG_FORMAT_OR_CREATOR_UNVERIFIED"
             }
             val now = System.currentTimeMillis()
