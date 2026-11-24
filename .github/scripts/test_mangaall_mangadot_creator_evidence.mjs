@@ -38,4 +38,10 @@ assert.equal(calls,1);
 const broken = {http:{getResource:async()=>{throw Error("unavailable");}}};
 assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",title:series.name}, broken),
   {detailOutcome:"DETAIL_FAILED"});
+const badDom = {http:host.http, dom:{selectText:async()=>{throw Error("bad structure");}}};
+assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",title:series.name}, badDom),
+  {detailOutcome:"INVALID_RESPONSE"});
+const wrongWork = {http:host.http, dom:{selectText:async()=>raw({...series, url:url+"0"})}};
+assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",title:series.name}, wrongWork),
+  {detailOutcome:"IDENTITY_MISMATCH"});
 console.log("MANGAALL_DOT_CREATOR|strictParser=PASS|opaqueHandle=PASS|canonical=NOT_TESTED");
