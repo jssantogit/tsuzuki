@@ -1,7 +1,7 @@
 name: MangaALL — frozen 30 manhwas, actual app Reader HTTP loader (OPT-IN)
 # Immutable corpus, build ONCE and run 3 isolated GitHub-hosted Android
 # emulators against the same unsigned code11 APK pair (10 locked works/shard).
-# Source-HID only; actual app OkHttp Reader loader + bitmap; no canonical/UI or release.
+# Source-HID only; real app OkHttp Reader cache/bitmap; no canonical/UI promotion.
 on:
   push:
     branches: ['probe/mangaall-dual-source-scale30-*']
