@@ -1,0 +1,151 @@
+name: MangaALL — signed source MangaFire evidence transport contracts (OFFLINE)
+# No external provider HTTP: only a disposable emulator running a local
+# allowlist test; no signed asset change, release, secrets, or live challenge.
+# A genuine CI live gate is separate, explicitly opt-in and fail-closed.
+on:
+  push:
+    branches: ['probe/mangaall-a54-browser-profile-validation-*']
+    paths:
+      - '.github/workflows/mangaall-mangafire-source-evidence-contract.yml'
+      - '.github/scripts/mangaall_ci_three_gate.py'
+      - '.github/scripts/test_mangaall_ci_three_gate.py'
+      - '.github/scripts/mangaall_ci_fire_source_gate.py'
+      - '.github/scripts/test_mangaall_ci_fire_source_gate.py'
+      - '.github/scripts/run_mangaall_ci_webview_android.sh'
+      - '.github/scripts/run_mangaall_fire_source_allowlist_offline.sh'
+      - '.github/workflows/mangaall-ci-browser-host-live.yml'
+      - 'app/src/debug/AndroidManifest.xml'
+      - 'app/src/debug/assets/mangafire-ci-solver.html'
+      - 'app/src/debug/java/eu/kanade/tachiyomi/provider/runtime/MangaFireCiShapeSolverActivity.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllInstrumentationVerdict.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-mangafire-source-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  signed-source-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Offline fail-closed source API receipt contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/run_mangaall_ci_webview_android.sh
+          bash -n .github/scripts/run_mangaall_fire_source_allowlist_offline.sh
+          python3 .github/scripts/test_mangaall_ci_three_gate.py
+          python3 .github/scripts/test_mangaall_ci_fire_source_gate.py
+          python3 - <<'PY'
+          from pathlib import Path
+          test=Path('app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt').read_text()
+          start=test.index('private suspend fun runMangaAllCiWebviewMangaFireChapterGate(')
+          end=test.index('private suspend fun runPublishedMangaAllLivePages(', start)
+          scope=test[start:end]
+          assert 'browserDiagnosticSink = {' in scope
+          assert 'browserSuccess.get() > 0' in scope
+          assert 'browserAttempts.incrementAndGet()' in scope
+          assert 'browserFailure.set(' in scope
+          assert 'MANGAALL_CI_BROWSER_FALLBACK|work=$id' in scope
+          assert 'sourceJson = if (' in scope
+          assert 'phase=API|signedUrl=$urlSeen' in scope
+          # The native opt-in replaces the original HTTP GET; ordinary
+          # mode still cannot issue a second independent live API request.
+          native_start=scope.index('if (nativeBrowserTransport && url.host == "mangafire.to")')
+          native_end=scope.index('val response = chain.proceed(chain.request())', native_start)
+          native=scope[native_start:native_end]
+          assert scope.count('AndroidProviderBrowserHostService(') == 1
+          assert 'AndroidProviderBrowserHostService(' in native
+          assert 'chain.proceed(' not in native
+          assert 'return@addInterceptor Response.Builder()' in native
+          assert 'nativeOriginRejected.set(true)' in native
+          assert 'classifyProviderBrowserFailure(error)' in native
+          assert 'directBody' not in scope
+          assert 'signedApi.getAndSet(null)' in scope
+          assert 'sourceCandidates["mangafire"]' in scope
+          assert 'code10-published-package.tsz' in scope
+          assert 'MANGAALL_CI_FIRE_SOURCE|work=$id' in scope
+          assert 'MANGAALL_CI_FIRE_403|work=$id' in scope
+          assert 'classifyMangaFire403(response)' in scope
+          assert 'response.peekBody(1024)' in test
+          assert 'mangaAllCiMangaFire403Classifier_offlineResponseOnly' in test
+          assert 'mangaFireLookupComplete' in scope
+          assert 'mangaDotPageFourPending' in scope
+          assert 'MangaFireCiShapeSolverGate.ACK' in scope
+          assert 'MANGAALL_CI_SHAPE_SOLVER|outcome=$solver' in scope
+          assert 'MangaFireCiShapeSolverGate.lastStage()' in scope
+          assert 'MANGAALL_CI_SHAPE_STAGE|last=' in scope
+          assert 'MANGAALL_CI_SHAPE_NATIVE|last=' in scope
+          assert 'MANGAALL_CI_SHAPE_DOCUMENT|origin=' in scope
+          assert 'mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork' in test
+          assert 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork' in test
+          live=Path('.github/workflows/mangaall-ci-browser-host-live.yml').read_text()
+          assert "if gate == 'shape':" in live
+          assert 'I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE' in live
+          debug=Path('app/src/debug/AndroidManifest.xml').read_text()
+          release=Path('app/src/main/AndroidManifest.xml').read_text()
+          assert 'MangaFireCiShapeSolverActivity' in debug
+          assert 'MangaFireCiShapeSolverActivity' not in release
+          solver=Path('app/src/debug/assets/mangafire-ci-solver.html').read_text()
+          assert 'Array.from({length: 2}, solve)' in solver
+          assert 'Array.from({length: 10}, solve)' not in solver
+          activity=Path('app/src/debug/java/eu/kanade/tachiyomi/provider/runtime/MangaFireCiShapeSolverActivity.kt').read_text()
+          assert 'WebViewCompat.addWebMessageListener' in activity
+          assert 'https://mangafire.to' in activity
+          assert 'I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE' in activity
+          assert 'stage:DOCUMENT_READY' in activity
+          assert 'ASSET_OFFLINE_ACK' in activity
+          assert 'blockNetworkLoads = bridgeOnly || exactAssetOffline' in activity
+          assert 'INTERCEPT_OFFLINE_ACK' in activity
+          assert 'bridgeOnly || exactAssetOffline || interceptOffline || opaqueOffline) return blockedResponse()' in activity
+          assert 'OPAQUE_OFFLINE_ACK' in activity
+          assert 'blockNetworkLoads = bridgeOnly || exactAssetOffline || opaqueOffline' in activity
+          assert 'view.loadData(html, "text/html", "UTF-8")' in activity
+          assert 'MangaFireCiShapeSolverGate.complete("UNTRUSTED_ORIGIN")' in activity
+          assert 'MangaFireCiShapeSolverGate.markNativeStage("LOAD_REQUESTED")' in activity
+          assert 'MangaFireCiShapeSolverGate.markDocumentOrigin(' in activity
+          assert 'location.origin' in activity
+          runner=Path('.github/scripts/run_mangaall_fire_source_allowlist_offline.sh').read_text()
+          assert 'mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork' in runner
+          assert 'mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork' in runner
+          assert 'mangaAllCiShapeSolverExactAsset_opaqueOriginFailsClosedOffline' in runner
+          assert 'stage:GENERATE_STARTED' in solver
+          assert 'stage:VERIFY_STARTED' in solver
+          assert 'stage:OPENCV_IMPORT_FAILED' in solver
+          assert solver.index('stage:DOCUMENT_READY') < solver.index('docs.opencv.org/5.0/opencv.js')
+          print('MANGAALL_CI_SOURCE_EVIDENCE|offline=PASS|duplicate_live_API=DENIED|signed_code10=UNCHANGED|unified=NOT_PROVEN')
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Assemble debug APK and Android test for actual offline instrumentation
+        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Enable KVM for offline-only ephemeral Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Execute whitelist positive and negative records in actual Android instrumentation (NO NETWORK)
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_fire_source_allowlist_offline.sh
+      - name: Scope of verdict
+        run: |
+          echo 'MANGAALL_CI_SOURCE_EVIDENCE|result=OFFLINE_CONTRACT_PASS|live=NOT_STARTED|mangafire=NOT_PROVEN_BY_THIS_RUN'

@@ -30,7 +30,6 @@ import tachiyomi.core.provider.runtime.ProviderResourceStore
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ScopedProviderSecretsHostService
 import java.io.File
-import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -182,7 +181,7 @@ class ProviderHostInvocationFactory(
                         allowedOrigins = origins,
                         allowLocalNetwork = policy.allowLocalNetwork,
                     ),
-                    providerProfileName = providerProfileName(policy.providerId),
+                    providerProfileName = ProviderBrowserProfiles.nameFor(policy.providerId),
                 )
                 object : ProviderBrowserHostService, AutoCloseable {
                     override suspend fun readText(url: String, cssSelector: String): String {
@@ -296,13 +295,6 @@ class ProviderHostInvocationFactory(
                 operationBudget = ProviderHostOperationBudget(policy.maxHostOperations),
             ),
         )
-    }
-
-    private fun providerProfileName(providerId: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(providerId.encodeToByteArray())
-            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
-        return "tsuzuki-provider-${digest.take(24)}"
     }
 }
 

@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.provider.reading
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -7,19 +8,31 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.data.tsuzuki.instrumentation.MangaAllInstrumentationVerdict
+import eu.kanade.tachiyomi.provider.runtime.AndroidProviderBrowserHostService
+import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestActivity
+import eu.kanade.tachiyomi.provider.runtime.MangaFireBrowserSessionTestGate
+import eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupActivity
+import eu.kanade.tachiyomi.provider.runtime.MangaFireCiBrowserWarmupGate
+import eu.kanade.tachiyomi.provider.runtime.MangaFireCiShapeSolverActivity
+import eu.kanade.tachiyomi.provider.runtime.MangaFireCiShapeSolverGate
+import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserDiagnostic
+import eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfiles
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
+import eu.kanade.tachiyomi.provider.runtime.classifyProviderBrowserFailure
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.CanonicalLocalReaderFormat
 import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
 import eu.kanade.tachiyomi.ui.reader.loader.LocalChapterLoader
 import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpChapterLoader
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -31,11 +44,13 @@ import okio.Buffer
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
+import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
@@ -77,8 +92,11 @@ import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import javax.crypto.Cipher
@@ -2336,6 +2354,1327 @@ class ScriptProviderReadingGatewayIsolationTest {
         runPublishedMangaAllLivePages(10L)
     }
 
+    /** CI-only diagnostic contract: real API acceptance is not a page-load flag. */
+    @Test
+    fun mangaAllCiBrowserVerdictContract_rejectsUnboundedOrUntrustedData() {
+        val good = listOf(
+            "MANGAALL_CI_WEBVIEW|phase=STARTED",
+            "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=PAGE_FINISHED",
+            "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=HTTP_REJECTED",
+            "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=PROFILE_UNSUPPORTED",
+            "MANGAALL_CI_WEBVIEW|work=punpun|api=VALID_JSON|candidates=1",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=UNSOLVED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=UNSUPPORTED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=HTTP_REJECTED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=UNTRUSTED_ORIGIN|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_STAGE|last=NO_EVENT|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NATIVE|last=NO_EVENT|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NATIVE|last=ASSET_READY|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NATIVE|last=LISTENER_REGISTERED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NATIVE|last=PAGE_FINISHED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_JS_PROBE|result=PENDING|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_JS_PROBE|result=BRIDGE_READY|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_JS_PROBE|result=BRIDGE_MISSING|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_JS_PROBE|result=JS_UNAVAILABLE|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=PENDING|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=EXPECTED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=SAME_SITE|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=OPAQUE|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=FOREIGN|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=JS_UNAVAILABLE|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_FINISH_JS_PROBE|result=PENDING|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_FINISH_JS_PROBE|result=BRIDGE_READY|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_FINISH_JS_PROBE|result=BRIDGE_MISSING|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_FINISH_DOCUMENT|origin=PENDING|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_FINISH_DOCUMENT|origin=EXPECTED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_FINISH_DOCUMENT|origin=OPAQUE|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NAV|phase=START|kind=PENDING|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NAV|phase=START|kind=EXPECTED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NAV|phase=COMMIT|kind=ABOUT|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NAV|phase=COMMIT|kind=DATA|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NAV|phase=FINISH|kind=NO_URL|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NAV|phase=FINISH|kind=OTHER|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_STAGE|last=OPENCV_IMPORT_FAILED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_STAGE|last=GENERATE_HTTP_ERROR|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_STAGE|last=VERIFY_OK|mode=DEBUG_ONLY",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=0|outcome=NOT_USED",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=koe|attempts=1|outcome=UPSTREAM_CHALLENGE",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=akame|attempts=1|outcome=SUCCEEDED",
+            "MANGAALL_CI_NATIVE|work=punpun|search=1|chapterReads=2|rejected=NO",
+            "MANGAALL_CI_NATIVE|work=koe|search=0|chapterReads=0|rejected=YES",
+            "MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=HTTP_REJECTED",
+            "MANGAALL_CI_FIRE_403|work=punpun|kind=SHAPE_REQUIRED",
+            "MANGAALL_CI_FIRE_403|work=koe|kind=OTHER_JSON",
+            "MANGAALL_CI_FIRE_403|work=akame|kind=UNCLASSIFIED",
+            "MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=SKIPPED",
+            "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP|outcome=COMPLETE|pages=3|candidates=1",
+            "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP_FAILURE" +
+                "|cause=CHALLENGE_BLOCKED|http=403",
+            "MANGAALL_CI_CHAPTER|work=punpun|phase=API|signedUrl=OBSERVED" +
+                "|http=403|transport=BROWSER|json=VALIDATED",
+            "MANGAALL_CI_CHAPTER|work=punpun|phase=API|signedUrl=OBSERVED" +
+                "|http=200|transport=HTTP|json=VALIDATED",
+            "MANGAALL_CI_CHAPTER|work=koe|phase=LOOKUP|outcome=READ_ERROR|pages=2|candidates=0",
+            "MANGAALL_CI_CHAPTER|work=punpun|outcome=READY|pages=1" +
+                "|count=147|chapterOne=YES|reason=NONE",
+            "MANGAALL_CI_CHAPTER|work=koe|outcome=INCONCLUSIVE|pages=0" +
+                "|count=0|chapterOne=UNVERIFIED|reason=SOURCE_READ_ERROR",
+            "MANGAALL_CI_FIRE_SOURCE|work=punpun|lookup=COMPLETE" +
+                "|api=VALIDATED|chapters=COMPLETE|chapterOne=YES|outcome=SOURCE_READY",
+            "MANGAALL_CI_FIRE_SOURCE|work=koe|lookup=INCOMPLETE" +
+                "|api=UNVERIFIED|chapters=INCOMPLETE|chapterOne=UNVERIFIED|outcome=INCONCLUSIVE",
+            "MANGAALL_CI_FIRE_SOURCE|outcome=SOURCE_CHAPTERS_ACCEPTED" +
+                "|ready=3|works=3|canonical=NOT_TESTED|unified=NOT_PROVEN",
+            "MANGAALL_CI_LOOKUP_BLOCKER|work=koe|source=MANGADOT|reason=PAGE_FOUR_PENDING",
+            "MANGAALL_CI_CHAPTER|outcome=CHAPTERS_ACCEPTED|ready=2|works=2" +
+                "|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
+            "MANGAALL_CI_WEBVIEW|work=koe|api=BLOCKED|candidates=0",
+            "MANGAALL_CI_WEBVIEW|outcome=CI_SIGNED_API_ACCEPTED|signedJson=2" +
+                "|works=2|providerCandidateWorks=2|canonical=NOT_TESTED" +
+                "|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+            "MANGAALL_CI_WEBVIEW|outcome=CI_INCONCLUSIVE|signedJson=0" +
+                "|works=2|providerCandidateWorks=0|canonical=NOT_TESTED" +
+                "|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+        good.forEach { record ->
+            assertTrue("CI verdict format unexpectedly denied", MangaAllInstrumentationVerdict.isPermitted(record))
+        }
+        val bad = listOf(
+            "MANGAALL_CI_FIRE_SOURCE|work=punpun|lookup=COMPLETE" +
+                "|api=VALIDATED|chapters=COMPLETE|chapterOne=YES|outcome=SOURCE_READY|cookie=secret",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=PRODUCTION",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=DEBUG_ONLY|cookie=secret",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=SOLVED|mode=DEBUG_ONLY|captchaImage=data:",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=TOKEN_EXPORTED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_STAGE|last=CHALLENGE_IMAGE_BASE64|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NATIVE|last=RESOURCE_URL|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_JS_PROBE|result=SECRET|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_JS_PROBE|result=BRIDGE_READY|mode=RELEASE",
+            "MANGAALL_CI_SHAPE_JS_PROBE|result=BRIDGE_READY|mode=DEBUG_ONLY|cookie=secret",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=https://mangafire.to|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=EXPECTED|mode=RELEASE",
+            "MANGAALL_CI_SHAPE_DOCUMENT|origin=FOREIGN|mode=DEBUG_ONLY|cookie=secret",
+            "MANGAALL_CI_FIRE_403|work=punpun|kind=SHAPE_REQUIRED|body=secret",
+            "MANGAALL_CI_FIRE_403|work=unknown|kind=SHAPE_REQUIRED",
+            "MANGAALL_CI_FIRE_403|work=koe|kind=COOKIES_EXPORTED",
+            "MANGAALL_CI_SHAPE_SOLVER|outcome=UNTRUSTED_ORIGIN|mode=RELEASE",
+            "MANGAALL_CI_SHAPE_FINISH_JS_PROBE|result=TOKEN|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_FINISH_DOCUMENT|origin=FOREIGN|mode=PRODUCTION",
+            "MANGAALL_CI_SHAPE_FINISH_DOCUMENT|origin=EXPECTED|mode=DEBUG_ONLY|url=secret",
+            "MANGAALL_CI_SHAPE_NAV|phase=UNKNOWN|kind=EXPECTED|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NAV|phase=START|kind=INVALID|mode=DEBUG_ONLY",
+            "MANGAALL_CI_SHAPE_NAV|phase=COMMIT|kind=EXPECTED|mode=RELEASE",
+            "MANGAALL_CI_SHAPE_NAV|phase=COMMIT|kind=EXPECTED|mode=DEBUG_ONLY|url=secret",
+            "MANGAALL_CI_SHAPE_NATIVE|last=ASSET_READY|mode=PRODUCTION",
+            "MANGAALL_CI_SHAPE_NATIVE|last=PAGE_FINISHED|mode=DEBUG_ONLY|cookie=secret",
+            "MANGAALL_CI_SHAPE_STAGE|last=GENERATE_OK|mode=PRODUCTION",
+            "MANGAALL_CI_SHAPE_STAGE|last=VERIFY_OK|mode=DEBUG_ONLY|cookie=secret",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=1" +
+                "|outcome=UPSTREAM_CHALLENGE|url=https://mangafire.to",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=punpun|attempts=10|outcome=SUCCEEDED",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=unknown|attempts=0|outcome=NOT_USED",
+            "MANGAALL_CI_BROWSER_FALLBACK|work=koe|attempts=1|outcome=COOKIE_ACCEPTED",
+            "MANGAALL_CI_NATIVE|work=koe|search=100|chapterReads=0|rejected=YES",
+            "MANGAALL_CI_NATIVE|work=koe|search=0|chapterReads=0|rejected=YES|url=secret",
+            "MANGAALL_CI_FIRE_SOURCE|outcome=SOURCE_CHAPTERS_ACCEPTED" +
+                "|ready=3|works=3|canonical=NOT_TESTED|unified=READY",
+            "MANGAALL_CI_LOOKUP_BLOCKER|work=koe|source=MANGADOT" +
+                "|reason=PAGE_FOUR_PENDING|cursor=4",
+            "MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=HUMAN_CONFIRMED",
+            "MANGAALL_CI_WEBVIEW|work=unknown|api=VALID_JSON|candidates=1",
+            "MANGAALL_CI_CHAPTER|work=punpun|phase=API|signedUrl=OBSERVED" +
+                "|http=403|transport=BROWSER|json=VALIDATED|cookie=secret",
+            "MANGAALL_CI_CHAPTER|work=punpun|phase=LOOKUP|outcome=COMPLETE" +
+                "|pages=9|candidates=1",
+            "MANGAALL_CI_CHAPTER|work=unknown|outcome=READY|pages=1" +
+                "|count=147|chapterOne=YES|reason=NONE",
+            "MANGAALL_CI_CHAPTER|work=koe|outcome=READY|pages=1" +
+                "|count=20|chapterOne=YES|reason=NONE|token=secret",
+            "MANGAALL_CI_WEBVIEW|work=koe|api=VALID_JSON|candidates=1|cookie=secret",
+            "MANGAALL_CI_WEBVIEW|work=koe|api=VALID_JSON|candidates=1" +
+                "|url=https://mangafire.to/api/titles",
+            "MANGAALL_CI_WEBVIEW|outcome=CI_SIGNED_API_ACCEPTED|signedJson=3" +
+                "|works=2|providerCandidateWorks=2|canonical=NOT_TESTED" +
+                "|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+        bad.forEach { record ->
+            assertFalse("CI verdict accepted unsafe details", MangaAllInstrumentationVerdict.isPermitted(record))
+        }
+    }
+
+    /** Offline guard for strictly redacted Android A54 instrumentation output. */
+    @Test
+    fun mangaAllA54ClosedVerdictContract_acceptsOnlyExplicitSourceFreeFormats() {
+        val allowed = listOf(
+            "MANGAALL_A54_PROFILE|phase=STARTED",
+            "MANGAALL_A54_PROFILE|phase=ACTIVITY_REQUESTED",
+            "MANGAALL_A54_PROFILE|phase=OPERATOR_CONFIRMED",
+            "MANGAALL_A54_PROFILE|outcome=INCONCLUSIVE|reason=USER_VERIFICATION_NOT_COMPLETED",
+            "MANGAALL_A54_PROFILE|work=punpun|outcome=INCONCLUSIVE" +
+                "|reason=SIGNED_API_REQUEST_NOT_OBSERVED|mangafireCandidates=0",
+            "MANGAALL_A54_PROFILE|work=koe|outcome=SIGNED_API_JSON_VALID" +
+                "|mangafireCandidates=1|browserApi=VALID_JSON",
+            "MANGAALL_A54_PROFILE|outcome=BROWSER_SIGNED_API_ACCEPTED" +
+                "|signedJson=2|works=2|providerCandidateWorks=2" +
+                "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+            "MANGAALL_A54_PROFILE|outcome=INCONCLUSIVE" +
+                "|signedJson=0|works=2|providerCandidateWorks=0" +
+                "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+        allowed.forEach { record ->
+            assertTrue("Closed A54 verdict not accepted: $record", MangaAllInstrumentationVerdict.isPermitted(record))
+        }
+        val blocked = listOf(
+            "MANGAALL_A54_PROFILE|phase=UNKNOWN",
+            "MANGAALL_A54_PROFILE|work=unknown|outcome=SIGNED_API_JSON_VALID" +
+                "|mangafireCandidates=1|browserApi=VALID_JSON",
+            "MANGAALL_A54_PROFILE|phase=STARTED|cookie=secret",
+            "MANGAALL_A54_PROFILE|work=koe|outcome=SIGNED_API_JSON_VALID" +
+                "|mangafireCandidates=1|browserApi=VALID_JSON|url=https://example.test",
+            "MANGAALL_A54_PROFILE|outcome=BROWSER_SIGNED_API_ACCEPTED" +
+                "|signedJson=3|works=2|providerCandidateWorks=2" +
+                "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+        blocked.forEach { record ->
+            assertFalse("Unredacted or unbounded verdict accepted", MangaAllInstrumentationVerdict.isPermitted(record))
+        }
+    }
+
+    /**
+     * Physical A54, explicit opt-in only: the user completes a normal
+     * MangaFire browser verification in the exact production Provider profile,
+     * then the unchanged signed code10 lookup generates its own API URLs.
+     * Never claim API availability from a cookie or from other two sources.
+     */
+    @Test(timeout = 300_000L)
+    fun mangaAllCode10HumanVerifiedBrowserProfile_checksRealSignedApi() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val args = InstrumentationRegistry.getArguments()
+        assertEquals("I_ACCEPT_MANGAFIRE_A54_INTERACTIVE_TEST", args.getString("mangaAllA54SessionOptIn"))
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+
+        MangaAllInstrumentationVerdict.publish("MANGAALL_A54_PROFILE|phase=STARTED")
+        MangaFireBrowserSessionTestGate.reset()
+        // Synchronous launch lets the instrumented runner observe startup
+        // crashes instead of silently timing out with no on-screen activity.
+        instrumentation.startActivitySync(
+            Intent(context, MangaFireBrowserSessionTestActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        MangaAllInstrumentationVerdict.publish("MANGAALL_A54_PROFILE|phase=ACTIVITY_REQUESTED")
+        val operatorFinished = withContext(Dispatchers.IO) {
+            MangaFireBrowserSessionTestGate.awaitOperator(150)
+        }
+        if (!operatorFinished) {
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_A54_PROFILE|outcome=INCONCLUSIVE|reason=USER_VERIFICATION_NOT_COMPLETED",
+            )
+            return@runBlocking
+        }
+        MangaAllInstrumentationVerdict.publish("MANGAALL_A54_PROFILE|phase=OPERATOR_CONFIRMED")
+
+        val archive = instrumentation.context.assets
+            .open("mangaall/code10-published-package.tsz").use { it.readBytes() }
+        assertEquals(
+            "bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f",
+            tachiyomi.core.provider.supplychain.sha256Hex(archive),
+        )
+        val manifest = ProviderPackageParser().parse(archive).manifest
+        assertEquals("app.tsuzuki.mangaall", manifest.id)
+        assertEquals(10L, manifest.version.code)
+        val providerId = ProviderId(manifest.id)
+        val capturedSignedApi = AtomicReference<String?>(null)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val url = chain.request().url
+                if (url.scheme == "https" && url.host == "mangafire.to" &&
+                    url.encodedPath == "/api/titles" &&
+                    !url.queryParameter("keyword").isNullOrBlank()
+                ) {
+                    // In-memory only, never included in telemetry / artifacts.
+                    capturedSignedApi.set(url.toString())
+                }
+                chain.proceed(chain.request())
+            }
+            .callTimeout(25, TimeUnit.SECONDS)
+            .build()
+        val gateway = gateway(
+            main = "",
+            providerId = providerId,
+            networkOrigins = requireNotNull(manifest.permissions.network).origins,
+            browserOrigins = manifest.permissions.browser?.origins.orEmpty(),
+            localNetwork = false,
+            packageBytesOverride = archive,
+            baseHttpClient = client,
+        )
+        val works = listOf(
+            "punpun" to "Oyasumi Punpun",
+            "koe" to "Koe no Katachi",
+        )
+        var validApiResponses = 0
+        var providerCandidates = 0
+        try {
+            for ((id, title) in works) {
+                capturedSignedApi.set(null)
+                val lookup = runCatching {
+                    withTimeout(55_000L) {
+                        gateway.lookup(
+                            providerId,
+                            ProviderReadingLookupRequest(
+                                titles = listOf(title),
+                                requestedLanguage = "en",
+                            ),
+                        )
+                    }
+                }.getOrNull()
+                val mangafireObserved = (lookup as? ProviderCallResult.Success)
+                    ?.value?.items?.count { it.externalWorkId.startsWith("mangafire:") }
+                    ?.coerceAtMost(99) ?: 0
+                if (mangafireObserved > 0) providerCandidates++
+
+                val signedApi = capturedSignedApi.getAndSet(null)
+                if (signedApi == null) {
+                    MangaAllInstrumentationVerdict.publish(
+                        "MANGAALL_A54_PROFILE|work=$id|outcome=INCONCLUSIVE" +
+                            "|reason=SIGNED_API_REQUEST_NOT_OBSERVED|mangafireCandidates=$mangafireObserved",
+                    )
+                    continue
+                }
+                val body = withContext(Dispatchers.IO) {
+                    runCatching {
+                        AndroidProviderBrowserHostService(
+                            context = context,
+                            policy = ProviderNetworkPolicy(setOf("https://mangafire.to")),
+                            providerProfileName = ProviderBrowserProfiles.nameFor(manifest.id),
+                            timeoutSeconds = 25L,
+                        ).use { it.readText(signedApi, "body") }
+                    }.getOrNull()
+                }
+                // A challenge interstitial or an HTML response cannot pass.
+                val validJson = body?.let {
+                    runCatching {
+                        val json = JSONObject(it)
+                        json.has("items") && json.optJSONArray("items") != null &&
+                            !json.has("error")
+                    }.getOrDefault(false)
+                } ?: false
+                if (validJson) validApiResponses++
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_A54_PROFILE|work=$id|outcome=" +
+                        (if (validJson) "SIGNED_API_JSON_VALID" else "INCONCLUSIVE") +
+                        "|mangafireCandidates=$mangafireObserved" +
+                        "|browserApi=" + (if (validJson) "VALID_JSON" else "BLOCKED_OR_UNVERIFIED"),
+                )
+            }
+        } finally {
+            capturedSignedApi.set(null)
+        }
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_A54_PROFILE|outcome=" +
+                (if (validApiResponses == 2) "BROWSER_SIGNED_API_ACCEPTED" else "INCONCLUSIVE") +
+                "|signedJson=$validApiResponses|works=2|providerCandidateWorks=$providerCandidates" +
+                "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+    }
+
+    /**
+     * GitHub Actions opt-in only: passive ordinary Android WebView navigation,
+     * then the ORIGINAL signed code10 generates the MangaFire API URL through
+     * a unified 3-source lookup. No user verification, captcha solving,
+     * session export, canonical grants, chapters or Reader claims.
+     *
+     * Green test-infrastructure does NOT imply successful MangaFire access.
+     * Runner checks a separate closed CI_SIGNED_API_ACCEPTED summary.
+     */
+    @Test(timeout = 300_000L)
+    fun mangaAllCode10CiWebviewSameProfile_checksRealSignedApi() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val args = InstrumentationRegistry.getArguments()
+        assertEquals(
+            "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE",
+            args.getString("mangaAllCiWebviewOptIn"),
+        )
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        MangaAllInstrumentationVerdict.publish("MANGAALL_CI_WEBVIEW|phase=STARTED")
+        MangaFireCiBrowserWarmupGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaFireCiBrowserWarmupActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        val warmup = withContext(Dispatchers.IO) {
+            MangaFireCiBrowserWarmupGate.await(35L)
+        }
+        MangaAllInstrumentationVerdict.publish("MANGAALL_CI_WEBVIEW|phase=WARMUP|outcome=$warmup")
+        if (warmup != "PROFILE_UNSUPPORTED" && warmup != "TLS_REJECTED" &&
+            warmup != "RENDERER_EXITED"
+        ) {
+            // The site may perform ordinary asynchronous JS verification.
+            // This does not interact with any challenge and is not a PASS.
+            withContext(Dispatchers.IO) { Thread.sleep(8_000L) }
+        }
+        instrumentation.runOnMainSync { activity.finish() }
+        if (warmup == "PROFILE_UNSUPPORTED") {
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_WEBVIEW|outcome=CI_INCONCLUSIVE|signedJson=0" +
+                    "|works=2|providerCandidateWorks=0|canonical=NOT_TESTED" +
+                    "|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+            )
+            return@runBlocking
+        }
+
+        val archive = instrumentation.context.assets.open("mangaall/code10-published-package.tsz")
+            .use { it.readBytes() }
+        assertEquals(
+            "bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f",
+            tachiyomi.core.provider.supplychain.sha256Hex(archive),
+        )
+        val manifest = ProviderPackageParser().parse(archive).manifest
+        assertEquals("app.tsuzuki.mangaall", manifest.id)
+        assertEquals(10L, manifest.version.code)
+        val providerId = ProviderId(manifest.id)
+        val capturedSignedApi = AtomicReference<String?>(null)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val url = chain.request().url
+                if (url.scheme == "https" && url.host == "mangafire.to" &&
+                    url.encodedPath == "/api/titles" &&
+                    !url.queryParameter("keyword").isNullOrBlank()
+                ) {
+                    // Ephemeral only: no raw URL, query or cookie leaves RAM.
+                    capturedSignedApi.set(url.toString())
+                }
+                chain.proceed(chain.request())
+            }
+            .callTimeout(25, TimeUnit.SECONDS)
+            .build()
+        val gateway = gateway(
+            main = "",
+            providerId = providerId,
+            networkOrigins = requireNotNull(manifest.permissions.network).origins,
+            browserOrigins = manifest.permissions.browser?.origins.orEmpty(),
+            localNetwork = false,
+            packageBytesOverride = archive,
+            baseHttpClient = client,
+        )
+        val works = listOf(
+            "punpun" to "Oyasumi Punpun",
+            "koe" to "Koe no Katachi",
+        )
+        var validApiResponses = 0
+        var providerCandidates = 0
+        try {
+            for ((id, title) in works) {
+                capturedSignedApi.set(null)
+                val lookup = runCatching {
+                    withTimeout(48_000L) {
+                        gateway.lookup(
+                            providerId,
+                            ProviderReadingLookupRequest(
+                                titles = listOf(title),
+                                requestedLanguage = "en",
+                            ),
+                        )
+                    }
+                }.getOrNull()
+                val mangaFireCount = (lookup as? ProviderCallResult.Success)
+                    ?.value?.items?.count { it.externalWorkId.startsWith("mangafire:") }
+                    ?.coerceAtMost(99) ?: 0
+                if (mangaFireCount > 0) providerCandidates++
+                val signedApi = capturedSignedApi.getAndSet(null)
+                val body = if (signedApi == null) {
+                    null
+                } else {
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            AndroidProviderBrowserHostService(
+                                context = context,
+                                policy = ProviderNetworkPolicy(setOf("https://mangafire.to")),
+                                providerProfileName = ProviderBrowserProfiles.nameFor(manifest.id),
+                                timeoutSeconds = 25L,
+                            ).use { it.readText(signedApi, "body") }
+                        }.getOrNull()
+                    }
+                }
+                val validJson = body?.let {
+                    runCatching {
+                        val json = JSONObject(it)
+                        json.has("items") && json.optJSONArray("items") != null &&
+                            !json.has("error")
+                    }.getOrDefault(false)
+                } ?: false
+                if (validJson) validApiResponses++
+                val apiOutcome = when {
+                    validJson -> "VALID_JSON"
+                    signedApi != null -> "BLOCKED"
+                    else -> "NOT_OBSERVED"
+                }
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_WEBVIEW|work=$id|api=$apiOutcome|candidates=$mangaFireCount",
+                )
+            }
+        } finally {
+            capturedSignedApi.set(null)
+        }
+        val outcome = if (validApiResponses == 2 && providerCandidates == 2) {
+            "CI_SIGNED_API_ACCEPTED"
+        } else {
+            "CI_INCONCLUSIVE"
+        }
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_CI_WEBVIEW|outcome=$outcome" +
+                "|signedJson=$validApiResponses|works=2|providerCandidateWorks=$providerCandidates" +
+                "|canonical=NOT_TESTED|chapters=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+    }
+
+    /** Verify native navigation classification with synthetic URLs only. */
+    @Test
+    fun mangaAllCiShapeNativeNavigationClassifier_offline() {
+        MangaFireCiShapeSolverGate.reset()
+        assertEquals("PENDING", MangaFireCiShapeSolverGate.lastNavigation("START"))
+        MangaFireCiShapeSolverGate.markNavigation("START", "about:blank")
+        MangaFireCiShapeSolverGate.markNavigation("COMMIT", "https://mangafire.to/@waf/solver")
+        MangaFireCiShapeSolverGate.markNavigation("FINISH", "https://unknown.invalid/path")
+        assertEquals("ABOUT", MangaFireCiShapeSolverGate.lastNavigation("START"))
+        assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastNavigation("COMMIT"))
+        assertEquals("OTHER", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
+        MangaFireCiShapeSolverGate.markNavigation("FINISH", "data:text/html,placeholder")
+        assertEquals("DATA", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
+        MangaFireCiShapeSolverGate.markNavigation("FINISH", null)
+        assertEquals("NO_URL", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
+        MangaFireCiShapeSolverGate.markJavaScriptProbe("BRIDGE_MISSING")
+        MangaFireCiShapeSolverGate.markDocumentOrigin("OPAQUE")
+        MangaFireCiShapeSolverGate.markFinishProbe("BRIDGE_READY", "EXPECTED")
+        assertEquals("BRIDGE_MISSING", MangaFireCiShapeSolverGate.lastJavaScriptProbe())
+        assertEquals("OPAQUE", MangaFireCiShapeSolverGate.lastDocumentOrigin())
+        assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+        assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
+        MangaFireCiShapeSolverGate.markFinishProbe("SECRET", "FOREIGN_URL")
+        assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+        assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
+    }
+
+    /** Offline, real Chromium multi-profile and origin-scoped WebMessage test. */
+    @Test(timeout = 80_000L)
+    fun mangaAllCiShapeSolverBridge_offlineWithoutNetwork() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        MangaFireCiShapeSolverGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaFireCiShapeSolverActivity::class.java)
+                .putExtra("ciOptIn", MangaFireCiShapeSolverGate.OFFLINE_ACK)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        try {
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.await(30))
+            assertEquals("DOCUMENT_READY", MangaFireCiShapeSolverGate.lastStage())
+            // A completed document must be sampled independently of the
+            // initial commit, without synthetic clearance or source traffic.
+            val finishDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe() == "PENDING" &&
+                System.nanoTime() < finishDeadline
+            ) {
+                Thread.sleep(50)
+            }
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
+    /**
+     * Real Chromium negative control. The exact solver HTML is loaded via
+     * data: instead of trusted HTTPS. A bridge event must never be accepted;
+     * the completed document must be classified without external traffic.
+     */
+    @Test(timeout = 80_000L)
+    fun mangaAllCiShapeSolverExactAsset_opaqueOriginFailsClosedOffline() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        MangaFireCiShapeSolverGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaFireCiShapeSolverActivity::class.java)
+                .putExtra("ciOptIn", MangaFireCiShapeSolverGate.OPAQUE_OFFLINE_ACK)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        try {
+            assertEquals("UNTRUSTED_ORIGIN", MangaFireCiShapeSolverGate.await(30))
+            assertFalse(MangaFireCiShapeSolverGate.hasDocumentReady())
+            assertEquals("OPAQUE", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
+            assertEquals("BRIDGE_MISSING", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+            assertTrue(
+                MangaFireCiShapeSolverGate.lastNavigation("FINISH") in setOf("DATA", "ABOUT"),
+            )
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
+    /**
+     * Uses the exact, unmodified debug solver HTML — not the minimal
+     * synthetic handshake — in an origin-scoped Chromium instance.
+     * Both WebSettings.blockNetworkLoads and request interception deny all
+     * subresources / challenge endpoints; no site traffic occurs.
+     */
+    @Test(timeout = 80_000L)
+    fun mangaAllCiShapeSolverExactAsset_offlineWithoutNetwork() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        MangaFireCiShapeSolverGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaFireCiShapeSolverActivity::class.java)
+                .putExtra("ciOptIn", MangaFireCiShapeSolverGate.ASSET_OFFLINE_ACK)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        try {
+            assertEquals("ASSET_BRIDGE_READY", MangaFireCiShapeSolverGate.await(45))
+            assertTrue("Real solver HTML did not post DOCUMENT_READY", MangaFireCiShapeSolverGate.hasDocumentReady())
+            // Independent runtime probe: it must not manufacture the
+            // DOCUMENT_READY stage or run any external network requests.
+            val probeDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (MangaFireCiShapeSolverGate.lastJavaScriptProbe() == "PENDING" &&
+                System.nanoTime() < probeDeadline
+            ) {
+                Thread.sleep(50)
+            }
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastJavaScriptProbe())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastDocumentOrigin())
+            val finishedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe() == "PENDING" &&
+                System.nanoTime() < finishedDeadline
+            ) {
+                Thread.sleep(50)
+            }
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
+            assertTrue(
+                "Real solver WebView never reached loadDataWithBaseURL",
+                MangaFireCiShapeSolverGate.lastNativeStage() in setOf(
+                    "LOAD_REQUESTED",
+                    "PAGE_COMMITTED",
+                    "PAGE_FINISHED",
+                ),
+            )
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
+    /**
+     * Network-setting differential, still ZERO upstream traffic. Executes the
+     * exact solver asset with WebSettings.blockNetworkLoads=false (live mode),
+     * but shouldInterceptRequest rejects every subresource/challenge request.
+     * This distinguishes WebView setting effects from live WAF/network effects.
+     */
+    @Test(timeout = 80_000L)
+    fun mangaAllCiShapeSolverExactAsset_interceptOfflineWithoutNetwork() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        MangaFireCiShapeSolverGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaFireCiShapeSolverActivity::class.java)
+                .putExtra("ciOptIn", MangaFireCiShapeSolverGate.INTERCEPT_OFFLINE_ACK)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        try {
+            assertEquals("ASSET_BRIDGE_READY", MangaFireCiShapeSolverGate.await(45))
+            assertTrue(
+                "Live WebSettings with fully intercepted network never emitted DOCUMENT_READY",
+                MangaFireCiShapeSolverGate.hasDocumentReady(),
+            )
+            val probeDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (MangaFireCiShapeSolverGate.lastJavaScriptProbe() == "PENDING" &&
+                System.nanoTime() < probeDeadline
+            ) {
+                Thread.sleep(50)
+            }
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastJavaScriptProbe())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastDocumentOrigin())
+            // In a fresh instrumentation process, the first full solver
+            // document must retain its source origin after page finish.
+            // This is an offline Chromium lifecycle proof, NOT MangaFire access.
+            val finishedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe() == "PENDING" &&
+                System.nanoTime() < finishedDeadline
+            ) {
+                Thread.sleep(50)
+            }
+            assertEquals("BRIDGE_READY", MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastFinishDocumentOrigin())
+            assertEquals("EXPECTED", MangaFireCiShapeSolverGate.lastNavigation("FINISH"))
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
+    /**
+     * CI-only source chapter gate on the same Android Browser Host profile.
+     * The original signed code10 performs one combined-source lookup per
+     * title; ONLY the unique returned MangaFire source HID is used to inspect
+     * real MangaFire chapter cursors. Nothing is bound canonically/persisted.
+     */
+    @Test(timeout = 480_000L)
+    fun mangaAllCode10CiWebviewMangaFireChapters_checksRealPagination() = runBlocking {
+        runMangaAllCiWebviewMangaFireChapterGate(
+            listOf("punpun" to "Oyasumi Punpun", "koe" to "Koe no Katachi"),
+        )
+    }
+
+    /** Three real signed code10 source lookups, on the same Android CI WebView. */
+    @Test(timeout = 720_000L)
+    fun mangaAllCode10CiWebviewThreeWorks_liveSourceAndChapterAudit() = runBlocking {
+        runMangaAllCiWebviewMangaFireChapterGate(
+            listOf(
+                "punpun" to "Oyasumi Punpun",
+                "koe" to "Koe no Katachi",
+                "akame" to "Akame ga Kill!",
+            ),
+            nativeBrowserTransport = InstrumentationRegistry.getArguments()
+                .getString("mangaAllCiNativeBrowserOptIn") == "I_ACCEPT_NATIVE_BROWSER_TRANSPORT",
+        )
+    }
+
+    /**
+     * Explicit opt-in shape-challenge prototype, debug-only. This is a
+     * dedicated CI scenario; ordinary source gate never invokes a solver.
+     */
+    @Test(timeout = 840_000L)
+    fun mangaAllCode10CiWebviewShapeSolverThreeWorks_liveSourceAndChapterAudit() = runBlocking {
+        runMangaAllCiWebviewMangaFireChapterGate(
+            listOf(
+                "punpun" to "Oyasumi Punpun",
+                "koe" to "Koe no Katachi",
+                "akame" to "Akame ga Kill!",
+            ),
+            runCiSolverPilot = true,
+        )
+    }
+
+    /**
+     * Captures only a closed challenge classification from the ORIGINAL
+     * signed provider HTTP response. peekBody is capped, leaves the response
+     * readable by code10, and performs no extra GET or WebView operation.
+     * An arbitrary HTML/403 is not evidence of a shape CAPTCHA.
+     */
+    private fun classifyMangaFire403(response: Response): String {
+        if (response.code != 403) return "NOT_403"
+        return runCatching {
+            val json = JSONObject(response.peekBody(1024).string())
+            if (json.optString("error") == "captcha_required") {
+                "SHAPE_REQUIRED"
+            } else {
+                "OTHER_JSON"
+            }
+        }.getOrDefault("UNCLASSIFIED")
+    }
+
+    @Test
+    fun mangaAllCiMangaFire403Classifier_offlineResponseOnly() {
+        fun response(code: Int, body: String): Response =
+            Response.Builder()
+                .request(
+                    okhttp3.Request.Builder()
+                        .url("https://mangafire.to/api/titles?keyword=fixture")
+                        .build(),
+                )
+                .protocol(Protocol.HTTP_1_1)
+                .code(code)
+                .message("Synthetic test only")
+                .body(body.toResponseBody())
+                .build()
+
+        response(403, """{"error":"captcha_required"}""").use {
+            assertEquals("SHAPE_REQUIRED", classifyMangaFire403(it))
+            assertEquals("""{"error":"captcha_required"}""", requireNotNull(it.body).string())
+        }
+        response(403, """{"error":"temporarily_unavailable"}""").use {
+            assertEquals("OTHER_JSON", classifyMangaFire403(it))
+        }
+        response(403, "<html>not a shape JSON error</html>").use {
+            assertEquals("UNCLASSIFIED", classifyMangaFire403(it))
+        }
+        response(200, """{"items":[]}""").use {
+            assertEquals("NOT_403", classifyMangaFire403(it))
+        }
+    }
+
+    private suspend fun runMangaAllCiWebviewMangaFireChapterGate(
+        works: List<Pair<String, String>>,
+        runCiSolverPilot: Boolean = false,
+        nativeBrowserTransport: Boolean = false,
+    ) {
+        require(works.size in 2..3)
+        require(!nativeBrowserTransport || (works.size == 3 && !runCiSolverPilot))
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        assertEquals(
+            "I_ACCEPT_MANGAFIRE_CI_WEBVIEW_LIVE",
+            InstrumentationRegistry.getArguments().getString("mangaAllCiWebviewOptIn"),
+        )
+        val context = instrumentation.targetContext
+        assertEquals("app.tsuzuki.dev", context.packageName)
+        if (works.size == 3) {
+            if (runCiSolverPilot) {
+                // Separate exact opt-in; never run the solver for the ordinary
+                // signed provider CI gate, app UI, or release builds.
+                assertEquals(
+                    MangaFireCiShapeSolverGate.ACK,
+                    InstrumentationRegistry.getArguments().getString("mangaAllCiShapeOptIn"),
+                )
+                MangaFireCiShapeSolverGate.reset()
+                val activity = instrumentation.startActivitySync(
+                    Intent(context, MangaFireCiShapeSolverActivity::class.java)
+                        .putExtra("ciOptIn", MangaFireCiShapeSolverGate.ACK)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                val solver = withContext(Dispatchers.IO) {
+                    MangaFireCiShapeSolverGate.await(100)
+                }
+                instrumentation.runOnMainSync { activity.finish() }
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_SOLVER|outcome=$solver|mode=DEBUG_ONLY",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_STAGE|last=${MangaFireCiShapeSolverGate.lastStage()}" +
+                        "|mode=DEBUG_ONLY",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_NATIVE|last=${MangaFireCiShapeSolverGate.lastNativeStage()}" +
+                        "|mode=DEBUG_ONLY",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_JS_PROBE|result=${MangaFireCiShapeSolverGate.lastJavaScriptProbe()}" +
+                        "|mode=DEBUG_ONLY",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_DOCUMENT|origin=${MangaFireCiShapeSolverGate.lastDocumentOrigin()}" +
+                        "|mode=DEBUG_ONLY",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_FINISH_JS_PROBE" +
+                        "|result=${MangaFireCiShapeSolverGate.lastFinishJavaScriptProbe()}" +
+                        "|mode=DEBUG_ONLY",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SHAPE_FINISH_DOCUMENT" +
+                        "|origin=${MangaFireCiShapeSolverGate.lastFinishDocumentOrigin()}" +
+                        "|mode=DEBUG_ONLY",
+                )
+                for (phase in listOf("START", "COMMIT", "FINISH")) {
+                    MangaAllInstrumentationVerdict.publish(
+                        "MANGAALL_CI_SHAPE_NAV|phase=$phase" +
+                            "|kind=${MangaFireCiShapeSolverGate.lastNavigation(phase)}" +
+                            "|mode=DEBUG_ONLY",
+                    )
+                }
+                if (solver != "SOLVED") {
+                    // Do not send another three-source request burst when
+                    // the dedicated site challenge has not been cleared.
+                    MangaAllInstrumentationVerdict.publish(
+                        "MANGAALL_CI_FIRE_SOURCE|outcome=INCONCLUSIVE" +
+                            "|ready=0|works=3|canonical=NOT_TESTED|unified=NOT_PROVEN",
+                    )
+                    MangaAllInstrumentationVerdict.publish(
+                        "MANGAALL_CI_CHAPTER|outcome=INCONCLUSIVE|ready=0|works=3" +
+                            "|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
+                    )
+                    return
+                }
+            } else {
+                // Challenged homepage navigation never helped the original CI
+                // API gate. No attempt to solve challenges without opt-in.
+                MangaAllInstrumentationVerdict.publish("MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=SKIPPED")
+            }
+        } else {
+            MangaFireCiBrowserWarmupGate.reset()
+            val activity = instrumentation.startActivitySync(
+                Intent(context, MangaFireCiBrowserWarmupActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            val warmup = withContext(Dispatchers.IO) {
+                MangaFireCiBrowserWarmupGate.await(35L)
+            }
+            MangaAllInstrumentationVerdict.publish("MANGAALL_CI_CHAPTER|phase=WARMUP|outcome=$warmup")
+            if (warmup != "PROFILE_UNSUPPORTED" && warmup != "TLS_REJECTED" &&
+                warmup != "RENDERER_EXITED"
+            ) {
+                withContext(Dispatchers.IO) { Thread.sleep(8_000L) }
+            }
+            instrumentation.runOnMainSync { activity.finish() }
+            if (warmup == "PROFILE_UNSUPPORTED") {
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_CHAPTER|outcome=INCONCLUSIVE|ready=0|works=${works.size}" +
+                        "|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
+                )
+                return
+            }
+        }
+
+        val archive = instrumentation.context.assets.open("mangaall/code10-published-package.tsz")
+            .use { it.readBytes() }
+        assertEquals(
+            "bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f",
+            tachiyomi.core.provider.supplychain.sha256Hex(archive),
+        )
+        val manifest = ProviderPackageParser().parse(archive).manifest
+        assertEquals("app.tsuzuki.mangaall", manifest.id)
+        assertEquals(10L, manifest.version.code)
+        val providerId = ProviderId(manifest.id)
+        val signedApi = AtomicReference<String?>(null)
+        val sourceHttp = AtomicReference("NONE")
+        val challenge403 = AtomicReference("NOT_OBSERVED")
+        // This is the actual signed provider Browser Host fallback, not a
+        // second independent request to the same API URL from the test.
+        val browserSuccess = AtomicInteger(0)
+        val browserAttempts = AtomicInteger(0)
+        val browserFailure = AtomicReference("NONE")
+        val nativeSearch = AtomicInteger(0)
+        val nativeChapterReads = AtomicInteger(0)
+        val nativeFailed = AtomicBoolean(false)
+        val nativeOriginRejected = AtomicBoolean(false)
+        val gateway = gateway(
+            main = "",
+            providerId = providerId,
+            networkOrigins = requireNotNull(manifest.permissions.network).origins,
+            browserOrigins = manifest.permissions.browser?.origins.orEmpty(),
+            localNetwork = false,
+            packageBytesOverride = archive,
+            browserDiagnosticSink = { observedProvider, detail ->
+                if (observedProvider == manifest.id && detail.sourceHost == "mangafire.to") {
+                    when (detail.phase.name) {
+                        "STARTED" -> browserAttempts.incrementAndGet()
+                        "SUCCEEDED" -> browserSuccess.incrementAndGet()
+                        "FAILED" -> browserFailure.set(
+                            when (detail.failure?.name) {
+                                "UPSTREAM_CHALLENGE", "HTTP_REJECTED", "TIMEOUT",
+                                "NAVIGATION", "TLS", "RENDERER_GONE",
+                                "WEBVIEW_UNSUPPORTED", "SELECTOR_MISSING", "CANCELLED",
+                                -> requireNotNull(detail.failure).name
+                                else -> "UNKNOWN"
+                            },
+                        )
+                    }
+                }
+            },
+            baseHttpClient = OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    val url = chain.request().url
+                    val isSignedMangaFireSearch = url.scheme == "https" &&
+                        url.host == "mangafire.to" &&
+                        url.encodedPath == "/api/titles" &&
+                        !url.queryParameter("keyword").isNullOrBlank()
+                    if (isSignedMangaFireSearch) signedApi.set(url.toString())
+                    if (nativeBrowserTransport && url.host == "mangafire.to") {
+                        // Test transport only: no HTTP request to MangaFire,
+                        // no cookie export, challenge solving or retry after
+                        // rejection. Other providers use the existing client.
+                        val allowed = url.scheme == "https" && url.port == 443 &&
+                            chain.request().method == "GET" &&
+                            Regex("/api/titles(?:/[A-Za-z0-9_-]{1,128}(?:/chapters)?)?")
+                                .matches(url.encodedPath)
+                        if (!allowed || nativeOriginRejected.get() || nativeFailed.get()) {
+                            nativeFailed.set(true)
+                            throw IOException("Native browser source unavailable")
+                        }
+                        browserAttempts.incrementAndGet()
+                        val body = try {
+                            runBlocking {
+                                AndroidProviderBrowserHostService(
+                                    context = context,
+                                    policy = ProviderNetworkPolicy(setOf("https://mangafire.to")),
+                                    providerProfileName = ProviderBrowserProfiles.nameFor(manifest.id),
+                                ).use { it.readText(url.toString(), "body") }
+                            }.also {
+                                val json = JSONObject(it)
+                                if (json.has("error")) {
+                                    browserFailure.set(
+                                        if (json.optString("error") == "captcha_required") {
+                                            "UPSTREAM_CHALLENGE"
+                                        } else {
+                                            "UNKNOWN"
+                                        },
+                                    )
+                                    throw IOException("Native browser rejected response")
+                                }
+                            }
+                        } catch (error: Exception) {
+                            nativeFailed.set(true)
+                            nativeOriginRejected.set(true)
+                            browserFailure.compareAndSet("NONE", classifyProviderBrowserFailure(error).name)
+                            throw IOException("Native browser source unavailable")
+                        }
+                        browserSuccess.incrementAndGet()
+                        if (isSignedMangaFireSearch) nativeSearch.incrementAndGet()
+                        if (url.encodedPath.endsWith("/chapters")) nativeChapterReads.incrementAndGet()
+                        // Local adapter envelope for the existing signed JS
+                        // HTTP contract. This is NOT an observed HTTP status.
+                        // The upstream Browser Host has already rejected 4xx/5xx.
+                        return@addInterceptor Response.Builder()
+                            .request(chain.request())
+                            .protocol(Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("Native Browser Host body")
+                            .body(body.toResponseBody())
+                            .build()
+                    }
+                    val response = chain.proceed(chain.request())
+                    if (isSignedMangaFireSearch) {
+                        sourceHttp.set(
+                            when (response.code) {
+                                200 -> "200"
+                                403 -> "403"
+                                else -> "OTHER"
+                            },
+                        )
+                        if (response.code == 403) {
+                            challenge403.set(classifyMangaFire403(response))
+                        }
+                    }
+                    response
+                }
+                .callTimeout(25, TimeUnit.SECONDS)
+                .build(),
+        )
+        var readyWorks = 0
+        var mangaFireSourceReadyWorks = 0
+        for ((id, title) in works) {
+            signedApi.set(null)
+            sourceHttp.set("NONE")
+            challenge403.set("NOT_OBSERVED")
+            browserSuccess.set(0)
+            browserAttempts.set(0)
+            browserFailure.set("NONE")
+            nativeSearch.set(0)
+            nativeChapterReads.set(0)
+            nativeFailed.set(false)
+            fun publishNativeEvidence() {
+                if (!nativeBrowserTransport) return
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_NATIVE|work=$id|search=${nativeSearch.get().coerceAtMost(99)}" +
+                        "|chapterReads=${nativeChapterReads.get().coerceAtMost(99)}" +
+                        "|rejected=" + (if (nativeFailed.get()) "YES" else "NO"),
+                )
+            }
+            // Code10 is a single three-source router with deferred source
+            // continuations. Page one alone does not establish an exhaustive
+            // MangaFire selection. Drain at most eight bounded Host pages.
+            val found = linkedMapOf<String, tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate>()
+            val sourceCandidates = mapOf(
+                "mangadex" to hashSetOf<String>(),
+                "mangadot" to hashSetOf<String>(),
+                "mangafire" to hashSetOf<String>(),
+            )
+            val seenLookupCursors = hashSetOf<String>()
+            var lookupCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+            var lookupPages = 0
+            var lookupOutcome = "CURSOR_LIMIT"
+            var mangaFireLookupComplete = false
+            var mangaDotPageFourPending = false
+            runCatching {
+                withTimeout(70_000L) {
+                    for (page in 0 until 8) {
+                        val response = withTimeout(20_000L) {
+                            gateway.lookup(
+                                providerId,
+                                ProviderReadingLookupRequest(
+                                    titles = listOf(title),
+                                    cursor = lookupCursor,
+                                    requestedLanguage = "en",
+                                ),
+                            )
+                        }
+                        if (response is ProviderCallResult.Failure) {
+                            // A pending MangaDot page 4 precisely matches its
+                            // deliberately bounded 3-page source search. This
+                            // is diagnostic attribution, not a source PASS.
+                            if (mangaDotPageFourPending) {
+                                MangaAllInstrumentationVerdict.publish(
+                                    "MANGAALL_CI_LOOKUP_BLOCKER|work=$id|source=MANGADOT" +
+                                        "|reason=PAGE_FOUR_PENDING",
+                                )
+                            }
+                            val error = response.error
+                            val cause = when (error.sourceFailureCode?.name) {
+                                "CHALLENGE_BLOCKED" -> "CHALLENGE_BLOCKED"
+                                "HTTP_ERROR" -> "HTTP_ERROR"
+                                "INVALID_RESPONSE" -> "INVALID_RESPONSE"
+                                "UNCLASSIFIED_ERROR" -> "UNCLASSIFIED_ERROR"
+                                else -> "NONE"
+                            }
+                            val status = when (error.httpStatus) {
+                                200 -> "200"
+                                403 -> "403"
+                                null -> "NONE"
+                                else -> "OTHER"
+                            }
+                            MangaAllInstrumentationVerdict.publish(
+                                "MANGAALL_CI_CHAPTER|work=$id|phase=LOOKUP_FAILURE" +
+                                    "|cause=$cause|http=$status",
+                            )
+                            lookupOutcome = when (error.code.name) {
+                                "SOURCE_READ_ERROR" -> "READ_ERROR"
+                                "SOURCE_TOO_LARGE" -> "TOO_LARGE"
+                                "TIMEOUT" -> "TIMEOUT"
+                                else -> "OTHER"
+                            }
+                            break
+                        }
+                        val success = response as ProviderCallResult.Success
+                        lookupPages++
+                        for (candidate in success.value.items) {
+                            val source = sourceCandidates.keys.firstOrNull {
+                                candidate.externalWorkId.startsWith("$it:")
+                            }
+                            if (source == null) {
+                                lookupOutcome = "INVALID_IDENTITY"
+                                break
+                            }
+                            requireNotNull(sourceCandidates[source]).add(candidate.externalWorkId)
+                            if (source != "mangafire") continue
+                            val workId = candidate.externalWorkId
+                            if (!Regex("mangafire:[A-Za-z0-9_-]{1,128}").matches(workId)) {
+                                lookupOutcome = "INVALID_IDENTITY"
+                                break
+                            }
+                            val prior = found[workId]
+                            if (prior != null && prior.title != candidate.title) {
+                                lookupOutcome = "IDENTITY_CONFLICT"
+                                break
+                            }
+                            found[workId] = candidate
+                        }
+                        if (lookupOutcome == "INVALID_IDENTITY" || lookupOutcome == "IDENTITY_CONFLICT") {
+                            break
+                        }
+                        val next = success.value.nextCursor
+                        if (next == null) {
+                            mangaFireLookupComplete = true
+                            lookupOutcome = "COMPLETE"
+                            break
+                        }
+                        // Inspect only the source names and bounded, non-PII
+                        // pagination shape of our own signed router cursor.
+                        // A V2 deferred failure is NOT complete source proof.
+                        // Never publish the cursor or its source-specific IDs.
+                        val state = runCatching { JSONObject(next.value) }.getOrNull()
+                        val pending = state?.optJSONObject("remaining")
+                        val originalCursor = state?.optInt("v") == 1 && pending != null &&
+                            state.optJSONObject("failure") == null
+                        if (originalCursor && !requireNotNull(pending).has("mangafire")) {
+                            mangaFireLookupComplete = true
+                        }
+                        mangaDotPageFourPending = originalCursor &&
+                            requireNotNull(pending).length() == 1 &&
+                            pending.optString("mangadot") == "4"
+                        if (!seenLookupCursors.add(next.value)) break
+                        lookupCursor = next
+                    }
+                }
+            }.onFailure {
+                lookupOutcome = "TIMEOUT"
+            }
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_CHAPTER|work=$id|phase=LOOKUP|outcome=$lookupOutcome" +
+                    "|pages=$lookupPages|candidates=${found.size.coerceAtMost(99)}",
+            )
+            for (source in listOf("mangadex", "mangadot", "mangafire")) {
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_SOURCE|work=$id|source=$source" +
+                        "|candidates=${requireNotNull(sourceCandidates[source]).size.coerceAtMost(99)}" +
+                        "|lookup=" + (if (lookupOutcome == "COMPLETE") "COMPLETE" else "PARTIAL"),
+                )
+            }
+            val signedUrl = signedApi.getAndSet(null)
+            val urlSeen = if (signedUrl != null) "OBSERVED" else "NOT_OBSERVED"
+            val transport = when {
+                signedUrl == null -> "NONE"
+                sourceHttp.get() == "200" -> "HTTP"
+                browserSuccess.get() > 0 -> "BROWSER"
+                else -> "NONE"
+            }
+            // Source-backed evidence is accepted only when the unchanged
+            // signed provider parsed a real API list into precisely one
+            // MangaFire source candidate. A browser-navigation success alone
+            // is NEVER JSON proof. Unlike the old gate this makes no duplicate
+            // test-owned GET, which previously followed the provider HTTP GET
+            // and its own Browser Host fallback during each lookup.
+            val mangaFireCandidates = requireNotNull(sourceCandidates["mangafire"]).size
+            val sourceJson = if (signedUrl != null &&
+                mangaFireCandidates == 1 &&
+                transport != "NONE"
+            ) {
+                "VALIDATED"
+            } else {
+                "UNVERIFIED"
+            }
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_CHAPTER|work=$id|phase=API|signedUrl=$urlSeen" +
+                    "|http=${sourceHttp.get()}|transport=$transport|json=$sourceJson",
+            )
+            if (sourceHttp.get() == "403") {
+                // The already-observed response, no duplicate source call.
+                // Never publish the JSON, challenge HTML or request URL.
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_FIRE_403|work=$id|kind=${challenge403.get()}",
+                )
+            }
+            // Typed, response-body-free evidence from the very same Browser Host
+            // invocation used by the signed code10 adapter. A 403 followed by
+            // an unavailable WebView is not equivalent to a JSON-bearing 200.
+            val browserOutcome = when {
+                browserSuccess.get() > 0 -> "SUCCEEDED"
+                browserFailure.get() != "NONE" -> browserFailure.get()
+                browserAttempts.get() > 0 -> "NO_RESULT"
+                else -> "NOT_USED"
+            }
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_BROWSER_FALLBACK|work=$id" +
+                    "|attempts=${browserAttempts.get().coerceAtMost(9)}|outcome=$browserOutcome",
+            )
+            // Inspect a MangaFire candidate even if another source has a
+            // deferred lookup failure. This is diagnostic evidence ONLY: a
+            // globally incomplete lookup cannot yield READY/canonical binding.
+            val workId = if (lookupOutcome == "INVALID_IDENTITY" ||
+                lookupOutcome == "IDENTITY_CONFLICT"
+            ) {
+                null
+            } else {
+                found.keys.singleOrNull()
+            }
+            if (workId == null) {
+                val reason = when {
+                    lookupOutcome != "COMPLETE" -> "LOOKUP_INCOMPLETE"
+                    found.size > 1 -> "LOOKUP_AMBIGUOUS"
+                    else -> "LOOKUP_UNAVAILABLE"
+                }
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_CHAPTER|work=$id|outcome=INCONCLUSIVE|pages=0|count=0" +
+                        "|chapterOne=UNVERIFIED|reason=$reason",
+                )
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_CI_FIRE_SOURCE|work=$id|lookup=INCOMPLETE" +
+                        "|api=$sourceJson|chapters=INCOMPLETE|chapterOne=UNVERIFIED" +
+                        "|outcome=INCONCLUSIVE",
+                )
+                publishNativeEvidence()
+                continue
+            }
+
+            val binding = ProviderBindingRef(providerId, "en", requireNotNull(workId))
+            val chapterIds = hashSetOf<String>()
+            val chapterOneIds = hashSetOf<String>()
+            val seenCursors = hashSetOf<String>()
+            var cursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+            var pages = 0
+            var reason = "CURSOR_LIMIT"
+            var complete = false
+            for (page in 0 until 4) {
+                val response = runCatching {
+                    withTimeout(24_000L) {
+                        gateway.chapters(
+                            providerId,
+                            ProviderReadingChaptersRequest(binding, cursor = cursor),
+                        )
+                    }
+                }.getOrNull()
+                if (response == null) {
+                    reason = "TIMEOUT"
+                    break
+                }
+                if (response is ProviderCallResult.Failure) {
+                    reason = when (response.error.code.name) {
+                        "SOURCE_TOO_LARGE" -> "SOURCE_TOO_LARGE"
+                        "SOURCE_READ_ERROR" -> "SOURCE_READ_ERROR"
+                        "TIMEOUT" -> "TIMEOUT"
+                        else -> "OTHER"
+                    }
+                    break
+                }
+                val success = response as ProviderCallResult.Success
+                pages++
+                val chapterIdFormat = Regex("mangafire:[A-Za-z0-9_-]{1,128}")
+                val invalidIdentity = success.value.items.any {
+                    !chapterIdFormat.matches(it.providerChapterId)
+                }
+                if (invalidIdentity) {
+                    reason = "INVALID_IDENTITY"
+                    break
+                }
+                for (chapter in success.value.items) {
+                    if (chapter.language != null && chapter.language != "en") continue
+                    chapterIds.add(chapter.providerChapterId)
+                    if (chapter.rawNumber == 1.0 && chapter.volume == null) {
+                        chapterOneIds.add(chapter.providerChapterId)
+                    }
+                }
+                val next = success.value.nextCursor
+                if (next == null) {
+                    complete = true
+                    break
+                }
+                if (!seenCursors.add(next.toString())) break
+                cursor = next
+            }
+            val outcomeReason = when {
+                !complete -> reason
+                lookupOutcome != "COMPLETE" -> "LOOKUP_INCOMPLETE"
+                chapterIds.isEmpty() -> "EMPTY"
+                chapterOneIds.size != 1 -> "CHAPTER_ONE_NOT_ATTESTED"
+                else -> "NONE"
+            }
+            val chapterOne = when (chapterOneIds.size) {
+                1 -> "YES"
+                0 -> "NO"
+                else -> "MULTIPLE"
+            }
+            val ready = outcomeReason == "NONE"
+            if (ready) readyWorks++
+            val sourceReady = mangaFireLookupComplete && sourceJson == "VALIDATED" &&
+                found.size == 1 && complete && chapterIds.isNotEmpty() &&
+                chapterOneIds.size == 1 && reason != "INVALID_IDENTITY" &&
+                lookupOutcome != "INVALID_IDENTITY" && lookupOutcome != "IDENTITY_CONFLICT"
+            if (sourceReady) mangaFireSourceReadyWorks++
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_FIRE_SOURCE|work=$id" +
+                    "|lookup=" + (if (mangaFireLookupComplete) "COMPLETE" else "INCOMPLETE") +
+                    "|api=$sourceJson" +
+                    "|chapters=" + (if (complete) "COMPLETE" else "INCOMPLETE") +
+                    "|chapterOne=$chapterOne" +
+                    "|outcome=" + (if (sourceReady) "SOURCE_READY" else "INCONCLUSIVE"),
+            )
+            publishNativeEvidence()
+            val chapterOutcome = if (ready) "READY" else "INCONCLUSIVE"
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_CI_CHAPTER|work=$id|outcome=$chapterOutcome" +
+                    "|pages=$pages|count=${chapterIds.size.coerceAtMost(999)}" +
+                    "|chapterOne=$chapterOne|reason=$outcomeReason",
+            )
+        }
+        val sourceGate = if (mangaFireSourceReadyWorks == works.size) {
+            "SOURCE_CHAPTERS_ACCEPTED"
+        } else {
+            "INCONCLUSIVE"
+        }
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_CI_FIRE_SOURCE|outcome=$sourceGate" +
+                "|ready=$mangaFireSourceReadyWorks|works=${works.size}" +
+                "|canonical=NOT_TESTED|unified=NOT_PROVEN",
+        )
+        val chapterGate = if (readyWorks == works.size) "CHAPTERS_ACCEPTED" else "INCONCLUSIVE"
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_CI_CHAPTER|outcome=$chapterGate" +
+                "|ready=$readyWorks|works=${works.size}|canonical=NOT_TESTED|readerPixels=NOT_TESTED",
+        )
+    }
+
     private suspend fun runPublishedMangaAllLivePages(signedCode: Long) {
         require(signedCode == 8L || signedCode == 9L || signedCode == 10L)
 
@@ -2753,6 +4092,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         onRegistry: (DefaultProviderRegistry) -> Unit = {},
         packageBytesOverride: ByteArray? = null,
         baseHttpClient: OkHttpClient = OkHttpClient(),
+        browserDiagnosticSink: (String, ProviderBrowserDiagnostic) -> Unit = { _, _ -> },
         repositoryId: String = REPOSITORY_ID,
         packageVersionCode: Long = 1L,
         packageVersionName: String = "1.0.1",
@@ -2819,6 +4159,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 storageRoot = storageRoot,
                 managedFiles = managedFileStore,
                 baseHttpClient = baseHttpClient,
+                browserDiagnosticSink = browserDiagnosticSink,
             ),
             bindingObserver = onBindingPhase,
         )

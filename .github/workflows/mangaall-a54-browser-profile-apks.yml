@@ -1,0 +1,102 @@
+name: MangaALL — physical A54 same-profile browser verification APK (compile only)
+# Build a separate debug APK and instrumentation package; CI never initiates
+# MangaFire traffic or claims a physical Android acceptance result.
+on:
+  push:
+    branches: ['probe/mangaall-a54-browser-profile-validation-*']
+    paths:
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderBrowserProfiles.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderHostInvocation.kt'
+      - 'app/src/debug/AndroidManifest.xml'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/ProviderBrowserProfilesTest.kt'
+      - 'app/src/debug/java/eu/kanade/tachiyomi/provider/runtime/MangaFireBrowserSessionTestActivity.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
+      - '.github/scripts/run_mangaall_a54_browser_profile.sh'
+      - '.github/scripts/run_mangaall_a54_termux.sh'
+      - '.github/workflows/mangaall-a54-browser-profile-apks.yml'
+      - 'docs/mangaall-a54-interactive-browser-profile-validation-20261122.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-test-apks:
+    name: Test-only UI and real signed-code10 instrumentation — no live source traffic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 95
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preflight physical-device-only runner and debug-only UI
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/run_mangaall_a54_browser_profile.sh
+          bash -n .github/scripts/run_mangaall_a54_termux.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          activity = Path('app/src/debug/java/eu/kanade/tachiyomi/provider/runtime/MangaFireBrowserSessionTestActivity.kt')
+          main = Path('app/src/main/AndroidManifest.xml').read_text()
+          debug = Path('app/src/debug/AndroidManifest.xml').read_text()
+          runner = Path('.github/scripts/run_mangaall_a54_browser_profile.sh').read_text()
+          assert activity.is_file()
+          assert 'MangaFireBrowserSessionTestActivity' in debug
+          assert 'MangaFireBrowserSessionTestActivity' not in main
+          assert 'I_ACCEPT_MANGAFIRE_A54_INTERACTIVE_TEST' in runner
+          assert 'PHYSICAL_A54_REQUIRED' in runner
+          assert not any(line.lstrip().startswith(('adb uninstall ', 'adb shell pm clear ', 'device uninstall ', 'device shell pm clear ')) for line in runner.splitlines())
+          print('MANGAALL_A54_BROWSER_PREFLIGHT|testUi=DEBUG_ONLY|realPhone=REQUIRED|release=UNCHANGED|live=NOT_STARTED')
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 195502f981bd776a68feebde3efc6d20f55cca65
+          path: signed-code10
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Stage immutable P-256 code10 archive for debug instrumentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd signed-code10 && node tooling/verify_index.mjs)
+          python3 - <<'PY'
+          import hashlib, json, shutil
+          from pathlib import Path
+          root=Path('signed-code10')
+          index=json.loads((root/'dist/index.payload.json').read_text())
+          assert index['repositoryId']=='app.tsuzuki.providers' and index['sequence']==36
+          entries=[p for p in index['providers'] if p['providerId']=='app.tsuzuki.mangaall']
+          assert len(entries)==1
+          entry=entries[0]
+          expected='bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f'
+          assert entry['versionCode']==10 and entry['versionName']=='0.5.5' and entry['sha256']==expected
+          original=root/'dist/providers/app.tsuzuki.mangaall-10.tsz'
+          assert hashlib.sha256(original.read_bytes()).hexdigest()==expected
+          destination=Path('app/src/androidTest/assets/mangaall/code10-published-package.tsz')
+          destination.parent.mkdir(parents=True,exist_ok=True)
+          shutil.copyfile(original,destination)
+          print('MANGAALL_A54_PACKAGE|code=10|sequence=36|package=ORIGINAL_SIGNED|live=NOT_STARTED')
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Format gate and compile debug UI plus signed-code10 instrumentation
+        run: |
+          ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest
+          ./gradlew :app:testDebugUnitTest --tests eu.kanade.tachiyomi.provider.runtime.ProviderBrowserProfilesTest
+      - name: Publish only debug/test APKs for one manual physical session
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-a54-debug-profile-test-apks
+          path: |
+            app/build/outputs/apk/debug/*universal*.apk
+            app/build/outputs/apk/androidTest/debug/*.apk
+          if-no-files-found: error
+          retention-days: 3

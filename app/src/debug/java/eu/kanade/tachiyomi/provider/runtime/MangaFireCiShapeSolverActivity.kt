@@ -1,0 +1,464 @@
+package eu.kanade.tachiyomi.provider.runtime
+
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.net.Uri
+import android.net.http.SslError
+import android.os.Bundle
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.SslErrorHandler
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import java.io.ByteArrayInputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+
+/**
+ * Opt-in, debug/CI-only investigation of the same-site MangaFire shape challenge.
+ *
+ * Uses a bounded (at most 4 challenge trials), Apache-2.0-attributed Keiyoushi
+ * solver asset. Never exports clearance cookies, captcha images, request URLs,
+ * response bodies, WebView storage or JS bridge data other than closed verdict
+ * and fixed enumerated, non-sensitive progress stages.
+ * Production Browser Host and signed MangaALL code10 remain unchanged.
+ *
+ * The caller MUST still validate real signed provider API JSON and chapters.
+ */
+internal object MangaFireCiShapeSolverGate {
+    const val ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_LIVE"
+    const val OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_OFFLINE"
+    const val ASSET_OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_ASSET_OFFLINE"
+    const val INTERCEPT_OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_INTERCEPT_OFFLINE"
+    const val OPAQUE_OFFLINE_ACK = "I_ACCEPT_MANGAFIRE_SHAPE_SOLVER_CI_OPAQUE_OFFLINE"
+
+    private val latch = AtomicReference(CountDownLatch(1))
+    private val status = AtomicReference("TIMEOUT")
+    private val milestone = AtomicReference("NO_EVENT")
+    private val nativeStage = AtomicReference("NO_EVENT")
+    private val javaScriptProbe = AtomicReference("PENDING")
+    private val documentOrigin = AtomicReference("PENDING")
+    private val finishJavaScriptProbe = AtomicReference("PENDING")
+    private val finishDocumentOrigin = AtomicReference("PENDING")
+    private val navigationStart = AtomicReference("PENDING")
+    private val navigationCommit = AtomicReference("PENDING")
+    private val navigationFinish = AtomicReference("PENDING")
+    private val documentReady = AtomicBoolean(false)
+    private val permittedNativeStages = setOf(
+        "ACTIVITY_CREATED",
+        "ASSET_READY",
+        "PROFILE_READY",
+        "LISTENER_REGISTERED",
+        "LOAD_REQUESTED",
+        "PAGE_COMMITTED",
+        "PAGE_FINISHED",
+    )
+    private val permittedStages = setOf(
+        "DOCUMENT_READY",
+        "OPENCV_IMPORTED",
+        "OPENCV_IMPORT_FAILED",
+        "SOLVER_RUNNING",
+        "GENERATE_STARTED",
+        "GENERATE_OK",
+        "GENERATE_HTTP_ERROR",
+        "VERIFY_STARTED",
+        "VERIFY_OK",
+        "VERIFY_HTTP_ERROR",
+    )
+
+    fun reset() {
+        status.set("TIMEOUT")
+        milestone.set("NO_EVENT")
+        nativeStage.set("NO_EVENT")
+        javaScriptProbe.set("PENDING")
+        documentOrigin.set("PENDING")
+        finishJavaScriptProbe.set("PENDING")
+        finishDocumentOrigin.set("PENDING")
+        navigationStart.set("PENDING")
+        navigationCommit.set("PENDING")
+        navigationFinish.set("PENDING")
+        documentReady.set(false)
+        latch.set(CountDownLatch(1))
+    }
+
+    fun complete(outcome: String) {
+        require(
+            outcome in setOf(
+                "SOLVED",
+                "UNSOLVED",
+                "UNSUPPORTED",
+                "HTTP_REJECTED",
+                "NAVIGATION_FAILED",
+                "TLS_REJECTED",
+                "RENDERER_EXITED",
+                "ASSET_INVALID",
+                "BRIDGE_READY",
+                "ASSET_BRIDGE_READY",
+                "UNTRUSTED_ORIGIN",
+            ),
+        )
+        if (status.compareAndSet("TIMEOUT", outcome)) {
+            latch.get().countDown()
+        }
+    }
+
+    fun markStage(value: String) {
+        if (value in permittedStages) {
+            if (value == "DOCUMENT_READY") documentReady.set(true)
+            milestone.set(value)
+        }
+    }
+
+    fun markNativeStage(value: String) {
+        if (value in permittedNativeStages) nativeStage.set(value)
+    }
+
+    fun lastNativeStage(): String = nativeStage.get()
+
+    fun markJavaScriptProbe(result: String) {
+        if (result in setOf("BRIDGE_READY", "BRIDGE_MISSING", "JS_UNAVAILABLE")) {
+            javaScriptProbe.set(result)
+        }
+    }
+
+    fun lastJavaScriptProbe(): String = javaScriptProbe.get()
+
+    fun markDocumentOrigin(result: String) {
+        if (result in setOf("EXPECTED", "SAME_SITE", "OPAQUE", "FOREIGN", "JS_UNAVAILABLE")) {
+            documentOrigin.set(result)
+        }
+    }
+
+    fun lastDocumentOrigin(): String = documentOrigin.get()
+
+    fun markFinishProbe(bridge: String, origin: String) {
+        if (bridge in setOf("BRIDGE_READY", "BRIDGE_MISSING", "JS_UNAVAILABLE")) {
+            finishJavaScriptProbe.set(bridge)
+        }
+        if (origin in setOf("EXPECTED", "SAME_SITE", "OPAQUE", "FOREIGN", "JS_UNAVAILABLE")) {
+            finishDocumentOrigin.set(origin)
+        }
+    }
+
+    fun lastFinishJavaScriptProbe(): String = finishJavaScriptProbe.get()
+
+    fun lastFinishDocumentOrigin(): String = finishDocumentOrigin.get()
+
+    // Never expose the callback URL. The JavaScript origin and the native
+    // navigation target are independent diagnostics of the document lifecycle.
+    private fun classifyNavigation(url: String?): String {
+        val uri = url?.let(Uri::parse) ?: return "NO_URL"
+        return when {
+            uri.scheme == "https" && uri.host == "mangafire.to" &&
+                uri.port == -1 && uri.encodedPath == "/@waf/solver" -> "EXPECTED"
+            uri.scheme == "https" && uri.host == "mangafire.to" && uri.port == -1 -> "SAME_SITE"
+            uri.scheme == "about" -> "ABOUT"
+            uri.scheme == "data" -> "DATA"
+            else -> "OTHER"
+        }
+    }
+
+    fun markNavigation(phase: String, url: String?) {
+        val result = classifyNavigation(url)
+        when (phase) {
+            "START" -> navigationStart.set(result)
+            "COMMIT" -> navigationCommit.set(result)
+            "FINISH" -> navigationFinish.set(result)
+        }
+    }
+
+    fun lastNavigation(phase: String): String = when (phase) {
+        "START" -> navigationStart.get()
+        "COMMIT" -> navigationCommit.get()
+        "FINISH" -> navigationFinish.get()
+        else -> "NO_URL"
+    }
+
+    fun hasDocumentReady(): Boolean = documentReady.get()
+
+    fun lastStage(): String = milestone.get()
+
+    fun await(seconds: Long): String {
+        require(seconds in 1..120)
+        latch.get().await(seconds, TimeUnit.SECONDS)
+        return status.get()
+    }
+}
+
+class MangaFireCiShapeSolverActivity : Activity() {
+    private var page: WebView? = null
+    private var intentionallyOpaqueOffline = false
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val optIn = intent?.getStringExtra("ciOptIn")
+        val bridgeOnly = optIn == MangaFireCiShapeSolverGate.OFFLINE_ACK
+        val exactAssetOffline = optIn == MangaFireCiShapeSolverGate.ASSET_OFFLINE_ACK
+        val interceptOffline = optIn == MangaFireCiShapeSolverGate.INTERCEPT_OFFLINE_ACK
+        val opaqueOffline = optIn == MangaFireCiShapeSolverGate.OPAQUE_OFFLINE_ACK
+        intentionallyOpaqueOffline = opaqueOffline
+        if (!bridgeOnly && !exactAssetOffline && !interceptOffline && !opaqueOffline &&
+            optIn != MangaFireCiShapeSolverGate.ACK
+        ) {
+            finish()
+            return
+        }
+        MangaFireCiShapeSolverGate.markNativeStage("ACTIVITY_CREATED")
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE) ||
+            !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
+        ) {
+            MangaFireCiShapeSolverGate.complete("UNSUPPORTED")
+            finish()
+            return
+        }
+        val html = if (bridgeOnly) {
+            // No external script, WAF endpoint, image, or HTTP request. The
+            // same-origin JS bridge can be tested in CI without a challenge.
+            "<!doctype html><html><head><script>" +
+                "bridge.postMessage('stage:DOCUMENT_READY');" +
+                "setTimeout(() => bridge.postMessage('probe'), 0);" +
+                "</script></head><body></body></html>"
+        } else {
+            runCatching {
+                assets.open("mangafire-ci-solver.html").bufferedReader().use { it.readText() }
+            }.getOrNull()
+        }
+        if (html.isNullOrBlank() || !html.contains("bridge.postMessage")) {
+            MangaFireCiShapeSolverGate.complete("ASSET_INVALID")
+            finish()
+            return
+        }
+        MangaFireCiShapeSolverGate.markNativeStage("ASSET_READY")
+        val view = WebView(this)
+        page = view
+        WebViewCompat.setProfile(view, ProviderBrowserProfiles.nameFor("app.tsuzuki.mangaall"))
+        MangaFireCiShapeSolverGate.markNativeStage("PROFILE_READY")
+        view.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            allowFileAccess = false
+            allowContentAccess = false
+            // The intercepted offline variant keeps this setting identical to
+            // live, but still denies EVERY resource in shouldInterceptRequest.
+            // No browser or source traffic is permitted in any offline mode.
+            blockNetworkLoads = bridgeOnly || exactAssetOffline || opaqueOffline
+            javaScriptCanOpenWindowsAutomatically = false
+            setSupportMultipleWindows(false)
+        }
+
+        WebViewCompat.addWebMessageListener(
+            view,
+            "bridge",
+            setOf("https://mangafire.to"),
+        ) { _, message, sourceOrigin, isMainFrame, _ ->
+            if (isMainFrame &&
+                sourceOrigin.scheme == "https" &&
+                sourceOrigin.host == "mangafire.to"
+            ) {
+                if (bridgeOnly) {
+                    when (message.data) {
+                        "stage:DOCUMENT_READY" -> MangaFireCiShapeSolverGate.markStage("DOCUMENT_READY")
+                        "probe" -> MangaFireCiShapeSolverGate.complete("BRIDGE_READY")
+                    }
+                } else if (exactAssetOffline || interceptOffline || opaqueOffline) {
+                    // Execute the EXACT debug asset in Chromium with ALL
+                    // requests intercepted. The first inline script must
+                    // attest that the origin-scoped bridge actually works.
+                    // No CAPTCHA data, HTTP or JS payload is surfaced.
+                    val stageRecord = message.data
+                    if (stageRecord?.startsWith("stage:") == true) {
+                        val stage = stageRecord.removePrefix("stage:")
+                        MangaFireCiShapeSolverGate.markStage(stage)
+                        if (stage == "DOCUMENT_READY") {
+                            MangaFireCiShapeSolverGate.complete("ASSET_BRIDGE_READY")
+                        }
+                    }
+                } else {
+                    when (message.data) {
+                        "true" -> MangaFireCiShapeSolverGate.complete("SOLVED")
+                        "false" -> MangaFireCiShapeSolverGate.complete("UNSOLVED")
+                        else -> {
+                            val stageRecord = message.data
+                            if (stageRecord?.startsWith("stage:") == true) {
+                                MangaFireCiShapeSolverGate.markStage(stageRecord.removePrefix("stage:"))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        MangaFireCiShapeSolverGate.markNativeStage("LISTENER_REGISTERED")
+        view.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                MangaFireCiShapeSolverGate.markNavigation("START", url)
+            }
+
+            override fun onPageCommitVisible(view: WebView?, url: String?) {
+                MangaFireCiShapeSolverGate.markNativeStage("PAGE_COMMITTED")
+                MangaFireCiShapeSolverGate.markNavigation("COMMIT", url)
+                probeDocument(view, "COMMIT")
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                MangaFireCiShapeSolverGate.markNativeStage("PAGE_FINISHED")
+                MangaFireCiShapeSolverGate.markNavigation("FINISH", url)
+                probeDocument(view, "FINISH")
+            }
+
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                if (request?.isForMainFrame != true) return false
+                val target = request.url
+                // Never navigate to unapproved login, solver or redirect origins.
+                if (target.scheme != "https" || target.host != "mangafire.to" ||
+                    target.port != -1 || target.encodedPath != "/@waf/solver"
+                ) {
+                    MangaFireCiShapeSolverGate.complete("NAVIGATION_FAILED")
+                    return true
+                }
+                return false
+            }
+
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: WebResourceRequest?,
+            ): WebResourceResponse? {
+                if (request == null) return null
+                if (bridgeOnly || exactAssetOffline || interceptOffline || opaqueOffline) return blockedResponse()
+                val uri = request.url
+                val sameSiteSolver = uri.host == "mangafire.to" &&
+                    uri.encodedPath in setOf("/@waf/generate", "/@waf/verify")
+                val trustedOpenCv = uri.host == "docs.opencv.org" &&
+                    uri.encodedPath == "/5.0/opencv.js"
+                val allowed = uri.scheme == "https" && uri.port == -1 &&
+                    (sameSiteSolver || trustedOpenCv)
+                return if (allowed) null else blockedResponse()
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                response: WebResourceResponse?,
+            ) {
+                if (!exactAssetOffline && !interceptOffline && !bridgeOnly && !opaqueOffline &&
+                    response != null && response.statusCode >= 400 &&
+                    request?.url?.host == "mangafire.to" &&
+                    request?.url?.encodedPath?.startsWith("/@waf/") == true
+                ) {
+                    MangaFireCiShapeSolverGate.complete("HTTP_REJECTED")
+                }
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?,
+            ) {
+                if (!bridgeOnly && !exactAssetOffline && !interceptOffline && !opaqueOffline &&
+                    request != null && request.url.scheme == "https" &&
+                    request.url.host in setOf("mangafire.to", "docs.opencv.org")
+                ) {
+                    MangaFireCiShapeSolverGate.complete("NAVIGATION_FAILED")
+                }
+            }
+
+            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                handler?.cancel()
+                MangaFireCiShapeSolverGate.complete("TLS_REJECTED")
+            }
+
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                MangaFireCiShapeSolverGate.complete("RENDERER_EXITED")
+                return true
+            }
+        }
+
+        setContentView(view)
+        MangaFireCiShapeSolverGate.markNativeStage("LOAD_REQUESTED")
+        // Base origin is exactly the user-facing site. Only @waf endpoints
+        // and a single fixed OpenCV.js asset may be requested by this pilot.
+        if (opaqueOffline) {
+            // Negative control: an opaque data: document must NEVER receive
+            // the HTTPS origin-scoped bridge. All network is denied.
+            view.loadData(html, "text/html", "UTF-8")
+        } else {
+            view.loadDataWithBaseURL(
+                "https://mangafire.to/@waf/solver",
+                html,
+                "text/html",
+                "UTF-8",
+                null,
+            )
+        }
+    }
+
+    /**
+     * Read-only check at both navigation lifecycle points. A callback may
+     * initially sample about:blank; only the two distinct closed statuses are
+     * retained. Neither signal confirms a remote response or solves a challenge.
+     */
+    private fun probeDocument(view: WebView?, phase: String) {
+        view?.evaluateJavascript(
+            "(function(){ var origin = location.origin; " +
+                "var kind = origin === 'https://mangafire.to' ? " +
+                "(location.pathname === '/@waf/solver' ? 'EXPECTED' : 'SAME_SITE') : " +
+                "(origin === 'null' ? 'OPAQUE' : 'FOREIGN'); " +
+                "var bridgeKind = typeof bridge === 'object' && " +
+                "typeof bridge.postMessage === 'function' ? " +
+                "'BRIDGE_READY' : 'BRIDGE_MISSING'; " +
+                "return bridgeKind + '|' + kind; })()",
+        ) { value ->
+            val closed = value?.removeSurrounding("\"").orEmpty()
+            val bridge = when (closed.substringBefore("|")) {
+                "BRIDGE_READY" -> "BRIDGE_READY"
+                "BRIDGE_MISSING" -> "BRIDGE_MISSING"
+                else -> "JS_UNAVAILABLE"
+            }
+            val origin = closed.substringAfter("|", "JS_UNAVAILABLE")
+            if (phase == "FINISH") {
+                MangaFireCiShapeSolverGate.markFinishProbe(bridge, origin)
+                // Fail closed on the final document, not a transient
+                // about:blank commit. No challenge or HTTP data is trusted.
+                val finalNativeKind = MangaFireCiShapeSolverGate.lastNavigation("FINISH")
+                if ((
+                        finalNativeKind in setOf("EXPECTED", "DATA") ||
+                            (intentionallyOpaqueOffline && finalNativeKind == "ABOUT")
+                        ) &&
+                    origin == "OPAQUE" && bridge == "BRIDGE_MISSING" &&
+                    !MangaFireCiShapeSolverGate.hasDocumentReady()
+                ) {
+                    MangaFireCiShapeSolverGate.complete("UNTRUSTED_ORIGIN")
+                }
+            } else {
+                MangaFireCiShapeSolverGate.markJavaScriptProbe(bridge)
+                MangaFireCiShapeSolverGate.markDocumentOrigin(origin)
+            }
+        }
+    }
+
+    private fun blockedResponse(): WebResourceResponse =
+        WebResourceResponse(
+            "text/plain",
+            "utf-8",
+            403,
+            "Disallowed solver resource",
+            emptyMap(),
+            ByteArrayInputStream(ByteArray(0)),
+        )
+
+    override fun onDestroy() {
+        page?.let { webView ->
+            runCatching { webView.stopLoading() }
+            runCatching { webView.destroy() }
+        }
+        page = null
+        super.onDestroy()
+    }
+}
