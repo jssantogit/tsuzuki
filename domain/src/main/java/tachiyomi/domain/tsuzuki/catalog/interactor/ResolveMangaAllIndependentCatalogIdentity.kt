@@ -169,6 +169,8 @@ class ResolveMangaAllIndependentCatalogIdentity(
     ): SourceSearchResult {
         return withTimeoutOrNull(CATALOG_TIMEOUT_MILLIS) {
             val seen = mutableListOf<CatalogItem>()
+            val seenIds = mutableSetOf<String>()
+            var expectedTotal: Int? = null
             var offset = 0
             for (index in 0 until MAX_PAGES_PER_CATALOG) {
                 val result = try {
@@ -189,8 +191,15 @@ class ResolveMangaAllIndependentCatalogIdentity(
                 ) {
                     return@withTimeoutOrNull SourceSearchResult(failed = true)
                 }
+                if (page.items.any { !seenIds.add(it.providerId) }) {
+                    return@withTimeoutOrNull SourceSearchResult(seen)
+                }
                 seen += page.items
                 val reportedTotal = page.totalCount
+                if (expectedTotal != null && reportedTotal != expectedTotal) {
+                    return@withTimeoutOrNull SourceSearchResult(seen)
+                }
+                if (reportedTotal != null) expectedTotal = reportedTotal
                 if (reportedTotal != null && (
                         reportedTotal < seen.size ||
                             (!page.hasNextPage && reportedTotal > seen.size) ||
