@@ -632,6 +632,7 @@ class CollectProviderReadingEvidence private constructor(
         val descriptor = target.registration.descriptor
         val discovered = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssessment>()
         val initialCursor = ProviderCursor("""{"v":1,"remaining":{"$source":{"c":null,"o":0}}}""")
+
         // One page per independently observed title in round-robin order.
         // Broad primary-name pagination must not consume the entire alias
         // budget. Preserve each query's actual cursor, detect cycles across
