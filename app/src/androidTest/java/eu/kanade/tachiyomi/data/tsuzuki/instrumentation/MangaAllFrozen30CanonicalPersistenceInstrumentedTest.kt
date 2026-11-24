@@ -206,7 +206,9 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             val selectedCatalogs = names.map(catalogs::getValue)
             return object : IntegrationRegistry {
                 override fun searchProviders(): List<SearchProvider> = selectedCatalogs
-                override fun metadataProviders(): List<MetadataProvider> = selectedCatalogs.map { it as MetadataProvider }
+                override fun metadataProviders(): List<MetadataProvider> = selectedCatalogs.map {
+                    it as MetadataProvider
+                }
                 override fun discoveryProviders(): List<DiscoveryProvider> = emptyList()
                 override fun chapterEvidenceProviders(): List<ChapterEvidenceProvider> = emptyList()
                 override fun ratingsProviders(): List<RatingsProvider> = emptyList()
