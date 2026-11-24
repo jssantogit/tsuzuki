@@ -238,6 +238,31 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
     }
 
     @Test
+    fun `native title retrieval hint never replaces requested identity and needs detail corroboration`() = runTest {
+        val searchItem = item("mangaupdates", "42", "Requested Work")
+        val nativeTitle = "원래 제목"
+        val detail = searchItem.copy(titles = mapOf("native" to nativeTitle), authors = listOf("Verified Creator"))
+        val mu = source("mangaupdates", search = {
+            it.query shouldBe nativeTitle
+            CatalogPage(listOf(searchItem), false)
+        }, detail = { detail })
+        ResolveMangaAllIndependentCatalogIdentity(registry(mu))
+            .execute("Requested Work", searchTitle = nativeTitle).status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+
+        val wrong = source("mangaupdates", search = {
+            CatalogPage(listOf(searchItem.copy(title = nativeTitle)), false)
+        }, detail = { error("Native hint alone cannot authorize the requested title") })
+        ResolveMangaAllIndependentCatalogIdentity(registry(wrong))
+            .execute("Requested Work", searchTitle = nativeTitle).status shouldBe MangaAllCatalogIdentityStatus.CATALOG_NOT_FOUND
+
+        val noNative = source("mangaupdates", search = {
+            CatalogPage(listOf(searchItem), false)
+        }, detail = { searchItem })
+        ResolveMangaAllIndependentCatalogIdentity(registry(noNative))
+            .execute("Requested Work", searchTitle = nativeTitle).status shouldBe MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+    }
+
+    @Test
     fun `catalog published alias must also be corroborated by the owning detail`() = runTest {
         val searchItem = item("shikimori", "42", "Primary")
             .copy(titles = mapOf("alternate" to "Requested Alias"))
