@@ -110,8 +110,11 @@ const typedPagingGuard = `  if (!Array.isArray(rows) || rows.length > 56) {
   if (total != null && (!Number.isInteger(total) || total < 0)) {
     throw new Error("MangaAll source lookup invalid total format");
   }
-  if (total != null && total > 32) {
-    throw new Error("MangaAll source lookup total exceeds budget");
+  // Upstream may truthfully advertise more than our 32 auditable pages.
+  // Do not misclassify that as INVALID_RESPONSE. Preserve exact candidates
+  // on each permitted page; n>32 and page>=32 still fail closed as PARTIAL.
+  if (total != null && total > 4096) {
+    throw new Error("MangaAll source lookup invalid total range");
   }
   if (cursor != null && typeof cursor !== "string") {
     throw new Error("MangaAll source lookup invalid cursor");
@@ -256,7 +259,7 @@ function closedError(err) {
     ['invalid rows', 'SOURCE_PAGING_ROWS_INVALID'],
     ['invalid current', 'SOURCE_PAGING_CURRENT_INVALID'],
     ['invalid total format', 'SOURCE_PAGING_TOTAL_FORMAT_INVALID'],
-    ['total exceeds budget', 'SOURCE_PAGING_TOTAL_EXCEEDS_BUDGET'],
+    ['invalid total range', 'SOURCE_PAGING_TOTAL_RANGE_INVALID'],
     ['invalid cursor', 'SOURCE_PAGING_CURSOR_INVALID'],
     ['empty continuation', 'SOURCE_PAGING_EMPTY_CONTINUATION'],
   ]) {
