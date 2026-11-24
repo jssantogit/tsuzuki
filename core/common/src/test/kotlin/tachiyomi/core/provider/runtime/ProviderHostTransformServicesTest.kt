@@ -46,6 +46,14 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
+    fun `ordinary DOM text keeps its existing character bound independently of structured metadata bytes`(): Unit = runBlocking {
+        val value = "é".repeat(40 * 1024)
+        val handle = store.put(owner, ProviderResourceKind.HTML, "<h1>$value</h1>".encodeToByteArray())
+        val dom = DefaultProviderDomHostService(owner, store)
+        dom.selectText(handle, "h1") shouldBe value
+    }
+
+    @Test
     fun `structured metadata rejects duplicate or oversized script blocks`(): Unit = runBlocking {
         val script = """<script type="application/ld+json">{"name":"Work"}</script>"""
         val dom = DefaultProviderDomHostService(owner, store)
