@@ -140,6 +140,7 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
         }
 
         suspend fun inspect(title: String, facts: Facts) {
+            facts.stage = "LOOKUP"
             val terms = listOf(title) + when (title) {
                 "SSS-Class Revival Hunter" -> listOf("SSS-Class Suicide Hunter")
                 "Return of the Blossoming Blade" -> listOf("Return of the Mount Hua Sect")
@@ -161,7 +162,8 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                             "cursor" to JsonPrimitive(requireNotNull(cursor)),
                             "editorialEvidenceVersion" to JsonPrimitive(1),
                             "coverageEvidenceVersion" to JsonPrimitive(1),
-                            "diagnosticsVersion" to JsonPrimitive(2),
+                            // V1 returns the typed items and continuation cursor.
+                            // V2 lookup is a different read-only observation envelope.
                         ),
                     )
                     val reply = call("reading.lookup", request)
@@ -188,6 +190,7 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                 }
                 if (!terminal) facts.incompleteLookup++
             }
+            facts.stage = "CHAPTERS"
             facts.candidates = candidates.size
             facts.credited = candidates.values.count(::hasCredits)
             if (candidates.size > 8) {
@@ -195,6 +198,7 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                 return
             }
             for ((hid, _) in candidates) {
+                facts.stage = "CHAPTERS"
                 val binding = JsonObject(
                     mapOf(
                         "providerId" to JsonPrimitive("app.tsuzuki.mangaall"),
@@ -239,6 +243,7 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                 if (one.size > 8) facts.truncatedChapterOne = true
                 var pixelAttempted = false
                 for (chapterId in one.take(8)) {
+                    facts.stage = "PAGE_LIST"
                     val request = JsonObject(
                         mapOf(
                             "binding" to binding,
@@ -296,6 +301,7 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                 val facts = Facts()
                 try {
                     inspect(works[index].jsonPrimitive.content, facts)
+                    facts.stage = "NONE"
                 } catch (error: CancellationException) {
                     throw error
                 } catch (_: Exception) {
@@ -339,6 +345,7 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
         var truncatedCandidates: Boolean = false,
         var truncatedChapterOne: Boolean = false,
         var contractFailure: Boolean = false,
+        var stage: String = "NONE",
     ) {
         fun report(index: Int, pixelProbe: Boolean): String {
             val outcome = when {
@@ -357,7 +364,7 @@ class MangaAllFrozen30MangaDexAuditInstrumentedTest {
                 "|inventoryIncomplete=$incompleteInventories|chapterOne=$chapterOne|external=$externalChapters" +
                 "|pageLists=$pageLists|pageFailures=$pageFailures|canonical=NOT_TESTED" +
                 "|readableHids=$readableHids|pixelAttempts=$pixelAttempts|pixelDecoded=$pixelDecoded" +
-                "|pixelFailures=$pixelFailures|pixelMode=${if (pixelProbe) 1 else 0}"
+                "|pixelFailures=$pixelFailures|pixelMode=${if (pixelProbe) 1 else 0}|stage=$stage"
         }
     }
 
