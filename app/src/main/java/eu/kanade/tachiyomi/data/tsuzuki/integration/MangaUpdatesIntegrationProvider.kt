@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdatesUserListEntry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
@@ -60,7 +61,11 @@ class MangaUpdatesIntegrationProvider private constructor(
         val offset = query.offset.coerceAtLeast(0)
         val limit = query.limit.coerceAtLeast(0)
         if (limit == 0) return@capture CatalogPage(emptyList(), false)
-        val page = api.searchWindow(text, offset, limit)
+        val nativeType = when (query.format) {
+            CatalogItemFormat.MANHWA -> "Manhwa"
+            else -> null
+        }
+        val page = api.searchWindow(text, offset, limit, nativeType)
         check(page.items.size <= limit && page.totalHits >= 0)
         check(page.items.size.toLong() == (page.totalHits.toLong() - offset).coerceIn(0L, limit.toLong()))
 
