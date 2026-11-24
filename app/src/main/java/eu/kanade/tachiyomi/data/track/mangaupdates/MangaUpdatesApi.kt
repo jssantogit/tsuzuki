@@ -283,21 +283,16 @@ class MangaUpdatesApi(
         }
     }
 
-    // Keep the upstream total and explicit page offsets; never report a
-    // truncated first response as an exhaustive catalog search.
+    // The server can normalize the requested perpage. Use the actual
+    // response geometry, never the requested size, for absolute offsets.
     suspend fun searchWindow(query: String, offset: Int, limit: Int): MangaUpdatesSearchWindow {
         require(offset >= 0 && limit > 0)
-        val pageSize = limit.coerceAtMost(100)
-        var page = offset / pageSize + 1
-        var skip = offset % pageSize
-        var total: Int? = null
-        val items = mutableListOf<TrackSearch>()
-        val seenIds = mutableSetOf<Long>()
-        while (items.size < limit) {
+        val requestedSize = limit.coerceAtMost(100)
+        suspend fun fetchPage(page: Int): MUSearchResult {
             val body = buildJsonObject {
                 put("search", query)
                 put("page", page)
-                put("perpage", pageSize)
+                put("perpage", requestedSize)
                 put(
                     "filter_types",
                     buildJsonArray {
@@ -306,7 +301,7 @@ class MangaUpdatesApi(
                     },
                 )
             }
-            val response = with(json) {
+            return with(json) {
                 client.newCall(
                     POST(
                         url = "$BASE_URL/v1/series/search",
@@ -316,20 +311,48 @@ class MangaUpdatesApi(
                     .awaitSuccess()
                     .parseAs<MUSearchResult>()
             }
-            check(response.page == page && response.perPage == pageSize)
-            check(response.totalHits >= 0 && (total == null || total == response.totalHits))
-            total = response.totalHits
-            val start = (page.toLong() - 1L) * pageSize
-            val expected = (response.totalHits.toLong() - start).coerceIn(0L, pageSize.toLong()).toInt()
-            check(response.results.size == expected)
+        }
+
+        val first = fetchPage(1)
+        val total = first.totalHits
+        val size = first.perPage
+        if (first.page == 1 && total == 0 && first.results.isEmpty()) {
+            return MangaUpdatesSearchWindow(emptyList(), 0)
+        }
+        check(first.page == 1 && size in 1..100 && total >= 0) {
+            "MU_SEARCH_CONTRACT|reason=FIRST_GEOMETRY|page=${first.page}|size=$size|total=$total|rows=${first.results.size}"
+        }
+        val items = mutableListOf<TrackSearch>()
+        val seenIds = mutableSetOf<Long>()
+        fun validate(response: MUSearchResult, page: Int): List<TrackSearch> {
+            check(response.page == page && response.perPage == size && response.totalHits == total) {
+                "MU_SEARCH_CONTRACT|reason=PAGE_GEOMETRY|page=${response.page}|size=${response.perPage}" +
+                    "|total=${response.totalHits}|rows=${response.results.size}"
+            }
+            val start = (page.toLong() - 1L) * size
+            val expected = (total.toLong() - start).coerceIn(0L, size.toLong()).toInt()
+            check(response.results.size == expected) {
+                "MU_SEARCH_CONTRACT|reason=ROW_COUNT|page=$page|size=$size|total=$total|rows=${response.results.size}"
+            }
             val mapped = response.results.map { it.record.toTrackSearch(trackerId) }
-            check(mapped.all { it.remote_id > 0 && seenIds.add(it.remote_id) })
+            check(mapped.all { it.remote_id > 0 && seenIds.add(it.remote_id) }) {
+                "MU_SEARCH_CONTRACT|reason=INVALID_OR_REPEATED_ID|page=$page|size=$size|total=$total|rows=${mapped.size}"
+            }
+            return mapped
+        }
+
+        val firstRows = validate(first, 1)
+        if (offset >= total) return MangaUpdatesSearchWindow(emptyList(), total)
+        var page = offset / size + 1
+        var skip = offset % size
+        while (items.size < limit) {
+            val mapped = if (page == 1) firstRows else validate(fetchPage(page), page)
             items += mapped.drop(skip).take(limit - items.size)
-            if (start + mapped.size >= response.totalHits || mapped.isEmpty()) break
+            if ((page.toLong() - 1L) * size + mapped.size >= total) break
             skip = 0
             page++
         }
-        return MangaUpdatesSearchWindow(items, requireNotNull(total))
+        return MangaUpdatesSearchWindow(items, total)
     }
 
     suspend fun discover(
