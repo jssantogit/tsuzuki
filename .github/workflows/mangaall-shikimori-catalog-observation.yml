@@ -54,6 +54,10 @@ jobs:
                           raise TypeError("alias")
                       return [v for v in values if isinstance(v,str)]
                   exact=[r for r in rows if isinstance(r,dict) and r.get("kind")=="manhwa" and normalized(title) in {normalized(v) for v in [r.get("name") or ""]+aliases(r)}]
+                  # Public editorial names only, bounded; no personal or credential data.
+                  for row in rows[:25]:
+                      names=[row.get("name") or ""]+aliases(row)
+                      print("SHIKI_NAMES|index="+str(index)+"|names="+json.dumps([v[:256] for v in names[:12]],ensure_ascii=True))
                   primary=sum(normalized(r.get("name") or "")==normalized(title) for r in exact)
                   credits=sum(any(isinstance(p,dict) and (p.get("person") or {}).get("name") and any("Story" in x or "Art" in x for x in p.get("rolesEn") or []) for p in r.get("personRoles") or []) for r in exact)
                   ids=[str(r.get("id")) for r in rows if isinstance(r,dict)]
