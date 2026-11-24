@@ -125,12 +125,11 @@ class MangaAllMangaDotCorroborationInstrumentedTest {
         val gateway = ScriptProviderReadingGateway(
             registry = registry,
             packageSource = ActiveProviderScriptPackageSource { requested ->
-                if (requested != id) null else ActiveProviderScriptPackage(
-                    repositoryId,
-                    manifest.version.code,
-                    bytes,
-                    parsed,
-                )
+                if (requested != id) {
+                    null
+                } else {
+                    ActiveProviderScriptPackage(repositoryId, manifest.version.code, bytes, parsed)
+                }
             },
             runtimeClient = ProviderRuntimeClient(
                 context = context,
@@ -187,7 +186,13 @@ class MangaAllMangaDotCorroborationInstrumentedTest {
                 candidate,
                 chapterPage,
             ) ?: return "SOURCE_COVERAGE_UNVERIFIED"
-            val checked = ProviderWorkSourcePortfolio.assess(id, "en", title, creators.toSet(), listOf(preview)).single()
+            val checked = ProviderWorkSourcePortfolio.assess(
+                id,
+                "en",
+                title,
+                creators.toSet(),
+                listOf(preview),
+            ).single()
             if (!checked.canCollectProvisionalChapters || checked.canOpenReader || checked.canPromoteChapters) {
                 return "PORTFOLIO_PREVIEW_REJECTED"
             }
