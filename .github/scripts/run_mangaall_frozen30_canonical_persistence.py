@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from run_mangaall_frozen30_independent_catalog import DIGEST, locked_works
+from run_mangaall_frozen30_catalog_plan import plan as load_plan
 
 APP = "app.tsuzuki.dev"
 RUNNER = APP + ".test/androidx.test.runner.AndroidJUnitRunner"
@@ -31,18 +32,19 @@ def adb(*args, check=True, timeout=120):
                           stderr=subprocess.STDOUT, timeout=timeout, check=check)
 
 
-def parse_phase(log, shard, phase, process_ok):
+def parse_phase(log, shard, phase, process_ok, catalog="mangaupdates", owners=None):
     indices = set(range(shard * 10 + 1, shard * 10 + 11))
     rows = {}
     invalid = 0
     for match in re.finditer(
-        r"MANGAALL_CANONICAL_PERSISTENCE\|phase=(COLLECT|RESTORE)\|index=(\d+)\|outcome=([A-Z_0-9]+)",
+        r"MANGAALL_CANONICAL_PERSISTENCE\|phase=(COLLECT|RESTORE)\|index=(\d+)\|outcome=([A-Z_0-9]+)\|catalog=(mangaupdates|shikimori)",
         log,
     ):
-        observed_phase, index, status = match.groups()
+        observed_phase, index, status, observed_owner = match.groups()
         index = int(index)
         if (observed_phase != phase or index not in indices
                 or index in rows or status not in STATUS
+                or observed_owner != (owners.get(index) if owners is not None else catalog)
                 or (phase == "COLLECT" and status == "RESTORED")
                 or (phase == "RESTORE" and status == "COLLECTED")):
             invalid += 1
@@ -59,22 +61,34 @@ def parse_phase(log, shard, phase, process_ok):
                 and all(status == expected for status in rows.values()))
     return {"phase": phase, "processOk": process_ok, "invalid": invalid, "pid": pid,
             "complete": complete,
-            "works": [{"index": i, "status": rows.get(i, "NOT_OBSERVED")} for i in sorted(indices)]}
+            "works": [{"index": i, "catalog": owners.get(i) if owners is not None else catalog,
+                       "status": rows.get(i, "NOT_OBSERVED")} for i in sorted(indices)]}
+
+
+def scope(catalog):
+    if catalog!="explicit_plan":
+        return None, None
+    rows, digest=load_plan()
+    return {r["index"]:r["catalog"] for r in rows}, digest
 
 
 def invoke(shard, phase, catalog):
+    owners, plan_digest=scope(catalog)
+    args=["shell", "am", "instrument", "-w", "-r",
+          "-e", "mangaAllCanonicalOptIn", "I_ACCEPT_FROZEN30_CANONICAL_RESEARCH",
+          "-e", "mangaAllCanonicalPhase", phase,
+          "-e", "mangaAllCanonicalCatalog", catalog,
+          "-e", "mangaAllFrozen30Shard", str(shard)]
+    if plan_digest:
+        args.extend(["-e","mangaAllCanonicalPlanSha256",plan_digest])
+    args.extend(["-e","class",TEST,RUNNER])
     try:
-        result = adb("shell", "am", "instrument", "-w", "-r",
-                     "-e", "mangaAllCanonicalOptIn", "I_ACCEPT_FROZEN30_CANONICAL_RESEARCH",
-                     "-e", "mangaAllCanonicalPhase", phase,
-                     "-e", "mangaAllCanonicalCatalog", catalog,
-                     "-e", "mangaAllFrozen30Shard", str(shard),
-                     "-e", "class", TEST, RUNNER, check=False, timeout=1850)
-        ok = (result.returncode == 0 and "INSTRUMENTATION_CODE: -1" in result.stdout
-              and "OK (1 test)" in result.stdout)
-        return parse_phase(result.stdout, shard, phase, ok)
+        result=adb(*args,check=False,timeout=1850)
+        ok=(result.returncode==0 and "INSTRUMENTATION_CODE: -1" in result.stdout
+            and "OK (1 test)" in result.stdout)
+        return parse_phase(result.stdout,shard,phase,ok,catalog,owners)
     except subprocess.SubprocessError:
-        return parse_phase("", shard, phase, False)
+        return parse_phase("",shard,phase,False,catalog,owners)
 
 
 def evaluate(shard, collect, restore, force_stopped, catalog="mangaupdates"):
@@ -82,7 +96,7 @@ def evaluate(shard, collect, restore, force_stopped, catalog="mangaupdates"):
                and collect["pid"] != restore["pid"])
     return {
         "schemaVersion": 1, "corpusSha256": DIGEST, "shard": shard,
-        "catalogSource": catalog,
+        "catalogSource": catalog, "planSha256": scope(catalog)[1],
         "scope": "CANONICAL_COLLECTOR_SQLITE_SELECTED_OPTION_RESTART",
         "restartObserved": restart,
         "outcome": "PASS" if restart and collect["complete"] and restore["complete"] else "RED",
@@ -128,6 +142,7 @@ def run(shard, catalog):
 
 
 def aggregate(catalog):
+    owners, plan_digest=scope(catalog)
     complete = True
     for shard in range(3):
         path = OUT / f"shard-{shard}" / "verdict.json"
@@ -137,7 +152,7 @@ def aggregate(catalog):
         report = json.loads(path.read_text())
         expected = list(range(shard * 10 + 1, shard * 10 + 11))
         if (report.get("schemaVersion") != 1 or report.get("corpusSha256") != DIGEST
-                or report.get("catalogSource") != catalog
+                or report.get("catalogSource") != catalog or report.get("planSha256") != plan_digest
                 or report.get("shard") != shard or report.get("outcome") != "PASS"
                 or report.get("restartObserved") is not True
                 or report.get("scope") != "CANONICAL_COLLECTOR_SQLITE_SELECTED_OPTION_RESTART"):
@@ -147,7 +162,7 @@ def aggregate(catalog):
             rows = data.get("works", [])
             if (data.get("complete") is not True or data.get("processOk") is not True
                     or data.get("invalid") != 0 or [r.get("index") for r in rows] != expected
-                    or any(r.get("status") != success for r in rows)):
+                    or any(r.get("status") != success or r.get("catalog") != (owners.get(r["index"]) if owners is not None else catalog) for r in rows)):
                 complete = False
     print(f"MANGAALL_CANONICAL_PERSISTENCE|outcome={'PASS' if complete else 'RED'}"
           "|expected=30|readerUI=NOT_TESTED|editorialEditionEquivalence=NOT_PROVEN|signed=NO")
@@ -158,7 +173,7 @@ def selftest():
     def sample(phase, status, pid):
         return "\n".join(
             [f"MANGAALL_CANONICAL_PROCESS|phase={phase}|shard=0|pid={pid}"]
-            + [f"MANGAALL_CANONICAL_PERSISTENCE|phase={phase}|index={i}|outcome={status}"
+            + [f"MANGAALL_CANONICAL_PERSISTENCE|phase={phase}|index={i}|outcome={status}|catalog=mangaupdates"
                for i in range(1, 11)]
         )
     first = sample("COLLECT", "COLLECTED", 123)
@@ -173,12 +188,13 @@ def selftest():
     assert not parse_phase(first, 0, "COLLECT", False)["complete"]
     assert not parse_phase(second.replace("index=10", "index=11"), 0, "RESTORE", True)["complete"]
     assert not parse_phase(second.replace("RESTORED", "NO_COLLECTED_RECEIPT"), 0, "RESTORE", True)["complete"]
+    assert not parse_phase(first.replace("catalog=mangaupdates","catalog=shikimori"), 0, "COLLECT", True)["complete"]
     print("MANGAALL_CANONICAL_PERSISTENCE|selftest=PASS")
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--catalog", choices=("mangaupdates", "shikimori"), default="mangaupdates")
+    parser.add_argument("--catalog", choices=("mangaupdates", "shikimori", "explicit_plan"), default="mangaupdates")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--shard", type=int, choices=range(3))
     group.add_argument("--aggregate", action="store_true")
