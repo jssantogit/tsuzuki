@@ -145,7 +145,8 @@ object ProviderWorkSourcePortfolio {
     }
 
     private fun normalizeTitle(title: String): String =
-        title.trim().lowercase().replace(WHITESPACE, " ")
+        title.replace('’', '\'').replace('‘', '\'').replace('ʼ', '\'')
+            .trim().lowercase().replace(WHITESPACE, " ")
 
     private fun explicitlyQualifiedEdition(sourceTitle: String, normalizedBase: String): Boolean {
         val name = normalizeTitle(sourceTitle)
