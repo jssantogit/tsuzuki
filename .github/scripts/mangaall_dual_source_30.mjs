@@ -153,7 +153,15 @@ const typedPagingGuard = `  if (!Array.isArray(rows) || rows.length > 56) {
   }
   // Page 32 retains candidates and a nonterminal cursor. The 32-page
   // journey budget marks INCOMPLETE; a later page-33 call fails closed.`;
+// CI-only server-side recall experiment. The MangoDot search endpoint has
+// 464+ pages for some English titles starting with "The". Search by a rarer
+// core word, but keep the router's EXACT original-title/alias filter unchanged.
+const dotSearchAnchor = '["search", title], ["page", page], ["limit", 56],';
+assert.equal(originalDotSource.split(dotSearchAnchor).length, 2,
+  'MangaDot source search parameter changed; do not apply heuristic blindly');
+const narrowedDotSearch = '["search", ({"The Boxer":"Boxer","The Horizon":"Horizon","The Breaker":"Breaker"}[title] || title)], ["page", page], ["limit", 56],';
 const experimentalDotCode = originalDotSource
+  .replace(dotSearchAnchor, narrowedDotSearch)
   .replace(sourcePageLimit,
     'if (n > 32) throw new Error("MangaAll bounded source search exhausted");')
   .replace(originalPagingGuard, typedPagingGuard)
@@ -415,6 +423,9 @@ async function offlineContracts() {
   assert.throws(() => granularPage(syntheticChapters, 600, cursorMark));
   assert.equal(safeChapterId('mangadot:uploads:123', 'mangadot'), true);
   assert.equal(safeChapterId('mangadot:123', 'mangadot'), false);
+  assert.ok(originalDotSource.includes(dotSearchAnchor));
+  assert.ok(experimentalDotCode.includes(narrowedDotSearch));
+  assert.equal(Object.keys(verifiedAliasQueries).length, 3);
   // Regression: original-language metadata is required for Korean manhwa.
   // The source adapter must continue to reject unverified Japanese-language
   // works even when the translated English title is identical.
