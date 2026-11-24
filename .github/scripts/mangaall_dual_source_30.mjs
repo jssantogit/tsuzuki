@@ -60,7 +60,8 @@ const verifiedAliasQueries = Object.freeze({
   'SSS-Class Revival Hunter': Object.freeze(['SSS-Class Suicide Hunter']),
   'Return of the Blossoming Blade': Object.freeze(['Return of the Mount Hua Sect']),
   "The Reason Why Raeliana Ended Up at the Duke's Mansion":
-    Object.freeze(["Why Raeliana Ended Up at the Duke's Mansion"]),
+    Object.freeze(["Why Raeliana Ended Up at the Duke's Mansion",
+      "그녀가 공작저로 가야 했던 사정"]),
 });
 assert.ok(Object.entries(verifiedAliasQueries).every(([main, aliases]) =>
   cohort.works.includes(main) && aliases.length >= 1 && aliases.length <= 2 &&
