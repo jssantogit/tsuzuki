@@ -17,13 +17,13 @@ import java.text.Normalizer
 object ProviderWorkSourcePortfolio {
 
     /**
-     * Only the actual signed MangaFire implementation, standalone or embedded
-     * inside MangaAll, currently supplies detail/coverage evidence strong enough
-     * for the established provisional work-source portfolio.
+     * MangaFire retains its established source-specific policy. MangaDex can
+     * enter the provisional portfolio only with verified source details,
+     * expanded creators and observed numeric coverage for the requested facet.
      *
-     * MangaDex/MangaDot still contribute lookup/chapter evidence, but their
-     * similarly named records must not borrow MangaFire's author authority.
-     * MangaFire's standalone facet stays English in this version.
+     * MangaDot is not trusted by this predicate. Its experimental native
+     * coverage path must independently fetch and validate the exact chapter page.
+     * No internal source can borrow another source's author authority.
      */
     fun trustedCandidates(
         providerId: ProviderId,
