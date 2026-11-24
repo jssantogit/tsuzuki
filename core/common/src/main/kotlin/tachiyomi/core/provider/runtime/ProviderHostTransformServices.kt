@@ -30,8 +30,8 @@ class DefaultProviderDomHostService(
         val html = resources
             .read(owner, resourceHandle, ProviderResourceKind.HTML)
             .decodeToString()
-        val document = Jsoup.parse(html)
         val node = try {
+            val document = Jsoup.parse(html)
             if (cssSelector == JSON_LD_SELECTOR) {
                 // Structured metadata is data, not executable script. Refuse
                 // ambiguous documents instead of selecting their first block.
@@ -44,7 +44,9 @@ class DefaultProviderDomHostService(
         } ?: throw ProviderHostServiceException("Provider DOM selector did not match")
 
         val text = if (cssSelector == JSON_LD_SELECTOR) node.data() else node.text()
-        if (text.length > MAX_DOM_RESULT_CHARS || text.encodeToByteArray().size > MAX_DOM_RESULT_CHARS) {
+        if (text.length > MAX_DOM_RESULT_CHARS ||
+            (cssSelector == JSON_LD_SELECTOR && text.encodeToByteArray().size > MAX_DOM_RESULT_CHARS)
+        ) {
             throw ProviderHostServiceException("Provider DOM result exceeds the text limit")
         }
         return text
