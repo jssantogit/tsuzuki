@@ -60,7 +60,8 @@ jobs:
           assert "I_ACCEPT_FROZEN30_MANGADEX_AUDIT" in kotlin and "I_ACCEPT_FROZEN30_MANGADEX_AUDIT" in runner
           assert "airplane-mode disable" in runner
           assert "DEX_START" in kotlin and "MANGAALL_DEX_AUDIT" in kotlin
-          assert "MANGAALL_DEX_AUDIT" in runner
+          assert "verify_mangaall_frozen30_mangadex_audit.py" in runner
+          assert "MANGAALL_DEX_AUDIT" in Path(".github/scripts/verify_mangaall_frozen30_mangadex_audit.py").read_text()
           assert "canonical=NOT_TESTED" in kotlin
           Path("app/src/androidTest/assets").mkdir(parents=True, exist_ok=True)
           Path("app/src/androidTest/assets/mangaall-dual-source-30-cohort-lock.json").write_bytes(
