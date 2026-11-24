@@ -22,7 +22,7 @@ class ResolveMangaAllSelectedReadingOption(
     ): ProviderChapterReadingOption? {
         val eligible = options(canonicalTitleId, canonicalChapterId, requestedLanguage, verifiedOptions)
         val ref = eligible.firstOrNull()?.bindingRef() ?: return null
-        val savedRelease = selections.getRelease(canonicalChapterId, ref)
+        val savedRelease = selections.getRelease(canonicalTitleId, canonicalChapterId, ref)
         return if (savedRelease == null) {
             eligible.singleOrNull()
         } else {

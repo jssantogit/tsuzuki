@@ -10,15 +10,16 @@ CREATE TABLE tsuzuki_mangaall_chapter_releases(
 );
 
 getMangaAllChapterRelease:
-SELECT release.provider_chapter_id
-FROM tsuzuki_mangaall_chapter_releases AS release
-JOIN tsuzuki_canonical_chapters AS chapter ON chapter.id = release.canonical_chapter_id
+SELECT chosen_release.provider_chapter_id
+FROM tsuzuki_mangaall_chapter_releases AS chosen_release
+JOIN tsuzuki_canonical_chapters AS chapter ON chapter.id = chosen_release.canonical_chapter_id
 JOIN tsuzuki_mangaall_source_selections AS choice ON choice.canonical_title_id = chapter.canonical_title_id
-    AND choice.language = release.language
-    AND choice.external_work_id = release.external_work_id
-WHERE release.canonical_chapter_id = :canonicalChapterId
-AND release.language = :language
-AND release.external_work_id = :externalWorkId
+    AND choice.language = chosen_release.language
+    AND choice.external_work_id = chosen_release.external_work_id
+WHERE chapter.canonical_title_id = :canonicalTitleId
+AND chosen_release.canonical_chapter_id = :canonicalChapterId
+AND chosen_release.language = :language
+AND chosen_release.external_work_id = :externalWorkId
 LIMIT 1;
 
 selectMangaAllChapterRelease:

@@ -51,10 +51,15 @@ class MangaAllSourceSelectionRepositoryImpl(
             )
         }.awaitAsOneOrNull()
 
-    override suspend fun getRelease(canonicalChapterId: String, ref: ProviderBindingRef): String? {
+    override suspend fun getRelease(
+        canonicalTitleId: String,
+        canonicalChapterId: String,
+        ref: ProviderBindingRef,
+    ): String? {
         val language = ref.facetId ?: return null
         if (ref.providerId.value != "app.tsuzuki.mangaall") return null
         return database.tsuzuki_mangaall_chapter_releasesQueries.getMangaAllChapterRelease(
+            canonicalTitleId = canonicalTitleId,
             canonicalChapterId = canonicalChapterId,
             language = language,
             externalWorkId = ref.externalWorkId,
@@ -78,7 +83,7 @@ class MangaAllSourceSelectionRepositoryImpl(
             canonicalTitleId = canonicalTitleId,
             producerId = ref.evidenceProducerId(),
         )
-        return getRelease(option.canonicalChapterId, ref) == option.providerChapterId
+        return getRelease(canonicalTitleId, option.canonicalChapterId, ref) == option.providerChapterId
     }
 
     override suspend fun select(choice: MangaAllSourceSelection): Boolean {

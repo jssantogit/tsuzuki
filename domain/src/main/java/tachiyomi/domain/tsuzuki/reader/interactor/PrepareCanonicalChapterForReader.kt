@@ -29,6 +29,7 @@ import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
 import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
 import tachiyomi.domain.tsuzuki.download.service.canReuseArtifact
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveMangaAllSelectedChapter
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
@@ -250,7 +251,7 @@ class PrepareCanonicalChapterForReader(
 
     /** Called only after an explicit chapter-specific Reader selection succeeds. */
     suspend fun rememberMangaAllRelease(
-        option: tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption,
+        option: ProviderChapterReadingOption,
         at: Long,
     ): Boolean = resolveMangaAllSelectedChapter?.rememberRelease(option, at) == true
 

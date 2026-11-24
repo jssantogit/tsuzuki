@@ -92,6 +92,47 @@ class ResolveMangaAllSelectedReadingOptionTest {
         resolver.select("", "chapter-1", "en", listOf(option(refEn, "mangafire:first"))) shouldBe null
     }
 
+    @Test
+    fun `explicit chapter release survives resolver reconstruction but cannot silently fall back`() = runBlocking {
+        val saved = MangaAllSourceSelection(title, refEn, 10)
+        val storage = object : MangaAllSourceSelectionRepository {
+            private val choices = mutableMapOf<Pair<String, ProviderBindingRef>, String>()
+            override suspend fun get(canonicalTitleId: String, language: String) =
+                saved.takeIf { it.canonicalTitleId == canonicalTitleId && it.ref.facetId == language }
+            override suspend fun select(choice: MangaAllSourceSelection) = error("must not change work")
+            override suspend fun getRelease(
+                canonicalTitleId: String,
+                canonicalChapterId: String,
+                ref: ProviderBindingRef,
+            ): String? = if (canonicalTitleId == title) choices[canonicalChapterId to ref] else null
+            override suspend fun selectRelease(
+                canonicalTitleId: String,
+                option: ProviderChapterReadingOption,
+                at: Long,
+            ): Boolean {
+                choices[option.canonicalChapterId to option.bindingRef()] = option.providerChapterId
+                return true
+            }
+        }
+        val first = option(refEn, "mangafire:first")
+        val second = option(refEn, "mangafire:second")
+        val rival = option(refEn.copy(externalWorkId = "mangafire:other-work"), "mangafire:rival")
+        val all = listOf(first, second, rival)
+        val resolver = ResolveMangaAllSelectedReadingOption(storage)
+        resolver.select(title, "chapter-1", "en", all) shouldBe null
+        resolver.remember(title, rival, all, 20) shouldBe false
+        resolver.remember(title, second, listOf(first), 20) shouldBe false
+        resolver.remember(title, second, all, 20) shouldBe true
+
+        val reopened = ResolveMangaAllSelectedReadingOption(storage)
+        reopened.select(title, "chapter-1", "en", all) shouldBe second
+        reopened.select(title, "chapter-1", "en", listOf(first, rival)) shouldBe null
+        reopened.select(title, "chapter-2", "en", all) shouldBe null
+        reopened.select("other-title", "chapter-1", "en", all) shouldBe null
+        reopened.remember(title, first, all, 30) shouldBe true
+        reopened.select(title, "chapter-1", "en", all) shouldBe first
+    }
+
     private fun option(ref: ProviderBindingRef, chapterId: String) = ProviderChapterReadingOption(
         canonicalChapterId = "chapter-1",
         bindingId = "verified-source",
