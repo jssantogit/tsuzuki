@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.provider.runtime
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -7,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -16,11 +18,11 @@ import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 /**
  * Research only: use the unmodified Android Browser Host from the MangaFire
  * experiment to test normal API navigation. A rejection terminates the probe.
- * No warmup after a rejection, challenge solver, imported session or retries.
+ * Passive homepage initialization before API access; no challenge solver, imported session or retries.
  */
 @RunWith(AndroidJUnit4::class)
 class MangaBallBrowserHostResearchTest {
-    @Test(timeout = 180_000L)
+    @Test(timeout = 240_000L)
     fun threeTitleNormalBrowserTransport() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         assertEquals(
@@ -36,17 +38,31 @@ class MangaBallBrowserHostResearchTest {
         assertEquals(-1, candidateRows("""{"code":403,"data":[],"pagination":{"page":1,"total_pages":0}}"""))
         assertEquals(-1, candidateRows("<html>challenge</html>"))
 
+        val urls = instrumentation.context.assets.open("mangaball/lookup-requests.json")
+            .bufferedReader().use { JSONArray(it.readText()) }
+        assertEquals(3, urls.length())
         val titles = listOf("Oyasumi Punpun", "Akame ga Kill!", "Koe no Katachi")
-        var accepted = 0
         for ((index, title) in titles.withIndex()) {
-            val url = Uri.parse("https://mangaball.com/api/v1/title/search-advanced").buildUpon()
-                .appendQueryParameter("keyword", title)
-                .appendQueryParameter("page", "1")
-                .appendQueryParameter("limit", "24")
-                .appendQueryParameter("tag_mode", "AND")
-                .appendQueryParameter("adult_mode", "no_18")
-                .build()
-                .toString()
+            val uri = Uri.parse(urls.getString(index))
+            assertEquals("https", uri.scheme)
+            assertEquals("mangaball.com", uri.host)
+            assertEquals("/api/v1/title/search-advanced", uri.path)
+            assertEquals(title, uri.getQueryParameter("keyword"))
+        }
+        MangaBallCiBrowserWarmupGate.reset()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MangaBallCiBrowserWarmupActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        val warmup = withContext(Dispatchers.IO) { MangaBallCiBrowserWarmupGate.await(30L) }
+        instrumentation.runOnMainSync { activity.finish() }
+        publish("MANGABALL_BROWSER_WARMUP|outcome=$warmup")
+        // A homepage result is not proof of API access. No retry, solver,
+        // or session transfer; only the ordinary lookup endpoint is tested.
+        assertEquals("WebView initialization must complete", true, warmup in setOf("PAGE_FINISHED", "HTTP_REJECTED"))
+        var accepted = 0
+        for (index in titles.indices) {
+            val url = urls.getString(index)
             val response = withContext(Dispatchers.IO) {
                 runCatching {
                     AndroidProviderBrowserHostService(
