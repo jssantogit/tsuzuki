@@ -314,9 +314,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 add(owner.externalId)
                 addAll(snapshot.metadata.externalIds.entries.map { "${it.key.value}:${it.value}" }.sorted())
                 addAll(credits.flatMap { it.value }.sorted())
-                addAll(titleNames.getByTitle(titleId).map {
-                    listOf(it.provider, it.sourceKey, it.value).joinToString("\u0000")
-                }.sorted())
+                addAll(
+                    titleNames.getByTitle(titleId).map {
+                        listOf(it.provider, it.sourceKey, it.value).joinToString("\u0000")
+                    }.sorted(),
+                )
                 add(one.id)
                 add(option.readerSourceKey)
                 addAll(
