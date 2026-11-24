@@ -111,12 +111,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: true
-      - name: Spotless, app and Android instrumentation compile ONCE
+      - name: Compile corrected MangaDex audit and regress independent creator alias provenance
         run: |
           set -euo pipefail
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
-          if ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*ResolveMangaAllIndependentCatalogIdentityTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
             cat "$log"
             exit 0
           fi
@@ -125,7 +125,7 @@ jobs:
             exit 1
           fi
           for attempt in 1 2 3; do
-            if ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*ResolveMangaAllIndependentCatalogIdentityTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               echo 'MANGAALL_FROZEN30_ANDROID|build=PASS|compiler=VERIFIED'
               exit 0
