@@ -419,6 +419,33 @@ async function offlineContracts() {
   // works even when the translated English title is identical.
   assert.ok(experimentalDexCode.includes('originalLanguage !== "ko"'));
   assert.ok(!originalDexSource.includes('originalLanguage !== "ko"'));
+  const previousHost = globalThis.tsuzuki;
+  try {
+    const makeWork = (suffix, language) => ({
+      type: 'manga',
+      id: '00000000-0000-4000-8000-' + String(suffix).padStart(12, '0'),
+      attributes: {
+        title: { en: 'Wind Breaker' }, altTitles: [],
+        ...(language == null ? {} : { originalLanguage: language }),
+      },
+    });
+    const mockDexResponse = {
+      result: 'ok', offset: 0, total: 3,
+      data: [makeWork(1, 'ja'), makeWork(2, 'ko'), makeWork(3, null)],
+    };
+    globalThis.tsuzuki = {http:{async request(method, url) {
+      assert.equal(method, 'GET');
+      assert.ok(url.startsWith('https://api.mangadex.org/manga?'));
+      return JSON.stringify({statusCode: 200, body: JSON.stringify(mockDexResponse)});
+    }}};
+    const koreanOnly = await extendedMangaDex.lookup({titles: ['Wind Breaker'], cursor: null});
+    assert.deepEqual(koreanOnly.items.map(item => item.externalWorkId),
+      ['mangadex:00000000-0000-4000-8000-000000000002']);
+    assert.equal(koreanOnly.nextCursor, null);
+  } finally {
+    if (previousHost === undefined) delete globalThis.tsuzuki;
+    else globalThis.tsuzuki = previousHost;
+  }
   assert.deepEqual(workQueryNames({names:['SSS-Class Revival Hunter']}),
     ['SSS-Class Revival Hunter', 'SSS-Class Suicide Hunter']);
   assert.deepEqual(workQueryNames({names:['Wind Breaker']}), ['Wind Breaker']);
