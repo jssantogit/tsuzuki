@@ -23,9 +23,13 @@ python3 - "$log" "$status" <<'PY'
 import re,sys
 from pathlib import Path
 raw=Path(sys.argv[1]).read_text(errors="replace")
-rows=re.findall(r"MANGAALL_DOT_CREATOR\|index=(\d+)\|outcome=(PASS|RED)\|exact=(\d+)\|verified=(\d+)\|canonical=NOT_TESTED",raw)
-for index,outcome,exact,verified in rows:
-    print(f"MANGAALL_DOT_CREATOR|index={index}|outcome={outcome}|exact={exact}|verified={verified}|canonical=NOT_TESTED")
+pattern=(r"MANGAALL_DOT_CREATOR\|index=(\d+)\|outcome=(PASS|RED)\|exact=(\d+)\|verified=(\d+)\|canonical=NOT_TESTED"
+         r"\|detail=(VERIFIED_NO_ALIASES|DETAIL_FAILED|INVALID_RESPONSE|IDENTITY_MISMATCH|NOT_OBSERVED)"
+         r"\|http200=(\d+)\|httpFailed=(\d+)\|http403=(\d+)\|http429=(\d+)")
+matches=list(re.finditer(pattern,raw))
+rows=[m.groups()[:4] for m in matches]
+for match in matches:
+    print(match.group(0))
 assert sys.argv[2]=="0" and "INSTRUMENTATION_CODE: -1" in raw and "OK (1 test)" in raw
 assert rows==[(str(i),"PASS","1","1") for i in (1,3,10,12)], "Source creator evidence incomplete"
 PY
