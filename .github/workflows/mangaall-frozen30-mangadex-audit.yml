@@ -1,4 +1,4 @@
-name: MangaALL — frozen 30 MangaDex independent Android audit (OPT-IN)
+name: MangaALL — frozen 30 MangaDex independent Android bitmap audit (OPT-IN)
 # Immutable corpus, build ONCE and run 3 isolated GitHub-hosted Android
 # emulators against the same unsigned code11 APK pair (10 locked works/shard).
 # MangaDex-only diagnostic scope, no canonical/UI promotion or coverage claim for missing releases.
@@ -28,6 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n .github/scripts/run_mangaall_frozen30_mangadex_audit.sh
+          python3 .github/scripts/verify_mangaall_frozen30_mangadex_audit.py --selftest
           python3 -m py_compile .github/scripts/mangaall_code11_dual_source_unsigned.py
           python3 - <<'PY'
           import hashlib
@@ -96,6 +97,7 @@ jobs:
           assert "mangafire" not in str(manifest).lower()
           assert manifest["name"] == "MangaAll — frozen 30 manhwa source research"
           assert 'originalLanguage !== "ko"' in dex
+          assert '["originalLanguage[]", "ko"]' in dex
           assert '"The Boxer":"Boxer"' in dot
           assert '"The Horizon":"Horizon"' in dot
           assert '"The Breaker":"Breaker"' in dot
@@ -111,7 +113,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: true
-      - name: Revalidate MangaDex audit after creator integration import correction
+      - name: Compile corrected V1 audit and real per-HID bitmap checks
         run: |
           set -euo pipefail
           log="$(mktemp)"
@@ -187,7 +189,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: bash .github/scripts/run_mangaall_frozen30_mangadex_audit.sh ${{ matrix.shard }}
+          script: bash .github/scripts/run_mangaall_frozen30_mangadex_audit.sh ${{ matrix.shard }} 1
       - name: Upload ONLY sanitized Android cohort verdict
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -224,10 +226,15 @@ jobs:
                   continue
               report=json.loads(p.read_text())
               actual=report.get("works",[])
-              valid &= (report.get("schemaVersion")==1 and report.get("scope")=="MANGADEX_EN_ONLY"
+              valid &= (report.get("schemaVersion")==2 and report.get("scope")=="MANGADEX_EN_ONLY"
                         and report.get("shard")==shard
                         and report.get("corpusSha256")=="19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1"
                         and report.get("integrity") is True
+                        and report.get("transportHealthy") is True
+                        and report.get("pixelContract") is True
+                        and report.get("pixelHealthy") is True
+                        and report.get("pixelProbe")=="FIRST_PAGE_PER_READABLE_HID"
+                        and report.get("outcome")=="PASS"
                         and report.get("completeReport") is True
                         and report.get("instrumentationPassed") is True
                         and [r.get("index") for r in actual]==list(range(shard*10+1,shard*10+11)))
@@ -235,7 +242,7 @@ jobs:
           counts=Counter(r.get("outcome","UNKNOWN") for r in rows)
           for outcome,count in sorted(counts.items()):
               print(f"MANGAALL_DEX_AUDIT|outcome={outcome}|works={count}")
-          print(f"MANGAALL_DEX_AUDIT|observed={len(rows)}|ready={counts['SOURCE_PAGE_LIST_READY']}|expected=30|canonical=NOT_TESTED|readerPixels=NOT_TESTED")
+          print(f"MANGAALL_DEX_AUDIT|observed={len(rows)}|ready={counts['SOURCE_PAGE_LIST_READY']}|expected=30|canonical=NOT_TESTED|pixelDecoded={sum(r['pixelDecoded'] for r in rows)}|readerUI=NOT_TESTED")
           assert valid and [r["index"] for r in rows]==list(range(1,31))
           PY
           test '${{ needs.build-once-unsigned.result }}' = 'success'
