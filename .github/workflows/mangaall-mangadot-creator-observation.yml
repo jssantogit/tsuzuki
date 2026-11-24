@@ -20,6 +20,7 @@ jobs:
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-mangadot-creator-observation.yml'
           python3 - <<'PY'
           import json, re, sys, time, urllib.request, urllib.parse, urllib.error
+          from html.parser import HTMLParser
           sys.path.insert(0, ".github/scripts")
           from run_mangaall_frozen30_independent_catalog import locked_works
           works = locked_works()
@@ -29,6 +30,7 @@ jobs:
           def nonempty(value):
               return bool(value.strip()) if isinstance(value,str) else bool(value) if isinstance(value,(list,dict)) else False
           observed = 0
+          details = []
           for index in (1,3,10,12):
               url = "https://mangadot.net/api/search?" + urllib.parse.urlencode(dict(search=works[index-1], page=1, limit=56))
               request = urllib.request.Request(url, headers={"Accept":"application/json","User-Agent":"Tsuzuki-CI-source-metadata-observation"})
@@ -51,6 +53,10 @@ jobs:
                           kinds = sorted(set(type(v).__name__ for v in values))
                           found.append(field+":"+str(len(values))+":"+"/".join(kinds))
                   observed += len(exact)
+                  if len(exact)==1:
+                      hid=exact[0].get('manga_id',exact[0].get('id'))
+                      if re.fullmatch(r'[1-9][0-9]{0,15}',str(hid)):
+                          details.append((index,str(hid)))
                   print(f"DOT_CREATOR|index={index}|outcome=HTTP200|rows={len(rows)}|exact={len(exact)}|creatorFields={','.join(found) or 'NONE'}")
               except urllib.error.HTTPError as error:
                   print(f"DOT_CREATOR|index={index}|outcome=HTTP{error.code}")
@@ -60,4 +66,62 @@ jobs:
                   print(f"DOT_CREATOR|index={index}|outcome=TRANSPORT_OR_SCHEMA_ERROR")
               time.sleep(1)
           print(f"DOT_CREATOR|scope=SEARCH_DTO_ONLY|exactRows={observed}|canonical=NOT_TESTED")
+          class Metadata(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.reading=False
+                  self.text=[]
+                  self.documents=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=="script" and dict(attrs).get("type","").lower()=="application/ld+json":
+                      self.reading=True
+                      self.text=[]
+              def handle_data(self,data):
+                  if self.reading:
+                      self.text.append(data)
+              def handle_endtag(self,tag):
+                  if tag=="script" and self.reading:
+                      try:
+                          self.documents.append(json.loads("".join(self.text)))
+                      except ValueError:
+                          pass
+                      self.reading=False
+          class SameOrigin(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,headers,newurl):
+                  target=urllib.parse.urlsplit(newurl)
+                  if target.scheme!="https" or target.netloc!="mangadot.net":
+                      raise urllib.error.HTTPError(newurl,code,"redirect denied",headers,fp)
+                  return super().redirect_request(req,fp,code,msg,headers,newurl)
+          opener=urllib.request.build_opener(SameOrigin())
+          def objects(value,depth=0):
+              if depth>12:
+                  return
+              if isinstance(value,dict):
+                  yield value
+                  for child in value.values():
+                      yield from objects(child,depth+1)
+              elif isinstance(value,list):
+                  for child in value:
+                      yield from objects(child,depth+1)
+          for index,hid in details:
+              request=urllib.request.Request("https://mangadot.net/manga/"+hid,headers={"Accept":"text/html","User-Agent":"Tsuzuki-CI-source-metadata-observation"})
+              try:
+                  with opener.open(request,timeout=15) as response:
+                      raw=response.read(2*1024*1024+1)
+                      if len(raw)>2*1024*1024:
+                          print(f"DOT_DETAIL|index={index}|outcome=BODY_LIMIT")
+                          continue
+                  parser=Metadata()
+                  parser.feed(raw.decode("utf-8",errors="replace"))
+                  candidates=[o for doc in parser.documents for o in objects(doc) if normalized(o.get("name"))==normalized(works[index-1])]
+                  creator_objects=sum(any(nonempty(o.get(f)) for f in fields) for o in candidates)
+                  print(f"DOT_DETAIL|index={index}|outcome=HTTP200|structuredDocuments={len(parser.documents)}|exactNamedObjects={len(candidates)}|withCreatorFields={creator_objects}")
+              except urllib.error.HTTPError as error:
+                  print(f"DOT_DETAIL|index={index}|outcome=HTTP{error.code}")
+                  if error.code in (403,429):
+                      sys.exit(1)
+              except (OSError,ValueError,AttributeError):
+                  print(f"DOT_DETAIL|index={index}|outcome=TRANSPORT_OR_SCHEMA_ERROR")
+              time.sleep(1)
+
           PY
