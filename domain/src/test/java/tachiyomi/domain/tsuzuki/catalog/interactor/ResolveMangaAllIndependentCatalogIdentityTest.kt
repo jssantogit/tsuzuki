@@ -152,6 +152,40 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
     }
 
     @Test
+    fun `oversized advertised catalog total stops after first page without accepting its exact match`() = runTest {
+        val offsets = mutableListOf<Int>()
+        val mu = source("mangaupdates", search = { query ->
+            offsets += query.offset
+            CatalogPage(
+                listOf(item("mangaupdates", "42", "Work").copy(format = CatalogItemFormat.MANHWA)),
+                hasNextPage = true,
+                totalCount = 8_574,
+            )
+        }, detail = { error("Incomplete search cannot authorize identity") })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(mu))
+            .execute("Work", CatalogItemFormat.MANHWA)
+        result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE
+        result.identity shouldBe null
+        result.catalogsFailed shouldBe 0
+        offsets shouldBe listOf(0)
+    }
+
+    @Test
+    fun `detail cannot change requested manhwa into a novel or unknown format`() = runTest {
+        for (format in listOf(CatalogItemFormat.NOVEL, CatalogItemFormat.UNKNOWN)) {
+            val mu = source("mangaupdates", search = {
+                CatalogPage(listOf(item("mangaupdates", "42", "Work").copy(format = CatalogItemFormat.MANHWA)), false)
+            }, detail = {
+                item("mangaupdates", it, "Work").copy(format = format)
+            })
+            val result = ResolveMangaAllIndependentCatalogIdentity(registry(mu))
+                .execute("Work", CatalogItemFormat.MANHWA)
+            result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+            result.identity shouldBe null
+        }
+    }
+
+    @Test
     fun `unbounded catalog cursor is incomplete instead of claiming full match`() = runTest {
         val mal = source("mal", search = {
             CatalogPage(listOf(item("mal", "42", "Work")), true)
