@@ -14,7 +14,8 @@ env:
 
 concurrency:
   group: mangaall-frozen30-canonical-persistence
-  cancel-in-progress: true
+  # Preserve an active baseline run when a corrected candidate is queued.
+  cancel-in-progress: false
 
 jobs:
   preflight:
