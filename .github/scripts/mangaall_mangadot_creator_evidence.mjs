@@ -49,16 +49,22 @@ export function extractMangaDotCreators(raw, id, title) {
 export async function observeMangaDotCreators(candidate, host = globalThis.tsuzuki) {
   const match = /^mangadot:([1-9][0-9]{0,15})$/.exec(candidate?.externalWorkId || "");
   if (!match || !exactName(candidate.title)) return { detailOutcome: "IDENTITY_MISMATCH" };
+  let handle;
   try {
     const url = "https://mangadot.net/manga/" + match[1];
-    const handle = await host.http.getResource(url);
-    const raw = await host.dom.selectText(handle, SELECTOR);
-    const authors = extractMangaDotCreators(raw, match[1], candidate.title);
-    return authors ? { detailOutcome: "VERIFIED_NO_ALIASES", authors } :
-      { detailOutcome: "IDENTITY_MISMATCH" };
+    handle = await host.http.getResource(url);
   } catch {
     return { detailOutcome: "DETAIL_FAILED" };
   }
+  let raw;
+  try {
+    raw = await host.dom.selectText(handle, SELECTOR);
+  } catch {
+    return { detailOutcome: "INVALID_RESPONSE" };
+  }
+  const authors = extractMangaDotCreators(raw, match[1], candidate.title);
+  return authors ? { detailOutcome: "VERIFIED_NO_ALIASES", authors } :
+    { detailOutcome: "IDENTITY_MISMATCH" };
 }
 export function mangaDotExactTitle(candidate, title) {
   return !!exactName(title) && exactName(candidate?.title) === exactName(title);
