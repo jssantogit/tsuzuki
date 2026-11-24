@@ -112,7 +112,7 @@ const typedPagingGuard = `  if (!Array.isArray(rows) || rows.length > 56) {
   }
   // Upstream may truthfully advertise more than our 32 auditable pages.
   // Do not misclassify that as INVALID_RESPONSE. Preserve exact candidates
-  // on each permitted page; n>32 and page>=32 still fail closed as PARTIAL.
+  // on each permitted page; n>32 remains fail-closed when a client asks for page 33.
   if (total != null && total > 4096) {
     throw new Error("MangaAll source lookup invalid total range");
   }
@@ -122,9 +122,8 @@ const typedPagingGuard = `  if (!Array.isArray(rows) || rows.length > 56) {
   if (hasNext && rows.length === 0) {
     throw new Error("MangaAll source lookup empty continuation");
   }
-  if (hasNext && page >= 32) {
-    throw new Error("MangaAll bounded source search exhausted");
-  }`;
+  // Page 32 retains candidates and a nonterminal cursor. The 32-page
+  // journey budget marks INCOMPLETE; a later page-33 call fails closed.`;
 const experimentalDotCode = originalDotSource
   .replace(sourcePageLimit,
     'if (n > 32) throw new Error("MangaAll bounded source search exhausted");')
