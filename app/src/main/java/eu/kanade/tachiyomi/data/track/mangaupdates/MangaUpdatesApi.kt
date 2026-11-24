@@ -283,6 +283,55 @@ class MangaUpdatesApi(
         }
     }
 
+    // Keep the upstream total and explicit page offsets; never report a
+    // truncated first response as an exhaustive catalog search.
+    suspend fun searchWindow(query: String, offset: Int, limit: Int): MangaUpdatesSearchWindow {
+        require(offset >= 0 && limit > 0)
+        val pageSize = limit.coerceAtMost(100)
+        var page = offset / pageSize + 1
+        var skip = offset % pageSize
+        var total: Int? = null
+        val items = mutableListOf<TrackSearch>()
+        val seenIds = mutableSetOf<Long>()
+        while (items.size < limit) {
+            val body = buildJsonObject {
+                put("search", query)
+                put("page", page)
+                put("perpage", pageSize)
+                put(
+                    "filter_types",
+                    buildJsonArray {
+                        add("drama cd")
+                        add("novel")
+                    },
+                )
+            }
+            val response = with(json) {
+                client.newCall(
+                    POST(
+                        url = "$BASE_URL/v1/series/search",
+                        body = body.toString().toRequestBody(CONTENT_TYPE),
+                    ),
+                )
+                    .awaitSuccess()
+                    .parseAs<MUSearchResult>()
+            }
+            check(response.page == page && response.perPage == pageSize)
+            check(response.totalHits >= 0 && (total == null || total == response.totalHits))
+            total = response.totalHits
+            val start = (page.toLong() - 1L) * pageSize
+            val expected = (response.totalHits.toLong() - start).coerceIn(0L, pageSize.toLong()).toInt()
+            check(response.results.size == expected)
+            val mapped = response.results.map { it.record.toTrackSearch(trackerId) }
+            check(mapped.all { it.remote_id > 0 && seenIds.add(it.remote_id) })
+            items += mapped.drop(skip).take(limit - items.size)
+            if (start + mapped.size >= response.totalHits || mapped.isEmpty()) break
+            skip = 0
+            page++
+        }
+        return MangaUpdatesSearchWindow(items, requireNotNull(total))
+    }
+
     suspend fun discover(
         orderBy: String,
         offset: Int,
