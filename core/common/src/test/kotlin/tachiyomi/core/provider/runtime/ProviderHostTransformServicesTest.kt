@@ -19,7 +19,7 @@ class ProviderHostTransformServicesTest {
     private val store = ProviderResourceStore()
 
     @Test
-    fun `dom selectors operate on host side html handles`() = runBlocking {
+    fun `dom selectors operate on host side html handles`(): Unit = runBlocking {
         val handle = store.put(
             owner = owner,
             kind = ProviderResourceKind.HTML,
@@ -33,7 +33,7 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
-    fun `large html resource yields only unique bounded structured metadata`() = runBlocking {
+    fun `large html resource yields only unique bounded structured metadata`(): Unit = runBlocking {
         val json = """{"@type":"ComicSeries","name":"Work","author":{"@type":"Person","name":"Creator"}}"""
         val script = """<script type="application/ld+json">$json</script>"""
         val html = "<html><head>$script</head><body>" + "x".repeat(350 * 1024) + "</body></html>"
@@ -46,7 +46,7 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
-    fun `structured metadata rejects duplicate or oversized script blocks`() = runBlocking {
+    fun `structured metadata rejects duplicate or oversized script blocks`(): Unit = runBlocking {
         val script = """<script type="application/ld+json">{"name":"Work"}</script>"""
         val dom = DefaultProviderDomHostService(owner, store)
         val duplicate = store.put(owner, ProviderResourceKind.HTML, (script + script).encodeToByteArray())
@@ -57,7 +57,7 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
-    fun `zip extraction keeps archive and entry bytes behind opaque handles`() = runBlocking {
+    fun `zip extraction keeps archive and entry bytes behind opaque handles`(): Unit = runBlocking {
         val archive = store.put(
             owner = owner,
             kind = ProviderResourceKind.ARCHIVE,
@@ -71,7 +71,7 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
-    fun `binary resource promotion stays host owned and returns only opaque managed token`() = runBlocking {
+    fun `binary resource promotion stays host owned and returns only opaque managed token`(): Unit = runBlocking {
         val handle = store.put(
             owner = owner,
             kind = ProviderResourceKind.BINARY,
@@ -95,7 +95,7 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
-    fun `aes cbc decrypt returns a new host resource without exposing bytes to script`() = runBlocking {
+    fun `aes cbc decrypt returns a new host resource without exposing bytes to script`(): Unit = runBlocking {
         val key = ByteArray(16) { it.toByte() }
         val iv = ByteArray(16) { (it + 16).toByte() }
         val encrypted = aesEncrypt(
