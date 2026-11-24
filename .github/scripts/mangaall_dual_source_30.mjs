@@ -70,6 +70,13 @@ assert.ok(Object.entries(verifiedAliasQueries).every(([main, aliases]) =>
 function workQueryNames(work) {
   return [...work.names, ...(verifiedAliasQueries[work.names[0]] || [])];
 }
+// Measured total search pages: Weak Hero 48, World After the Fall 43,
+// Cheese in the Trap 74. Keep all other 27 manhwas at 32. This is a CI-only
+// capacity experiment, not an increased production Host budget.
+const longTailLookupWorks = new Set([
+  'Weak Hero', 'The World After the Fall', 'Cheese in the Trap',
+]);
+assert.ok([...longTailLookupWorks].every(title => cohort.works.includes(title)));
 
 const routerFile = path.join(sourceRoot, 'modules/router.js');
 const original = readFileSync(routerFile, 'utf8');
@@ -163,7 +170,7 @@ const narrowedDotSearch = '["search", ({"The Boxer":"Boxer","The Horizon":"Horiz
 const experimentalDotCode = originalDotSource
   .replace(dotSearchAnchor, narrowedDotSearch)
   .replace(sourcePageLimit,
-    'if (n > 32) throw new Error("MangaAll bounded source search exhausted");')
+    'if (n > 80) throw new Error("MangaAll bounded source search exhausted");')
   .replace(originalPagingGuard, typedPagingGuard)
   .replace(originalHttpImport, 'from "' + adaptedDotHttpUri + '"');
 const extendedMangaDot = await import('data:text/javascript;base64,' +
@@ -426,6 +433,8 @@ async function offlineContracts() {
   assert.ok(originalDotSource.includes(dotSearchAnchor));
   assert.ok(experimentalDotCode.includes(narrowedDotSearch));
   assert.equal(Object.keys(verifiedAliasQueries).length, 3);
+  assert.ok(experimentalDotCode.includes('if (n > 80) throw new Error('));
+  assert.ok(extendedJourneyCode.includes('lookupPageLimit > 80'));
   // Regression: original-language metadata is required for Korean manhwa.
   // The source adapter must continue to reject unverified Japanese-language
   // works even when the translated English title is identical.
@@ -570,7 +579,7 @@ const prioritySummaryOrder = `const exactPrimary = candidate => titles.some(titl
       matchRank(b) - matchRank(a) ||
       a.externalWorkId.localeCompare(b.externalWorkId));`;
 const extendedJourneyCode = originalJourney
-  .replace(oldJourneyCeiling, 'lookupPageLimit > 32')
+  .replace(oldJourneyCeiling, 'lookupPageLimit > 80')
   .replace(originalSummaryOrder, prioritySummaryOrder);
 const { probeJourney, journeyVerdict } =
   await import('data:text/javascript;base64,' +
@@ -667,7 +676,9 @@ for (const [index, work] of assigned.entries()) {
   try {
     probe = await probeJourney(dualReading,
       {...work, names: workQueryNames(work)}, grants, {
-      lookupContract: 'v1', lookupPageLimit: 32, chapterPageLimit: 8,
+      lookupContract: 'v1',
+      lookupPageLimit: longTailLookupWorks.has(work.names[0]) ? 80 : 32,
+      chapterPageLimit: 8,
       includeCandidates: true, includeCandidateCoverage: true,
       candidatePreviewLimit: 3, candidateChapterPageLimit: 2,
     });
@@ -753,8 +764,8 @@ const report = {
   hostRepository: 'jssantogit/tsuzuki', sourceRepositoryCommit: PROVIDER_SHA,
   originalCode10SignedPackageChanged: false, adapterRouterModification: 'SOURCE_IDS_ONLY_IN_MEMORY',
   chapterAdaptation: 'MANGADOT_IN_MEMORY_48K_200_NO_RELEASE',
-  lookupAdaptation: 'MANGADOT_THIRTYTWO_SOURCE_PAGES_IN_MEMORY',
-  probeBudget: 'UNSIGNED_LOOKUP32_NOT_HOST',
+  lookupAdaptation: 'MANGADOT_EIGHTY_SOURCE_PAGES_SCOPED_IN_MEMORY',
+  probeBudget: 'UNSIGNED_LOOKUP32_OR80_NOT_HOST',
   acquisitionAdaptation: 'UNSIGNED_DOT8M_DEX50_CHAPTERS_CI_ONLY',
   sourceSet: SOURCES, shard, shardCount: count, totalWorkCount: 30,
   sourceHttp: 'REAL_GITHUB_ACTIONS_FETCH', canonical: 'NOT_TESTED',
