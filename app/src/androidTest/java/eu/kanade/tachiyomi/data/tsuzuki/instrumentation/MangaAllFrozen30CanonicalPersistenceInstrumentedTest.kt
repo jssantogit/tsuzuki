@@ -49,6 +49,10 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.RefreshChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
@@ -234,6 +238,40 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             }
         }
         val metadataRegistry = catalogRegistry(catalogs.keys)
+        // Retain only closed codes/counts for the fixed public corpus. Never
+        // export actual titles, creator names, HIDs, URLs or chapter IDs.
+        val acquisitionFacts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val diagnosticRecorder = object : StructuredDiagnosticRecorder {
+            override val sessionId = "00000000-0000-0000-0000-000000000000"
+            override val detailedCaptureActive = true
+            override fun canonicalTitleReference(canonicalTitleId: String): String? = null
+            override fun mihonMangaReference(mihonMangaId: Long): String? = null
+            override fun record(event: StructuredDiagnosticEvent) {
+                if (acquisitionFacts.size >= 2_048) return
+                if (event.name !in setOf(
+                        DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT,
+                        DiagnosticEventName.PROVIDER_READING_CANDIDATE,
+                        DiagnosticEventName.PROVIDER_READING_SOURCE_ASSOCIATION,
+                        DiagnosticEventName.PROVIDER_READING_CHAPTER_ATTEMPT,
+                    )
+                ) {
+                    return
+                }
+                fun code(key: String): String? =
+                    ((event.attributes[key] as? DiagnosticAttributeValue.Code)?.value as? Enum<*>)?.name
+                val hid = (event.attributes["provider_work_id"] as? DiagnosticAttributeValue.Text)?.value
+                val source = code("mangaall_network_source") ?: when (hid?.substringBefore(':')) {
+                    "mangadex" -> "MANGADEX"
+                    "mangadot" -> "MANGADOT"
+                    else -> "UNKNOWN"
+                }
+                val reason = code("provider_work_verification") ?: code("provider_detail_outcome")
+                    ?: code("error_category") ?: "NONE"
+                val candidates = (event.attributes["candidate_count"] as? DiagnosticAttributeValue.Number)?.value ?: 0
+                acquisitionFacts += "source=$source|event=${event.name.name}|outcome=${event.outcome.name}" +
+                    "|reason=$reason|candidates=$candidates"
+            }
+        }
         val collector = CollectProviderReadingEvidence(
             canonicalTitleRepository = titles,
             providerRegistry = registry,
@@ -241,6 +279,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             bindingRepository = bindings,
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
             clock = System::currentTimeMillis,
+            diagnostics = diagnosticRecorder,
             canonicalMetadataSnapshotRepository = metadata,
             integrationRegistry = metadataRegistry,
             titleNameObservationRepository = titleNames,
@@ -530,6 +569,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         var passed = 0
         for (index in (shard * 10 + 1)..(shard * 10 + 10)) {
             val titleId = "mangaall-frozen30-canonical-$index"
+            acquisitionFacts.clear()
             val result = try {
                 if (phase == "COLLECT") {
                     collect(index, titleId)
@@ -547,6 +587,17 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 throw error
             } catch (_: Exception) {
                 "UNCLASSIFIED_FAILURE"
+            }
+            if (phase == "COLLECT") {
+                val counts = synchronized(acquisitionFacts) { acquisitionFacts.toList().groupingBy { it }.eachCount() }
+                for ((fact, count) in counts.toSortedMap()) {
+                    instrument.sendStatus(
+                        1,
+                        Bundle().apply {
+                            putString("stream", "MANGAALL_CANONICAL_ACQUISITION|index=$index|$fact|count=$count")
+                        },
+                    )
+                }
             }
             if (phase == "RESTORE" && readerMode == "1") {
                 val readingOutcome = if (result == "RESTORED") {
