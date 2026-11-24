@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.provider.runtime
 
+import android.os.Bundle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
@@ -102,9 +103,15 @@ class MangaAllMangaDotCreatorLiveInstrumentedTest {
                 }
                 val passed = response.failure == null && rows.size == 1 && verified.size == 1
                 results += passed
-                println(
-                    "MANGAALL_DOT_CREATOR|index=$index|outcome=${if (passed) "PASS" else "RED"}" +
-                        "|exact=${rows.size}|verified=${verified.size}|canonical=NOT_TESTED",
+                instrument.sendStatus(
+                    1,
+                    Bundle().apply {
+                        putString(
+                            "stream",
+                            "MANGAALL_DOT_CREATOR|index=$index|outcome=${if (passed) "PASS" else "RED"}" +
+                                "|exact=${rows.size}|verified=${verified.size}|canonical=NOT_TESTED",
+                        )
+                    },
                 )
             }
             assertEquals("All four existing frozen observations must pass via actual Host", 4, results.count { it })
