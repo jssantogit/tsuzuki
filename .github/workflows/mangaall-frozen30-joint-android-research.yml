@@ -52,7 +52,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
         with:
           cache-read-only: true
-      - name: Regress all affected contracts and compile one unsigned APK pair
+      - name: Regress affected contracts and compile corrected unsigned APK pair
         run: |
           set -euo pipefail
           log="$(mktemp)"
