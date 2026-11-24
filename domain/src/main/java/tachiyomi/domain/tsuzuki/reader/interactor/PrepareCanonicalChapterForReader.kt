@@ -102,7 +102,8 @@ class PrepareCanonicalChapterForReader(
                         stage = DiagnosticStage.READER,
                         outcome = DiagnosticOutcome.NEEDS_CONFIRMATION,
                         attributes = mapOf(
-                            DiagnosticAttribute.CANDIDATE_COUNT to DiagnosticAttributeValue.Number(releases.size.toLong()),
+                            DiagnosticAttribute.CANDIDATE_COUNT to
+                                DiagnosticAttributeValue.Number(releases.size.toLong()),
                         ),
                     )
                     return complete(
