@@ -19,7 +19,7 @@ jobs:
           set -euo pipefail
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-mangadot-creator-observation.yml'
           python3 - <<'PY'
-          import json, re, sys, time, urllib.request, urllib.parse, urllib.error
+          import json, re, sys, time, subprocess, urllib.request, urllib.parse, urllib.error
           from html.parser import HTMLParser
           sys.path.insert(0, ".github/scripts")
           from run_mangaall_frozen30_independent_catalog import locked_works
@@ -127,7 +127,19 @@ jobs:
                   types=[t if isinstance(t,str) and t in known else "OTHER" for t in types]
                   exact_ref=sum(exact_url(o.get("url")) or exact_url(o.get("@id")) for o in credited)
                   people=sum(len(author_names(o.get("author"))) for o in credited)
-                  print(f"DOT_DETAIL|index={index}|outcome=HTTP200|bytes={len(raw)}|finalUrlExact={exact_url(final_url)}|structuredDocuments={len(parser.documents)}|exactNamedObjects={len(candidates)}|withCreatorFields={len(credited)}|types={','.join(types) or 'NONE'}|exactWorkRef={exact_ref}|authorPersons={people}")
+                  url_exact=sum(exact_url(o.get("url")) for o in credited)
+                  id_exact=sum(exact_url(o.get("@id")) for o in credited)
+                  id_present=sum(o.get("@id") is not None for o in credited)
+                  url_present=sum(o.get("url") is not None for o in credited)
+                  parsed_ok=False
+                  if len(parser.documents)==1:
+                      payload=json.dumps({"raw":json.dumps(parser.documents[0]),"id":hid,"title":works[index-1]})
+                      check=subprocess.run(["node","--input-type=module","-e",
+                          'import fs from "node:fs"; import {extractMangaDotCreators} from "./.github/scripts/mangaall_mangadot_creator_evidence.mjs"; const p=JSON.parse(fs.readFileSync(0,"utf8")); process.exit(extractMangaDotCreators(p.raw,p.id,p.title)?0:1);'],
+                          input=payload,text=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=5)
+                      parsed_ok=check.returncode==0
+
+                  print(f"DOT_DETAIL|index={index}|outcome=HTTP200|bytes={len(raw)}|finalUrlExact={exact_url(final_url)}|structuredDocuments={len(parser.documents)}|exactNamedObjects={len(candidates)}|withCreatorFields={len(credited)}|types={','.join(types) or 'NONE'}|exactWorkRef={exact_ref}|authorPersons={people}|urlExact={url_exact}|idExact={id_exact}|idPresent={id_present}|urlPresent={url_present}|strictParser={parsed_ok}")
               except urllib.error.HTTPError as error:
                   print(f"DOT_DETAIL|index={index}|outcome=HTTP{error.code}")
                   if error.code in (403,429):
