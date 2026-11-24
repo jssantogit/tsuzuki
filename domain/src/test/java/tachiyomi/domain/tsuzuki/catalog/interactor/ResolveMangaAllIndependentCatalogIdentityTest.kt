@@ -91,12 +91,40 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
         val offsets = mutableListOf<Int>()
         val mal = source("mal", search = { query ->
             offsets += query.offset
-            CatalogPage(listOf(item("mal", "42", "Work")), query.offset == 0)
+            if (query.offset == 0) {
+                CatalogPage(listOf(item("mal", "42", "Work")), true)
+            } else {
+                CatalogPage(listOf(item("mal", "43", "Unrelated Work")), false)
+            }
         }, detail = { item("mal", "42", "Work") })
         val result = ResolveMangaAllIndependentCatalogIdentity(registry(mal)).execute("Work")
         result.status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
         // Advance by the number actually received, never skip real candidates.
         offsets shouldBe listOf(0, 1)
+    }
+
+    @Test
+    fun `duplicate identity on terminal page cannot certify pagination`() = runTest {
+        val mal = source("mal", search = { query ->
+            CatalogPage(listOf(item("mal", "42", "Work")), query.offset == 0, totalCount = 2)
+        }, detail = { error("Repeated page cannot authorize identity") })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(mal)).execute("Work")
+        result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE
+        result.identity shouldBe null
+    }
+
+    @Test
+    fun `changing catalog total cannot certify pagination`() = runTest {
+        val mal = source("mal", search = { query ->
+            if (query.offset == 0) {
+                CatalogPage(listOf(item("mal", "42", "Work")), true, totalCount = 3)
+            } else {
+                CatalogPage(listOf(item("mal", "43", "Unrelated Work")), false, totalCount = 2)
+            }
+        }, detail = { error("Changing total cannot authorize identity") })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(mal)).execute("Work")
+        result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE
+        result.identity shouldBe null
     }
 
     @Test
