@@ -53,7 +53,7 @@ if [[ "$status" -ne 0 ]] ||
   # source payload, chapter ID, URL, cookie or Android exception is retained.
   safe_failure="$(grep -oE 'No exact-source candidate for frozen manhwa index [0-9]+|No terminal source-HID chapter-one proof for locked work [0-9]+; inspected=[0-9]+|Android source lookup failed for locked index [0-9]+ page [0-9]+|Host output exceeds 48KiB at work [0-9]+|Repeated chapter HID for frozen index [0-9]+|Repeated chapter cursor for frozen index [0-9]+|Android lookup cursor loop at locked index [0-9]+' "$log" | head -n 1 || true)"
   if [[ -n "$safe_failure" ]]; then
-    printf 'MANGAALL_FROZEN30_ANDROID|shard=%s|failure=%s\\n' "$shard"       "${safe_failure// /_}" >"$out/diagnostic.txt"
+    printf 'MANGAALL_FROZEN30_ANDROID|shard=%s|failure=%s\n' "$shard" "${safe_failure// /_}" >"$out/diagnostic.txt"
   fi
   # Sanitized, bounded diagnosis: no source response, chapter/HID, exception,
   # URLs, cookies, headers or raw instrumentation log enters the artifact.
