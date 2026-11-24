@@ -89,6 +89,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: true
+      - name: TEMPORARY - produce exact Kotlin formatter output for review
+        run: |
+          set -euo pipefail
+          ./gradlew :app:spotlessKotlinApply --stacktrace
+          echo 'MANGAALL_FORMATTED_KOTLIN_BEGIN'
+          base64 -w0 app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFrozen30Code11AndroidLiveInstrumentedTest.kt
+          echo
+          echo 'MANGAALL_FORMATTED_KOTLIN_END'
       - name: Compile code11 Android Host and frozen-cohort instrumentation
         run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
       - name: Enable KVM for GitHub-hosted Android emulator
