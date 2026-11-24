@@ -81,6 +81,7 @@ jobs:
           assert "mangafire" not in str(manifest).lower()
           assert manifest["name"] == "MangaAll — frozen 30 manhwa source research"
           assert 'originalLanguage !== "ko"' in dex
+          assert '["originalLanguage[]", "ko"]' in dex
           assert '"The Boxer":"Boxer"' in dot
           assert '"The Horizon":"Horizon"' in dot
           assert '"The Breaker":"Breaker"' in dot
@@ -96,7 +97,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: true
-      - name: Build exact shared unsigned Android APK pair including restored Reader checks
+      - name: Build corrected shared unsigned APK pair and native Korean search filter
         run: |
           set -euo pipefail
           log="$(mktemp)"
