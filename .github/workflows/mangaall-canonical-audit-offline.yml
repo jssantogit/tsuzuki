@@ -71,6 +71,30 @@ jobs:
         run: |
           ./gradlew :core:common:spotlessKotlinCheck :core:common:testDebugUnitTest \
             --tests '*MangaAllFutureHostChapterSnapshotTest' --tests '*ProviderStateHostServicesTest' --stacktrace
+      - name: Regress all core-common JVM tests (integrated branch)
+        run: |
+          ./gradlew :core:common:testDebugUnitTest --stacktrace
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          reports = list(Path('core/common/build/test-results/testDebugUnitTest').glob('TEST-*.xml'))
+          assert reports, 'No core-common JUnit reports'
+          names = set()
+          count = 0
+          for report in reports:
+              root = ET.parse(report).getroot()
+              assert int(root.get('failures', '0')) == 0 and int(root.get('errors', '0')) == 0
+              count += int(root.get('tests', '0'))
+              for case in root.findall('testcase'):
+                  if case.find('skipped') is None:
+                      names.add(case.get('name', ''))
+          for test in (
+              'snapshots_for_two_works_and_languages_survive_new_host_instances',
+              'quota_rejection_preserves_other_active_scope_and_expired_scope_is_pruned',
+          ):
+              assert any(test in name for name in names), 'Missing scoped snapshot regression: ' + test
+          print('MANGAALL_INTEGRATED_CORE_COMMON|tests=' + str(count) + '|result=PASS')
+          PY
       - name: Compile and exercise identity, continuation, SQLite and Reader
         run: |
           ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck \

@@ -31,6 +31,15 @@ import java.util.concurrent.atomic.AtomicReference
 class MangaAllReaderSourceCardInstrumentedTest {
     @Test(timeout = 90_000L)
     fun tappingMangaAllSourcePassesExactVerifiedChapterOptionWithoutCrossSourceSelection() {
+        assertSourceCardSelection(useMangaDot = false)
+    }
+
+    @Test(timeout = 90_000L)
+    fun tappingMangaDotKeepsExactChapterAndFacetInsteadOfMangaDex() {
+        assertSourceCardSelection(useMangaDot = true)
+    }
+
+    private fun assertSourceCardSelection(useMangaDot: Boolean) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val device = UiDevice.getInstance(instrumentation)
         device.wakeUp()
@@ -41,15 +50,15 @@ class MangaAllReaderSourceCardInstrumentedTest {
         ) as DefaultSkinValidationActivity
         val selected = AtomicReference<ProviderChapterReadingOption?>()
         val received = CountDownLatch(1)
-        val fire = ProviderChapterReadingOption(
+        val alternative = ProviderChapterReadingOption(
             canonicalChapterId = "canonical-punpun-chapter-1",
-            bindingId = "verified-punpun",
+            bindingId = if (useMangaDot) "verified-dot" else "verified-punpun",
             providerId = ProviderId("app.tsuzuki.mangaall"),
             facetId = "en",
-            externalWorkId = "mangafire:zk12",
-            providerChapterId = "mangafire:chapter-one",
+            externalWorkId = if (useMangaDot) "mangadot:131" else "mangafire:zk12",
+            providerChapterId = if (useMangaDot) "mangadot:chapters:13101" else "mangafire:chapter-one",
         )
-        val dex = fire.copy(
+        val dex = alternative.copy(
             bindingId = "verified-dex",
             externalWorkId = "mangadex:verified-work",
             providerChapterId = "mangadex:verified-chapter",
@@ -60,8 +69,8 @@ class MangaAllReaderSourceCardInstrumentedTest {
                     Column {
                         ReaderSourceCard(
                             state = ContentSelectorScreenState.Loading,
-                            providerOptions = listOf(dex, fire),
-                            activeProviderSourceKey = null,
+                            providerOptions = listOf(dex, alternative),
+                            activeProviderSourceKey = dex.readerSourceKey,
                             activeOptionKey = null,
                             activeContentLabel = null,
                             failure = null,
@@ -102,15 +111,17 @@ class MangaAllReaderSourceCardInstrumentedTest {
                 windowFocused,
             )
             instrumentation.waitForIdleSync()
+            val alternativeName = if (useMangaDot) "MangaDot" else "MangaFire"
+            val absentName = if (useMangaDot) "MangaFire" else "MangaDot"
             assertTrue(
-                "MangaFire option must be visible in the focused Compose Reader card",
-                device.wait(Until.hasObject(By.text("MangaFire")), 15_000L),
+                "$alternativeName option must be visible in the focused Compose Reader card",
+                device.wait(Until.hasObject(By.text(alternativeName)), 15_000L),
             )
             assertTrue(device.hasObject(By.text("MangaDex")))
-            assertFalse("Unlisted sources must not be offered", device.hasObject(By.text("MangaDot")))
-            device.findObject(By.text("MangaFire")).click()
+            assertFalse("Unlisted sources must not be offered", device.hasObject(By.text(absentName)))
+            device.findObject(By.text(alternativeName)).click()
             assertTrue("Tap must invoke the exact selected MangaAll option", received.await(10, TimeUnit.SECONDS))
-            assertEquals(fire, selected.get())
+            assertEquals(alternative, selected.get())
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
         }

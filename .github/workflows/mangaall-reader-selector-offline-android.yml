@@ -1,0 +1,65 @@
+name: MangaALL — focused Reader selector and restoration (OFFLINE Android)
+# Controlled HTTP and actual Compose/ReaderActivity on a disposable emulator.
+# Not live code11 or process-death acceptance; no Provider publication.
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/workflows/mangaall-reader-selector-offline-android.yml'
+      - '.github/scripts/run_mangaall_host_journey_android.sh'
+      - 'app/src/androidTest/java/eu/kanade/presentation/reader/MangaAllReaderSourceCardInstrumentedTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
+      - 'app/src/main/java/eu/kanade/presentation/reader/ReaderSourceCard.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-reader-selector-offline-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  controlled-reader:
+    if: startsWith(github.ref_name, 'probe/mangaall-dual-source-scale30-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          cache-read-only: true
+      - name: Verify script and build debug test APKs
+        run: |
+          bash -n .github/scripts/run_mangaall_host_journey_android.sh
+          ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Execute focused offline Reader cases
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_host_journey_android.sh
+        env:
+          MANGAALL_SELECTOR_OFFLINE_ONLY: '1'
+      - name: Preserve bounded failure evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mangaall-reader-selector-offline
+          path: .github/results/mangaall-host-journey-android/**
+          if-no-files-found: ignore
+          retention-days: 3
