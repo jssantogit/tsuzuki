@@ -16,6 +16,7 @@ PATTERN = re.compile(
     + "".join(r"\|" + name + r"=(\d+)" for name in FIELDS[:10])
     + r"\|canonical=NOT_TESTED"
     + "".join(r"\|" + name + r"=(\d+)" for name in FIELDS[10:])
+    + r"\|stage=(NONE|LOOKUP|CHAPTERS|PAGE_LIST)"
 )
 
 
@@ -36,13 +37,13 @@ def expected_coverage(row):
 def evaluate(raw, status, shard, pixel_mode):
     rows = []
     for match in PATTERN.finditer(raw):
-        index, outcome, *counts = match.groups()
-        rows.append(dict(index=int(index), outcome=outcome, **dict(zip(FIELDS, map(int, counts)))))
+        index, outcome, *counts, stage = match.groups()
+        rows.append(dict(index=int(index), outcome=outcome, stage=stage, **dict(zip(FIELDS, map(int, counts)))))
     expected = list(range(shard * 10 + 1, shard * 10 + 11))
     process_ok = status == 0 and "INSTRUMENTATION_CODE: -1" in raw and "OK (1 test)" in raw
     complete = process_ok and [r["index"] for r in rows] == expected
     integrity = complete and all(
-        r["outcome"] == expected_coverage(r)
+        r["outcome"] == expected_coverage(r) and r["stage"] == "NONE"
         and r["lookupIncomplete"] == r["inventoryIncomplete"] == 0
         and r["credited"] <= r["candidates"] == r["terminal"]
         and r["empty"] <= r["terminal"]
@@ -83,7 +84,7 @@ def selftest():
         return (f"MANGAALL_DEX_AUDIT|index={index}|outcome={outcome}"
                 + "".join(f"|{k}={row[k]}" for k in FIELDS[:10])
                 + "|canonical=NOT_TESTED"
-                + "".join(f"|{k}={row[k]}" for k in FIELDS[10:]))
+                + "".join(f"|{k}={row[k]}" for k in FIELDS[10:]) + "|stage=NONE")
 
     logs = [
         record(1, "SOURCE_PAGE_LIST_READY", candidates=1, credited=1, terminal=1,
@@ -102,6 +103,7 @@ def selftest():
     assert evaluate(good.replace("pageLists=1|pageFailures=0", "pageLists=0|pageFailures=1"), 0, 0, 1)["outcome"] == "RED"
     assert evaluate(good.replace("outcome=EXTERNAL_ONLY", "outcome=SOURCE_PAGE_LIST_READY"), 0, 0, 1)["outcome"] == "RED"
     assert evaluate(good.replace("lookupIncomplete=0", "lookupIncomplete=1"), 0, 0, 1)["outcome"] == "RED"
+    assert evaluate(good.replace("stage=NONE", "stage=LOOKUP"), 0, 0, 1)["outcome"] == "RED"
     print("MANGAALL_DEX_AUDIT|verifierSelftest=PASS")
 
 
