@@ -36,7 +36,9 @@ jobs:
           set -euo pipefail
           node --check .github/scripts/mangaall_mangadot_creator_evidence.mjs
           node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
-          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --self-test
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
+          python3 .github/scripts/verify_mangaall_frozen30_mangadex_audit.py --selftest
           python3 -m py_compile .github/scripts/mangaall_code11_dual_source_unsigned.py
           test "$(sha256sum .github/mangaall-dual-source-30-cohort-lock.json | cut -d' ' -f1)" = 19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1
   domain-data-app:
