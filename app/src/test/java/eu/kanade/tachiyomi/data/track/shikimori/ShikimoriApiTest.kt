@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.data.track.shikimori
 
+import eu.kanade.tachiyomi.data.track.shikimori.dto.SMManga
 import io.kotest.matchers.shouldBe
+import kotlinx.serialization.json.Json
 import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.jupiter.api.Test
@@ -26,6 +28,31 @@ class ShikimoriApiTest {
 
         body.formValue("client_id") shouldBe "user-client"
         body.formValue("client_secret") shouldBe "user-secret"
+    }
+
+    @Test
+    fun `declared alternate titles survive the tracker projection without replacing primary identity`() {
+        val manga = Json.decodeFromString<SMManga>(
+            """
+            {
+                "id": 42, "name": "Primary", "chapters": 0, "score": null,
+                "url": "https://shikimori.io/mangas/42", "status": null, "poster": null,
+                "airedOn": null, "description": null, "kind": "manhwa", "personRoles": null,
+                "english": "English title", "japanese": null,
+                "synonyms": ["Alternate", " Primary ", "English title", " ", "Alternate"]
+            }
+            """.trimIndent(),
+        )
+        val track = manga.toTrack(1)
+        track.remote_id shouldBe 42L
+        track.title shouldBe "Primary"
+        track.alternate_titles shouldBe listOf("English title", "Alternate")
+    }
+
+    @Test
+    fun `omitted alternate fields never fabricate aliases`() {
+        val manga = SMManga(42, "Primary", 0, null, "", null, null, null, null, "manhwa", null)
+        manga.toTrack(1).alternate_titles shouldBe emptyList()
     }
 
     private fun FormBody.formValue(name: String): String =
