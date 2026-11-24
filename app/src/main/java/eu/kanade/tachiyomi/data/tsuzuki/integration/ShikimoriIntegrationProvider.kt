@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriCollectionQuery
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriIntegrationApi
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.collections.execution.PageCatalogFetcher
@@ -62,7 +63,12 @@ class ShikimoriIntegrationProvider private constructor(
                                 page = page,
                                 limit = pageSize,
                                 order = DEFAULT_SEARCH_ORDER,
-                                kind = MANGA_KIND_EXCLUSIONS,
+                                kind = when (query.format) {
+                                    CatalogItemFormat.MANGA -> "manga"
+                                    CatalogItemFormat.MANHWA -> "manhwa"
+                                    CatalogItemFormat.MANHUA -> "manhua"
+                                    else -> MANGA_KIND_EXCLUSIONS
+                                },
                                 search = text,
                             ),
                         )
