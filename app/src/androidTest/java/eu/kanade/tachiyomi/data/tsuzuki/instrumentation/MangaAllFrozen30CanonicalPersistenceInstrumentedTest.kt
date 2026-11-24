@@ -116,8 +116,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         assertEquals(30, works.toSet().size)
         assertEquals(CORPUS_SHA, hash(JsonArray(works.map { JsonPrimitive(it) }).toString()))
         val plan = if (catalogScope == "explicit_plan") {
-            val doc = instrument.context.assets.open("mangaall-frozen30-catalog-plan.json")
-                .bufferedReader().use { Json.parseToJsonElement(it.readText()).jsonObject }
+            val planText = instrument.context.assets.open("mangaall-frozen30-catalog-plan.json")
+                .bufferedReader().use { it.readText() }
+            assertEquals(requireNotNull(args.getString("mangaAllCanonicalPlanSha256")), hash(planText))
+            val doc = Json.parseToJsonElement(planText).jsonObject
             assertEquals(CORPUS_SHA, doc.getValue("corpusSha256").jsonPrimitive.content)
             assertEquals("RESEARCH_EXPLICIT_OWNERS_NO_FALLBACK", doc.getValue("scope").jsonPrimitive.content)
             val rows = doc.getValue("works").jsonArray.map { it.jsonObject }
@@ -389,7 +391,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             instrument.sendStatus(
                 1,
                 Bundle().apply {
-                    putString("stream", "MANGAALL_CANONICAL_PERSISTENCE|phase=$phase|index=$index|outcome=$result")
+                    putString(
+                        "stream",
+                        "MANGAALL_CANONICAL_PERSISTENCE|phase=$phase|index=$index|outcome=$result" +
+                            "|catalog=${ownerScope(index)}",
+                    )
                 },
             )
         }
