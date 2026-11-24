@@ -60,7 +60,8 @@ class MangaAllMangaDotCreatorLiveInstrumentedTest {
                 storageRoot = root,
                 httpDiagnosticSink = { _, event ->
                     if (event.host == "mangadot.net") {
-                        httpFacts += "${event.phase.name}:${event.statusCode ?: 0}:${event.failureFamily?.name ?: "NONE"}"
+                        httpFacts +=
+                            "${event.phase.name}:${event.statusCode ?: 0}:${event.failureFamily?.name ?: "NONE"}"
                     }
                 },
             ),
@@ -112,7 +113,10 @@ class MangaAllMangaDotCreatorLiveInstrumentedTest {
                         } == true
                 }
                 val detail = rows.singleOrNull()?.get("detailOutcome")?.jsonPrimitive?.content
-                    ?.takeIf { it in setOf("VERIFIED_NO_ALIASES", "DETAIL_FAILED", "INVALID_RESPONSE", "IDENTITY_MISMATCH") }
+                    ?.takeIf {
+                        it in
+                            setOf("VERIFIED_NO_ALIASES", "DETAIL_FAILED", "INVALID_RESPONSE", "IDENTITY_MISMATCH")
+                    }
                     ?: "NOT_OBSERVED"
                 val facts = synchronized(httpFacts) { httpFacts.toList() }
                 val succeeded = facts.count { it.startsWith("SUCCEEDED:200:") }
