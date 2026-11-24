@@ -614,7 +614,10 @@ def main():
                   "|dotAdvertisedPages=" + str(row["mangaDotAdvertisedPages"]) +
                   "|issues=" + ",".join(row["issues"]))
         print("MANGAALL_DUAL30_GATE|outcome=" + report["outcome"] +
-              "|works=30|sources=2|completeLookup=" + str(counts["completeLookup"]) +
+              "|works=30|cohort=MANHWA_FIXED|sources=2|completeLookup=" + str(counts["completeLookup"]) +
+              "|chapterOneWorks=" + str(counts["chapterOneVerifiedWorks"]) +
+              "|invalidAudits=" + str(counts["invalidSourceAudits"]) +
+              "|inputOver192K=" + str(counts["upstreamOver192KiB"]) +
               "|ambiguous=" + str(counts["ambiguous"]) +
               "|completeChapterAudits=" + str(counts["completeChapterAudits"]) +
               "|oversized64K=" + str(counts["oversized64KiB"]) +
