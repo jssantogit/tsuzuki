@@ -90,6 +90,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterEvidenceAdapter
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCursor
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderSourceEditionQualification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkSourcePortfolio
@@ -295,8 +296,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     "mangadot" -> "MANGADOT"
                     else -> "UNKNOWN"
                 }
+                val rawError = (event.attributes["provider_error_code"] as? DiagnosticAttributeValue.Text)?.value
+                val error = ProviderErrorCode.entries.firstOrNull { it.name == rawError }?.name
                 val reason = code("provider_work_verification") ?: code("provider_detail_outcome")
-                    ?: code("error_category") ?: "NONE"
+                    ?: error ?: code("error_category") ?: "NONE"
                 val candidates = (event.attributes["candidate_count"] as? DiagnosticAttributeValue.Number)?.value ?: 0
                 acquisitionFacts += "source=$source|event=${event.name.name}|outcome=${event.outcome.name}" +
                     "|reason=$reason|candidates=$candidates"

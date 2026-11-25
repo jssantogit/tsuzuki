@@ -3702,6 +3702,17 @@ class CollectProviderReadingEvidenceTest {
         )
     }
 
+    @Test
+    fun `research retains creator conflict across aliases without native preview`() = runTest {
+        verifyResearchAliasBatch(
+            0,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+            conflictingFirst = true,
+        )
+    }
+
     private suspend fun verifyResearchAliasBatch(
         batch: Int,
         aliases: List<String>,
@@ -3709,6 +3720,7 @@ class CollectProviderReadingEvidenceTest {
         expectedQueries: List<String>,
         slowLookup: Boolean = false,
         slowRival: Boolean = false,
+        conflictingFirst: Boolean = false,
     ) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
@@ -3732,6 +3744,7 @@ class CollectProviderReadingEvidenceTest {
         } returns true
         val dotQueries = mutableListOf<String>()
         val bindings = MemoryBindingRepository()
+        val associations = MemoryWorkSourceAssociationRepository()
         val collector = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
             providerRegistry = registry(provider = mangaAll, versionCode = 11),
@@ -3746,7 +3759,22 @@ class CollectProviderReadingEvidenceTest {
                         if (slowLookup) delay(5_000)
                         if (query == canonicalTitle.displayTitle) {
                             ProviderCallResult.Success(
-                                ProviderPage(emptyList(), nextCursor = ProviderCursor("broad-page-two")),
+                                ProviderPage(
+                                    items = if (conflictingFirst) {
+                                        listOf(
+                                            ProviderWorkCandidate(
+                                                externalWorkId = "mangadot:317",
+                                                title = query,
+                                                url = "https://mangadot.net/manga/317",
+                                                authors = listOf("Different Creator"),
+                                                detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                            ),
+                                        )
+                                    } else {
+                                        emptyList()
+                                    },
+                                    nextCursor = if (conflictingFirst) null else ProviderCursor("broad-page-two"),
+                                ),
                             )
                         } else if (query == desiredAlias) {
                             ProviderCallResult.Success(
@@ -3781,6 +3809,7 @@ class CollectProviderReadingEvidenceTest {
                     }
                 },
                 chaptersHandler = { request ->
+                    check(!conflictingFirst) { "Conflicting source must not reach preview" }
                     if (slowRival && request.binding.externalWorkId == "mangadot:318") {
                         delay(30_000)
                         error("rival preview must time out")
@@ -3808,13 +3837,20 @@ class CollectProviderReadingEvidenceTest {
             titleNameObservationRepository = names,
             integrationRegistry = integrations,
             canonicalMetadataSnapshotRepository = metadata,
-            workSourceAssociationRepository = MemoryWorkSourceAssociationRepository(),
+            workSourceAssociationRepository = associations,
             nativeMangaDotPortfolioResearch = true,
             researchTitleQueryBatch = batch,
         )
         val result = collector.execute(canonicalTitle.id)
         dotQueries shouldBe expectedQueries
-        result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:111"
+        if (conflictingFirst) {
+            result.partialEvidence shouldBe emptyList()
+            result.cursorProgress shouldBe emptyList()
+            associations.getByTitle(canonicalTitle.id).single().workVerification shouldBe
+                ProviderWorkVerification.AUTHOR_CONFLICT
+        } else {
+            result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:111"
+        }
         result.snapshots shouldBe emptyList()
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
     }

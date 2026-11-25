@@ -695,9 +695,9 @@ class CollectProviderReadingEvidence private constructor(
         )
         val queries = titles.mapIndexed { index, title -> QueryState(index, title) }
         var nativeLookup: Pair<String, List<ProviderWorkCandidate>>? = null
-        // Negative catalog evidence remains decisive throughout this lookup
+        // Negative work evidence remains decisive throughout this lookup
         // invocation, even if another alias returns an apparently valid record.
-        val catalogConflicts = mutableSetOf<String>()
+        val workConflicts = mutableSetOf<String>()
         withTimeoutOrNull(MAX_RESEARCH_LOOKUP_MILLIS) {
             while (queries.any { !it.done } && discovered.isEmpty() && nativeLookup == null) {
                 for (query in queries) {
@@ -770,8 +770,14 @@ class CollectProviderReadingEvidence private constructor(
                                 }
                                 if (source == "mangadot") {
                                     assessments.filter {
+                                        it.workVerification == ProviderWorkVerification.AUTHOR_CONFLICT
+                                    }.forEach {
+                                        workConflicts += it.ref.externalWorkId
+                                        recordResearchWorkAssessment(canonicalTitleId, target, it)
+                                    }
+                                    assessments.filter {
                                         it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
-                                    }.forEach { catalogConflicts += it.ref.externalWorkId }
+                                    }.forEach { workConflicts += it.ref.externalWorkId }
                                     // Durable work observation only: never a creator credit,
                                     // chapter map or Reader permission.
                                     if (independentCatalogId != null) {
@@ -782,9 +788,9 @@ class CollectProviderReadingEvidence private constructor(
                                         }.filter {
                                             it.workVerification ==
                                                 ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT ||
-                                                it.ref.externalWorkId !in catalogConflicts
+                                                it.ref.externalWorkId !in workConflicts
                                         }.forEach {
-                                            recordResearchCatalogAssessment(
+                                            recordResearchWorkAssessment(
                                                 canonicalTitleId,
                                                 target,
                                                 it,
@@ -801,12 +807,12 @@ class CollectProviderReadingEvidence private constructor(
                                                 it.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED
                                             ) &&
                                             it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED &&
-                                            it.ref.externalWorkId !in catalogConflicts
+                                            it.ref.externalWorkId !in workConflicts
                                     }
                                     if (eligible &&
                                         exact.map { it.externalWorkId }.distinct().size <= MAX_COVERAGE_CONTENDERS
                                     ) {
-                                        val remaining = exact.filterNot { it.externalWorkId in catalogConflicts }
+                                        val remaining = exact.filterNot { it.externalWorkId in workConflicts }
                                         nativeLookup = title to remaining
                                     }
                                 } else {
@@ -918,16 +924,20 @@ class CollectProviderReadingEvidence private constructor(
         return "catalog-v1:$digest"
     }
 
-    private suspend fun recordResearchCatalogAssessment(
+    private suspend fun recordResearchWorkAssessment(
         canonicalTitleId: String,
         target: ReadingTarget,
         assessment: ProviderWorkSourceAssessment,
-        expectedCatalogId: String,
+        expectedCatalogId: String? = null,
     ) {
         val repository = workSourceAssociationRepository ?: return
-        // Recheck the same independently verified ID immediately before
-        // persisting, including the current metadata permission.
-        if (verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != expectedCatalogId) return
+        // Negative creator evidence needs no chapter preview. Catalog claims
+        // still require the exact independently verified, consented identity.
+        if (expectedCatalogId == null) {
+            if (assessment.workVerification != ProviderWorkVerification.AUTHOR_CONFLICT) return
+        } else if (verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != expectedCatalogId) {
+            return
+        }
         try {
             val recorded = repository.observe(
                 ProviderWorkSourceAssociation(
