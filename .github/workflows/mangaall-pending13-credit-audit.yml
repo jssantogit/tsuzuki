@@ -10,6 +10,8 @@ permissions:
 
 env:
   CATALOG_SCOPE: 'explicit_plan'
+  AUDIT_MODE: ${{ contains(github.event.head_commit.message, 'REMAINING6') && '--remaining6' || '' }}
+  AUDIT_DIR: ${{ contains(github.event.head_commit.message, 'REMAINING6') && 'remaining6' || 'pending13' }}
 
 concurrency:
   group: mangaall-pending13-credit-audit
@@ -37,6 +39,8 @@ jobs:
           fi
           python3 -m py_compile .github/scripts/run_mangaall_pending13_credit_audit.py
           python3 .github/scripts/run_mangaall_pending13_credit_audit.py --selftest
+          node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
+          node .github/scripts/test_mangaall_mangadot_search_policy.mjs
           python3 -m py_compile .github/scripts/run_mangaall_frozen30_canonical_persistence.py
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
           python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
@@ -166,12 +170,12 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: python3 .github/scripts/run_mangaall_pending13_credit_audit.py --shard ${{ matrix.shard }}
+          script: python3 .github/scripts/run_mangaall_pending13_credit_audit.py --shard ${{ matrix.shard }} ${{ env.AUDIT_MODE }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: pending13-credit-shard-${{ matrix.shard }}
-          path: .github/results/mangaall-pending13-credit-audit/shard-${{ matrix.shard }}/
+          path: .github/results/mangaall-pending13-credit-audit/${{ env.AUDIT_DIR }}/shard-${{ matrix.shard }}/
           if-no-files-found: ignore
           retention-days: 2
 
@@ -191,3 +195,5 @@ jobs:
 # Retry after the exact Spotless-only correction to native-credit romanization.
 
 # Retry with valid empty-coverage regression fixture; production logic unchanged.
+
+# REMAINING6 is an explicit subset audit, never a full cohort acceptance.
