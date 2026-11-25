@@ -57,6 +57,7 @@ object ProviderWorkSourcePortfolio {
         queryTitle: String,
         independentlyVerifiedAuthors: Set<String>?,
         candidates: List<ProviderWorkCandidate>,
+        independentlyVerifiedMangaUpdatesId: String? = null,
     ): List<ProviderWorkSourceAssessment> {
         val normalizedQuery = normalizeTitle(queryTitle)
         require(normalizedQuery.isNotEmpty()) { "Portfolio query title cannot be empty" }
@@ -71,10 +72,24 @@ object ProviderWorkSourcePortfolio {
                 .any { normalizeTitle(it) == normalizedQuery }
             val detailVerified = candidate.detailOutcome in VERIFIED_SOURCE_DETAILS
             val sourceAuthors = candidate.authors.flatMap(::creatorKeys).toSet()
+            val catalogId = independentlyVerifiedMangaUpdatesId?.takeIf {
+                val url = "https://mangadot.net/manga/${candidate.externalWorkId.substringAfter(':')}"
+                providerId.value == MANGAALL_PROVIDER_ID &&
+                    facetId in setOf("en", "pt-br") &&
+                    candidate.externalWorkId.matches(Regex("mangadot:[1-9][0-9]{0,15}")) &&
+                    candidate.url in setOf(url, "$url/") &&
+                    it.matches(Regex("[1-9][0-9]{0,17}"))
+            }
+            val references = candidate.mangaUpdatesReferenceIds
+            val catalogConflict = catalogId != null && references.isNotEmpty() &&
+                references != listOf(catalogId)
+            val catalogMatch = catalogId != null && references == listOf(catalogId)
             val verification = when {
                 !exactTitle -> ProviderWorkVerification.TITLE_UNVERIFIED
                 expectedAuthors == null -> ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED
                 !detailVerified -> ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED
+                catalogConflict -> ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+                sourceAuthors.isEmpty() && catalogMatch -> ProviderWorkVerification.CATALOG_CORROBORATED
                 sourceAuthors.isEmpty() -> ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE
                 sourceAuthors.none { it in expectedAuthors } &&
                     !hasCatalogAttestedRomanization(providerId, candidate, independentlyVerifiedAuthors.orEmpty()) ->
@@ -301,6 +316,8 @@ object ProviderWorkSourcePortfolio {
 
 enum class ProviderWorkVerification {
     AUTHOR_CORROBORATED,
+    CATALOG_CORROBORATED,
+    CATALOG_REFERENCE_CONFLICT,
     CANONICAL_METADATA_UNVERIFIED,
     SOURCE_DETAIL_UNVERIFIED,
     MISSING_AUTHOR_EVIDENCE,

@@ -129,6 +129,15 @@ assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",tit
 const noAuthor = {http:host.http,dom:{selectText:async()=>raw({...series,author:null})}};
 assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",title:series.name},noAuthor),
   {detailOutcome:"VERIFIED_NO_ALIASES",authors:[]});
+const linkedNoAuthor = {http:host.http,dom:{selectText:async(handle,selector)=>{
+  if (selector === "script[type=application/ld+json]") return raw(creditless);
+  throw Error("no semantic credit");
+}}};
+const linkedCandidate = {externalWorkId:"mangadot:42",title:series.name};
+assert.deepEqual(await observeMangaDotCreators(linkedCandidate,linkedNoAuthor),
+  {detailOutcome:"VERIFIED_NO_ALIASES",authors:[]});
+assert.deepEqual(await observeMangaDotCreators(linkedCandidate,linkedNoAuthor,true),
+  {detailOutcome:"VERIFIED_NO_ALIASES",authors:[],mangaUpdatesReferenceIds:[muId]});
 const semanticCalls = [];
 const microdataHost = {http:host.http,dom:{selectText:async(handle,selector)=>{
   assert.equal(handle,"res:opaque");

@@ -152,6 +152,7 @@ class ScriptProviderReadingGateway internal constructor(
                     cursor = request.cursor?.value,
                     coverageEvidenceVersion = request.coverageEvidenceVersion,
                     requestedLanguage = request.requestedLanguage,
+                    catalogEvidenceVersion = request.catalogEvidenceVersion,
                 ),
             ),
         ) { value, active ->
@@ -170,6 +171,17 @@ class ScriptProviderReadingGateway internal constructor(
             ProviderPage(
                 items = decoded.items.map { item ->
                     item.url?.let { validateResultUrl(active, it, browserAllowed = true) }
+                    require(
+                        item.mangaUpdatesReferenceIds.isEmpty() ||
+                            (
+                                request.catalogEvidenceVersion == 1 &&
+                                    providerId.value == "app.tsuzuki.mangaall" &&
+                                    active.versionCode == 11L &&
+                                    active.repositoryId == "mangaall-frozen30-unsigned-research" &&
+                                    active.installedArtifactSha256 == null &&
+                                    item.externalWorkId.startsWith("mangadot:")
+                                ),
+                    ) { "Unsolicited or out-of-scope catalog evidence" }
                     ProviderWorkCandidate(
                         externalWorkId = item.externalWorkId,
                         title = item.title,
@@ -187,6 +199,7 @@ class ScriptProviderReadingGateway internal constructor(
                         coverageHasMore = item.coverageHasMore,
                         detailOutcome = item.detailOutcome?.let(ProviderWorkDetailOutcome::valueOf),
                         detailHttpStatus = item.detailHttpStatus,
+                        mangaUpdatesReferenceIds = item.mangaUpdatesReferenceIds,
                     )
                 },
                 nextCursor = decoded.nextCursor?.let(::ProviderCursor),
@@ -705,6 +718,7 @@ class ScriptProviderReadingGateway internal constructor(
         val editorialEvidenceVersion: Int = 1,
         val coverageEvidenceVersion: Int? = null,
         val requestedLanguage: String? = null,
+        val catalogEvidenceVersion: Int? = null,
     )
 
     @Serializable
@@ -745,6 +759,7 @@ class ScriptProviderReadingGateway internal constructor(
         val coverageHasMore: Boolean? = null,
         val detailOutcome: String? = null,
         val detailHttpStatus: Int? = null,
+        val mangaUpdatesReferenceIds: List<String> = emptyList(),
     )
 
     @Serializable

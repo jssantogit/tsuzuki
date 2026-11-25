@@ -134,14 +134,10 @@ function decodeMangaUpdatesReference(value) {
 // This helper deliberately has no side effects and is not yet part of the
 // V1 lookup result. A caller must provide the freshly verified independent
 // catalog ID, never a value obtained by following this same source's link.
-export function assessMangaDotCatalogReference(raw, id, title, independentMangaUpdatesId) {
-  const record = extractMangaDotWork(raw, id, title);
-  if (!record) return {status:"SOURCE_DETAIL_UNVERIFIED", referenceCount:0};
+function catalogReferenceIds(record) {
   const refs = record.catalogReferences == null ? [] :
     Array.isArray(record.catalogReferences) ? record.catalogReferences : [record.catalogReferences];
-  if (refs.length > 32 || refs.some(ref => typeof ref !== "string" || ref.length > 512)) {
-    return {status:"INVALID_REFERENCES", referenceCount:0};
-  }
+  if (refs.length > 32 || refs.some(ref => typeof ref !== "string" || ref.length > 512)) return null;
   const ids = new Set();
   for (const ref of refs) {
     const decoded = decodeMangaUpdatesReference(ref);
@@ -149,9 +145,18 @@ export function assessMangaDotCatalogReference(raw, id, title, independentMangaU
     else if (/^https:\/\/(?:www\.)?mangaupdates\.com(?:[/:?#]|$)/i.test(ref)) {
       // Unsupported or malformed references on the relevant host are not
       // silently ignored beside a valid one: they could refer to another work.
-      return {status:"INVALID_REFERENCES", referenceCount:0};
+      return null;
     }
   }
+  return [...ids];
+}
+
+export function assessMangaDotCatalogReference(raw, id, title, independentMangaUpdatesId) {
+  const record = extractMangaDotWork(raw, id, title);
+  if (!record) return {status:"SOURCE_DETAIL_UNVERIFIED", referenceCount:0};
+  const references = catalogReferenceIds(record);
+  if (references === null) return {status:"INVALID_REFERENCES", referenceCount:0};
+  const ids = new Set(references);
   const referenceCount = ids.size;
   const expected = independentMangaUpdatesId;
   if (typeof expected !== "string" || !/^[1-9][0-9]{0,17}$/.test(expected)) {
@@ -193,7 +198,7 @@ async function observeExactMicrodataCredits(host, handle, id) {
   return result;
 }
 
-export async function observeMangaDotCreators(candidate, host = globalThis.tsuzuki) {
+export async function observeMangaDotCreators(candidate, host = globalThis.tsuzuki, includeCatalogReferences = false) {
   const match = /^mangadot:([1-9][0-9]{0,15})$/.exec(candidate?.externalWorkId || "");
   if (!match || !exactName(candidate.title)) return { detailOutcome: "IDENTITY_MISMATCH" };
   let handle;
@@ -214,8 +219,10 @@ export async function observeMangaDotCreators(candidate, host = globalThis.tsuzu
   // Verified work identity without a published person is distinct from
   // mismatch. It supplies no author authority and cannot pass the portfolio.
   const authors = record.authors.length ? record.authors : await observeExactMicrodataCredits(host, handle, match[1]);
+  const ids = includeCatalogReferences ? catalogReferenceIds(record) : null;
   return {detailOutcome: record.aliases.length ? "VERIFIED_WITH_ALIASES" : "VERIFIED_NO_ALIASES",
-    authors, ...(record.aliases.length ? {aliases:record.aliases} : {})};
+    authors, ...(record.aliases.length ? {aliases:record.aliases} : {}),
+    ...(ids?.length ? {mangaUpdatesReferenceIds:ids} : {})};
 }
 export function mangaDotExactTitle(candidate, title) {
   return !!exactName(title) && exactName(candidate?.title) === exactName(title);

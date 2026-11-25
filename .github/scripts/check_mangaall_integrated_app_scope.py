@@ -25,6 +25,7 @@ APP_PATHS = frozenset((
     "app/src/main/java/eu/kanade/tachiyomi/data/track/shikimori/dto/SMManga.kt",
     "app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/integration/MangaUpdatesIntegrationProvider.kt",
     "app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/integration/ShikimoriIntegrationProvider.kt",
+    "app/src/main/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGateway.kt",
     "app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt",
     "app/src/test/java/eu/kanade/tachiyomi/data/track/shikimori/ShikimoriApiTest.kt",
     "app/src/test/java/eu/kanade/tachiyomi/data/tsuzuki/integration/MangaUpdatesIntegrationProviderTest.kt",

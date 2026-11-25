@@ -19,6 +19,48 @@ class ProviderWorkSourcePortfolioTest {
     )
 
     @Test
+    fun `bibliographic ID verifies a creditless exact work but never grants edition or reader authority`() {
+        val candidate = original.copy(
+            externalWorkId = "mangadot:42",
+            url = "https://mangadot.net/manga/42",
+            authors = emptyList(),
+            mangaUpdatesReferenceIds = listOf("123456789012345678"),
+        )
+        fun assess(
+            item: ProviderWorkCandidate = candidate,
+            expectedId: String? = "123456789012345678",
+            providerId: ProviderId = ProviderId("app.tsuzuki.mangaall"),
+        ) = ProviderWorkSourcePortfolio.assess(
+            providerId,
+            "en",
+            candidate.title,
+            setOf("Independent Creator"),
+            listOf(item),
+            expectedId,
+        ).single()
+
+        val verified = assess()
+        verified.workVerification shouldBe ProviderWorkVerification.CATALOG_CORROBORATED
+        verified.canCollectProvisionalChapters shouldBe false
+        verified.canPromoteChapters shouldBe false
+        verified.canOpenReader shouldBe false
+        assess(expectedId = null).workVerification shouldBe ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE
+        assess(expectedId = "123").workVerification shouldBe ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+        assess(candidate.copy(mangaUpdatesReferenceIds = listOf("123", "123456789012345678")))
+            .workVerification shouldBe ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+        assess(candidate.copy(authors = listOf("Unrelated Creator")))
+            .workVerification shouldBe ProviderWorkVerification.AUTHOR_CONFLICT
+        assess(candidate.copy(url = "https://mangadot.net/manga/43"))
+            .workVerification shouldBe ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE
+        assess(candidate.copy(detailOutcome = ProviderWorkDetailOutcome.DETAIL_FAILED))
+            .workVerification shouldBe ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED
+        assess(candidate.copy(title = "Unrelated work"))
+            .workVerification shouldBe ProviderWorkVerification.TITLE_UNVERIFIED
+        assess(providerId = ProviderId("org.example.provider"))
+            .workVerification shouldBe ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE
+    }
+
+    @Test
     fun `Dungeon Meshi known Ryoko romanizations allow source evidence but not editorial authority`() {
         // Galaxy A54 code8 captured the *real* MangaFire HID 52020 with
         // VERIFIED_WITH_ALIASES, 200 observed numeric chapters, and

@@ -159,7 +159,7 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False,
             b'  return { items, nextCursor: hasNext ? String(page + 1) : null };',
             b'  if (input?.editorialEvidenceVersion === 1) {\n'
             b'    const exact = items.filter(item => mangaDotExactTitle(item, title)).slice(0, 3);\n'
-            b'    for (const item of exact) Object.assign(item, await observeMangaDotCreators(item));\n'
+            b'    for (const item of exact) Object.assign(item, await observeMangaDotCreators(item, globalThis.tsuzuki, input?.catalogEvidenceVersion === 1));\n'
             b'  }\n'
             b'  return { items, nextCursor: hasNext ? String(page + 1) : null };',
             "MANGADOT_CREATOR_ENRICHMENT",
