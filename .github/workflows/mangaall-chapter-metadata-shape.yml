@@ -1,0 +1,26 @@
+name: MangaALL — chapter metadata shape diagnostics (NO READER)
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/workflows/mangaall-chapter-metadata-shape.yml'
+permissions:
+  contents: read
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        index: [8, 15, 21, 27]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Bounded chapter metadata counts only
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .github/scripts/observe_mangaall_chapter_shape.py
+          python3 .github/scripts/observe_mangaall_chapter_shape.py --selftest
+          python3 .github/scripts/observe_mangaall_chapter_shape.py --index ${{ matrix.index }}
