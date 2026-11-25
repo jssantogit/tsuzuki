@@ -110,8 +110,14 @@ class CollectProviderReadingEvidence private constructor(
     private val workSourceAssociationRepository: ProviderWorkSourceAssociationRepository?,
     private val provisionalCursorRepository: ProviderProvisionalCursorRepository?,
     private val nativeMangaDotPortfolioResearch: Boolean,
+    private val researchTitleQueryBatch: Int,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
+
+    init {
+        require(researchTitleQueryBatch in 0..3)
+        require(researchTitleQueryBatch == 0 || nativeMangaDotPortfolioResearch)
+    }
 
     @Inject
     constructor(
@@ -141,6 +147,7 @@ class CollectProviderReadingEvidence private constructor(
         workSourceAssociationRepository = workSourceAssociationRepository,
         provisionalCursorRepository = provisionalCursorRepository,
         nativeMangaDotPortfolioResearch = false,
+        researchTitleQueryBatch = 0,
         constructorMarker = Unit,
     )
 
@@ -159,6 +166,7 @@ class CollectProviderReadingEvidence private constructor(
         workSourceAssociationRepository: ProviderWorkSourceAssociationRepository? = null,
         provisionalCursorRepository: ProviderProvisionalCursorRepository? = null,
         nativeMangaDotPortfolioResearch: Boolean = false,
+        researchTitleQueryBatch: Int = 0,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -174,6 +182,7 @@ class CollectProviderReadingEvidence private constructor(
         workSourceAssociationRepository = workSourceAssociationRepository,
         provisionalCursorRepository = provisionalCursorRepository,
         nativeMangaDotPortfolioResearch = nativeMangaDotPortfolioResearch,
+        researchTitleQueryBatch = researchTitleQueryBatch,
         constructorMarker = Unit,
     )
 
@@ -190,6 +199,18 @@ class CollectProviderReadingEvidence private constructor(
             integrationRegistry,
             maxVariants = if (nativeMangaDotPortfolioResearch) 6 else 3,
         )
+        val researchQueryTitles = if (researchTitleQueryBatch != 0 && targets.any { it.researchSource != null }) {
+            providerTitleLookupQueries(
+                canonicalTitleId,
+                canonicalTitle.displayTitle,
+                titleNameObservationRepository,
+                integrationRegistry,
+                maxVariants = 6,
+                researchBatch = researchTitleQueryBatch,
+            )
+        } else {
+            queryTitles
+        }
         // Bootstrap a missing canonical metadata snapshot once via ICE's
         // verified external IDs. The resolver pins active integration config,
         // deduplicates concurrent fetches and never authorizes title-only HIDs.
@@ -308,7 +329,7 @@ class CollectProviderReadingEvidence private constructor(
                         val finished = withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
                             collectTarget(
                                 canonicalTitleId = canonicalTitleId,
-                                titles = queryTitles,
+                                titles = if (target.researchSource != null) researchQueryTitles else queryTitles,
                                 target = target,
                                 canonicalCreators = canonicalCreators,
                                 onStageChanged = { activeStage = it },

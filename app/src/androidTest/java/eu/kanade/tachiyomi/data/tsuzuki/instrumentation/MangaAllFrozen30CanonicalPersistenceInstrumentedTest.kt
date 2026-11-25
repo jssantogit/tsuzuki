@@ -305,26 +305,29 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 }
             }
         }
-        val collector = CollectProviderReadingEvidence(
-            canonicalTitleRepository = titles,
-            providerRegistry = registry,
-            gateway = gateway,
-            bindingRepository = bindings,
-            evidenceAdapter = ProviderChapterEvidenceAdapter(),
-            clock = System::currentTimeMillis,
-            diagnostics = diagnosticRecorder,
-            canonicalMetadataSnapshotRepository = metadata,
-            integrationRegistry = metadataRegistry,
-            titleNameObservationRepository = titleNames,
-            workSourceAssociationRepository = associations,
-            provisionalCursorRepository = cursors,
-            nativeMangaDotPortfolioResearch = catalogScope == "explicit_plan",
-        )
-        val refresh = RefreshChapterEvidence(
-            registry = metadataRegistry,
-            reconcileChapterEvidence = ReconcileChapterEvidence(ParseCanonicalChapterLabel(), chapters, evidence),
-            providerReadingEvidence = collector,
-        )
+        fun refreshForBatch(batch: Int): RefreshChapterEvidence {
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titles,
+                providerRegistry = registry,
+                gateway = gateway,
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = System::currentTimeMillis,
+                diagnostics = diagnosticRecorder,
+                canonicalMetadataSnapshotRepository = metadata,
+                integrationRegistry = metadataRegistry,
+                titleNameObservationRepository = titleNames,
+                workSourceAssociationRepository = associations,
+                provisionalCursorRepository = cursors,
+                nativeMangaDotPortfolioResearch = catalogScope == "explicit_plan",
+                researchTitleQueryBatch = batch,
+            )
+            return RefreshChapterEvidence(
+                registry = metadataRegistry,
+                reconcileChapterEvidence = ReconcileChapterEvidence(ParseCanonicalChapterLabel(), chapters, evidence),
+                providerReadingEvidence = collector,
+            )
+        }
         val resolver = ResolveProviderChapterReading(
             canonicalChapterRepository = chapters,
             evidenceRepository = evidence,
@@ -618,15 +621,19 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     it.baseNumber == 1 && it.part == null && it.alphaSuffix == null &&
                     it.decimalFraction == null && it.confirmation != CanonicalChapterConfirmation.CONFLICTED
             }
-            if (refresh.execute(titleId, forceRefresh = true).isFailure) return "REFRESH_FAILED"
+            if (refreshForBatch(0).execute(titleId, forceRefresh = true).isFailure) return "REFRESH_FAILED"
             if (catalogScope == "explicit_plan") {
-                repeat(2) {
+                for (batch in 1..3) {
                     val observed = exactChapterOnes()
                     // Multiple canonical chapter identities or release choices
                     // are not transport gaps; do not retry to hide ambiguity.
-                    if (observed.size > 1) return@repeat
-                    if (observed.singleOrNull()?.let { resolver.options(it.id).isNotEmpty() } == true) return@repeat
-                    if (refresh.execute(titleId, forceRefresh = true).isFailure) return "REFRESH_FAILED"
+                    if (observed.size > 1) break
+                    if (observed.singleOrNull()?.let { resolver.options(it.id).isNotEmpty() } == true) break
+                    // Each refresh uses the same source/lane budget; only the
+                    // bounded window of independently observed names changes.
+                    if (refreshForBatch(batch).execute(titleId, forceRefresh = true).isFailure) {
+                        return "REFRESH_FAILED"
+                    }
                 }
             }
             val chapterRows = chapters.getByCanonicalTitleId(titleId)

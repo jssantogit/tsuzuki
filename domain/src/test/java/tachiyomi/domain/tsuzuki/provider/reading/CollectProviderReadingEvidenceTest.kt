@@ -3500,6 +3500,40 @@ class CollectProviderReadingEvidenceTest {
 
     @Test
     fun `research checks observed aliases before another broad primary search page`() = runTest {
+        verifyResearchAliasBatch(
+            0,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+        )
+    }
+
+    @Test
+    fun `research next batch reaches verified alias beyond first six without binding`() = runTest {
+        verifyResearchAliasBatch(
+            1,
+            (1..12).map { "Variant $it" },
+            "Variant 8",
+            listOf("Variant 6", "Variant 7", "Variant 8"),
+        )
+    }
+
+    @Test
+    fun `research short alias inventory retries primary batch without inventing names`() = runTest {
+        verifyResearchAliasBatch(
+            3,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+        )
+    }
+
+    private suspend fun verifyResearchAliasBatch(
+        batch: Int,
+        aliases: List<String>,
+        desiredAlias: String,
+        expectedQueries: List<String>,
+    ) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
         val metadata = mockk<CanonicalMetadataSnapshotRepository>()
@@ -3513,9 +3547,9 @@ class CollectProviderReadingEvidenceTest {
             refreshedAt = 42L,
         )
         val names = mockk<TitleNameObservationRepository>()
-        coEvery { names.getByTitle(canonicalTitle.id) } returns listOf(
-            TitleNameObservation(canonicalTitle.id, "mal", "english", "Verified Alias", 42L),
-        )
+        coEvery { names.getByTitle(canonicalTitle.id) } returns aliases.map {
+            TitleNameObservation(canonicalTitle.id, "mal", "english", it, 42L)
+        }
         val integrations = mockk<IntegrationRegistry>(relaxed = true)
         every {
             integrations.isGlobalCapabilityActive(metadataId, IntegrationCapability.METADATA_BASIC)
@@ -3537,13 +3571,13 @@ class CollectProviderReadingEvidenceTest {
                             ProviderCallResult.Success(
                                 ProviderPage(emptyList(), nextCursor = ProviderCursor("broad-page-two")),
                             )
-                        } else {
+                        } else if (query == desiredAlias) {
                             ProviderCallResult.Success(
                                 ProviderPage(
                                     listOf(
                                         ProviderWorkCandidate(
                                             externalWorkId = "mangadot:317",
-                                            title = "Verified Alias",
+                                            title = desiredAlias,
                                             url = "https://mangadot.net/manga/317",
                                             authors = listOf("Yonghwan Kim"),
                                             detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
@@ -3552,6 +3586,8 @@ class CollectProviderReadingEvidenceTest {
                                     nextCursor = null,
                                 ),
                             )
+                        } else {
+                            ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
                         }
                     }
                 },
@@ -3580,9 +3616,10 @@ class CollectProviderReadingEvidenceTest {
             canonicalMetadataSnapshotRepository = metadata,
             workSourceAssociationRepository = MemoryWorkSourceAssociationRepository(),
             nativeMangaDotPortfolioResearch = true,
+            researchTitleQueryBatch = batch,
         )
         val result = collector.execute(canonicalTitle.id)
-        dotQueries shouldBe listOf(canonicalTitle.displayTitle, "Verified Alias")
+        dotQueries shouldBe expectedQueries
         result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:111"
         result.snapshots shouldBe emptyList()
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()

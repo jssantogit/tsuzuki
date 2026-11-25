@@ -16,8 +16,10 @@ internal suspend fun providerTitleLookupQueries(
     observations: TitleNameObservationRepository?,
     integrations: IntegrationRegistry?,
     maxVariants: Int = MAX_QUERY_VARIANTS,
+    researchBatch: Int = 0,
 ): List<String> {
     require(maxVariants in 1..6)
+    require(researchBatch in 0..3 && (researchBatch == 0 || maxVariants == 6))
     val variants = buildList {
         add(primaryTitle.trim())
         if (observations != null && integrations != null) {
@@ -50,7 +52,11 @@ internal suspend fun providerTitleLookupQueries(
     return variants
         .filter { it.isNotBlank() && it.length <= MAX_QUERY_CHARS }
         .distinctBy { it.lowercase().replace(Regex("\\s+"), " ") }
-        .take(maxVariants)
+        .let { ordered ->
+            // Only explicit research refreshes may consume another bounded batch.
+            // Short lists retry the primary batch, preserving normal cursor recovery.
+            ordered.drop(researchBatch * maxVariants).take(maxVariants).ifEmpty { ordered.take(maxVariants) }
+        }
 }
 
 private const val MAX_QUERY_VARIANTS = 3
