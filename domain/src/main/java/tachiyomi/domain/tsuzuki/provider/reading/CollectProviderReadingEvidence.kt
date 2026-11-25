@@ -695,6 +695,9 @@ class CollectProviderReadingEvidence private constructor(
         )
         val queries = titles.mapIndexed { index, title -> QueryState(index, title) }
         var nativeLookup: Pair<String, List<ProviderWorkCandidate>>? = null
+        // Negative catalog evidence remains decisive throughout this lookup
+        // invocation, even if another alias returns an apparently valid record.
+        val catalogConflicts = mutableSetOf<String>()
         withTimeoutOrNull(MAX_RESEARCH_LOOKUP_MILLIS) {
             while (queries.any { !it.done } && discovered.isEmpty() && nativeLookup == null) {
                 for (query in queries) {
@@ -732,8 +735,12 @@ class CollectProviderReadingEvidence private constructor(
                             }
                             query.done = next == null || query.pages >= MAX_LOOKUP_PAGES
                             if (next != null) query.cursor = next
-                            val exact = exactFacetMatches(title, target.facetId, page.items)
-                                .filter(query.seenCandidates::add)
+                            val exact = exactFacetMatches(
+                                title,
+                                target.facetId,
+                                page.items,
+                                retainCatalogObservations = independentCatalogId != null,
+                            ).filter(query.seenCandidates::add)
                             if (exact.isNotEmpty()) {
                                 traceLookupCandidates(
                                     canonicalTitleId,
@@ -762,6 +769,9 @@ class CollectProviderReadingEvidence private constructor(
                                     )
                                 }
                                 if (source == "mangadot") {
+                                    assessments.filter {
+                                        it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+                                    }.forEach { catalogConflicts += it.ref.externalWorkId }
                                     // Durable work observation only: never a creator credit,
                                     // chapter map or Reader permission.
                                     if (independentCatalogId != null) {
@@ -769,6 +779,9 @@ class CollectProviderReadingEvidence private constructor(
                                             it.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED ||
                                                 it.workVerification ==
                                                 ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+                                        }.filter {
+                                            it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT ||
+                                                it.ref.externalWorkId !in catalogConflicts
                                         }.forEach {
                                             recordResearchCatalogAssessment(
                                                 canonicalTitleId,
@@ -786,13 +799,11 @@ class CollectProviderReadingEvidence private constructor(
                                             it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED ||
                                                 it.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED
                                             ) &&
-                                            it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED
+                                            it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED &&
+                                            it.ref.externalWorkId !in catalogConflicts
                                     }
                                     if (eligible && exact.size <= MAX_COVERAGE_CONTENDERS) {
-                                        val conflicting = assessments.filter {
-                                            it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
-                                        }.map { it.ref.externalWorkId }.toSet()
-                                        nativeLookup = title to exact.filterNot { it.externalWorkId in conflicting }
+                                        nativeLookup = title to exact.filterNot { it.externalWorkId in catalogConflicts }
                                     }
                                 } else {
                                     observeSourcePortfolio(
@@ -1434,11 +1445,13 @@ class CollectProviderReadingEvidence private constructor(
                     ),
                 )
                 if (recorded) {
-                    if (catalogIdentity == null) {
+                    val current = repository.get(assessment.ref)
+                    val agrees = current?.canonicalTitleId == canonicalTitleId &&
+                        current.workVerification == assessment.workVerification &&
+                        current.editionQualification == assessment.editionQualification
+                    if (agrees && catalogIdentity == null) {
                         retained += assessment
-                    } else if (repository.get(assessment.ref)?.workVerification ==
-                        ProviderWorkVerification.CATALOG_CORROBORATED
-                    ) {
+                    } else if (agrees && catalogIdentity != null) {
                         // Only the native preview path above can furnish this
                         // in-memory proof. The stored association is not enough.
                         retained += assessment.copy(researchCatalogIdentity = catalogIdentity)
@@ -1589,9 +1602,10 @@ class CollectProviderReadingEvidence private constructor(
         title: String,
         facetId: String?,
         candidates: List<ProviderWorkCandidate>,
+        retainCatalogObservations: Boolean = false,
     ): List<ProviderWorkCandidate> {
         val normalizedTitle = normalize(title)
-        return candidates.asSequence()
+        val matching = candidates.asSequence()
             .filter { candidate ->
                 facetId == null || candidate.language == null ||
                     candidate.language.equals(facetId, ignoreCase = true)
@@ -1601,8 +1615,11 @@ class CollectProviderReadingEvidence private constructor(
                     .plus(candidate.aliases.asSequence())
                     .any { normalize(it) == normalizedTitle }
             }
-            .distinctBy(ProviderWorkCandidate::externalWorkId)
-            .toList()
+        return if (retainCatalogObservations) {
+            matching.distinct().toList()
+        } else {
+            matching.distinctBy(ProviderWorkCandidate::externalWorkId).toList()
+        }
     }
 
     /**

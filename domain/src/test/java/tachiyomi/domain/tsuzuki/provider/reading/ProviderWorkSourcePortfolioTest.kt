@@ -61,6 +61,29 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
+    fun `conflicting references for the same HID dominate independent of arrival order`() {
+        val exact = original.copy(
+            externalWorkId = "mangadot:42",
+            url = "https://mangadot.net/manga/42",
+            mangaUpdatesReferenceIds = listOf("123"),
+        )
+        val conflict = exact.copy(mangaUpdatesReferenceIds = listOf("456"))
+        for (items in listOf(listOf(exact, conflict), listOf(conflict, exact))) {
+            val result = ProviderWorkSourcePortfolio.assess(
+                ProviderId("app.tsuzuki.mangaall"),
+                "en",
+                exact.title,
+                exact.authors.toSet(),
+                items,
+                "123",
+            ).single()
+            result.workVerification shouldBe ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+            result.canCollectProvisionalChapters shouldBe false
+            result.canOpenReader shouldBe false
+        }
+    }
+
+    @Test
     fun `Dungeon Meshi known Ryoko romanizations allow source evidence but not editorial authority`() {
         // Galaxy A54 code8 captured the *real* MangaFire HID 52020 with
         // VERIFIED_WITH_ALIASES, 200 observed numeric chapters, and

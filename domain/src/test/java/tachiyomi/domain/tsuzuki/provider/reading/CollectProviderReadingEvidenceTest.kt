@@ -3420,7 +3420,12 @@ class CollectProviderReadingEvidenceTest {
         verifyCatalogResearchCollection(revoke = true)
     }
 
-    private suspend fun verifyCatalogResearchCollection(revoke: Boolean) {
+    @Test
+    fun `research rejects duplicate HID with contradictory catalog references`() = runTest {
+        verifyCatalogResearchCollection(revoke = false, conflicting = true)
+    }
+
+    private suspend fun verifyCatalogResearchCollection(revoke: Boolean, conflicting: Boolean = false) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val owner = IntegrationId("mangaupdates")
         val independentId = "123456789012345678"
@@ -3457,23 +3462,23 @@ class CollectProviderReadingEvidenceTest {
                         ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
                     } else {
                         catalogVersions += request.catalogEvidenceVersion
-                        ProviderCallResult.Success(
-                            ProviderPage(
-                                items = listOf(
-                                    ProviderWorkCandidate(
-                                        externalWorkId = ref.externalWorkId,
-                                        title = canonicalTitle.displayTitle,
-                                        url = "https://mangadot.net/manga/317",
-                                        detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
-                                        mangaUpdatesReferenceIds = listOf(independentId),
-                                    ),
-                                ),
-                                nextCursor = null,
-                            ),
+                        val candidate = ProviderWorkCandidate(
+                            externalWorkId = ref.externalWorkId,
+                            title = canonicalTitle.displayTitle,
+                            url = "https://mangadot.net/manga/317",
+                            detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                            mangaUpdatesReferenceIds = listOf(independentId),
                         )
+                        val items = if (conflicting) {
+                            listOf(candidate, candidate.copy(mangaUpdatesReferenceIds = listOf("456")))
+                        } else {
+                            listOf(candidate)
+                        }
+                        ProviderCallResult.Success(ProviderPage(items, nextCursor = null))
                     }
                 },
                 chaptersHandler = { request ->
+                    check(!conflicting) { "Conflicting catalog references must never request chapters" }
                     request.binding shouldBe ref
                     if (revoke) consent = false
                     ProviderCallResult.Success(
@@ -3502,11 +3507,15 @@ class CollectProviderReadingEvidenceTest {
         )
         val result = collector.execute(canonicalTitle.id)
         catalogVersions shouldBe listOf(1)
-        observations.get(ref)?.workVerification shouldBe ProviderWorkVerification.CATALOG_CORROBORATED
+        observations.get(ref)?.workVerification shouldBe if (conflicting) {
+            ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+        } else {
+            ProviderWorkVerification.CATALOG_CORROBORATED
+        }
         result.partialEvidence.map { it.externalChapterKey } shouldBe
-            if (revoke) emptyList() else listOf("mangadot:chapters:111")
+            if (revoke || conflicting) emptyList() else listOf("mangadot:chapters:111")
         result.snapshots shouldBe emptyList()
-        if (revoke) {
+        if (revoke || conflicting) {
             result.cursorProgress shouldBe emptyList()
         } else {
             val progress = result.cursorProgress.single()

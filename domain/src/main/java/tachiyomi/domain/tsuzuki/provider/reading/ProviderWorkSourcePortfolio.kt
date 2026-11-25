@@ -66,7 +66,7 @@ object ProviderWorkSourcePortfolio {
             ?.toSet()
             ?.takeIf { it.isNotEmpty() }
 
-        return candidates.distinctBy(ProviderWorkCandidate::externalWorkId).map { candidate ->
+        val observations = candidates.map { candidate ->
             val exactTitle = sequenceOf(candidate.title)
                 .plus(candidate.aliases.asSequence())
                 .any { normalizeTitle(it) == normalizedQuery }
@@ -116,6 +116,13 @@ object ProviderWorkSourcePortfolio {
                     ProviderSourceEditionQualification.UNRESOLVED
                 },
             )
+        }
+        // For the experimental catalog assessment, a verified conflicting
+        // reference for the same HID must never disappear behind the first
+        // observation. Preserve established ordering for other assessments.
+        return observations.groupBy { it.ref }.values.map { group ->
+            group.firstOrNull { it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT }
+                ?: group.first()
         }
     }
 

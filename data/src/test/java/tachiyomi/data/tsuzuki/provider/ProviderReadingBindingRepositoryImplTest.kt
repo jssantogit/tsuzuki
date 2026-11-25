@@ -196,6 +196,20 @@ class ProviderReadingBindingRepositoryImplTest {
     }
 
     @Test
+    fun `catalog conflict wins equal timestamp races without changing title ownership`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val source = workSource("catalog-race")
+        val conflict = source.copy(workVerification = ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT)
+        portfolio.observe(source) shouldBe true
+        portfolio.observe(conflict) shouldBe true
+        portfolio.observe(source) shouldBe true
+        portfolio.get(source.ref) shouldBe conflict
+        val older = source.copy(observedAt = source.observedAt - 1)
+        portfolio.observe(older) shouldBe true
+        portfolio.get(source.ref) shouldBe conflict
+    }
+
+    @Test
     fun `shadow association cannot take a HID already preferred by another canonical work`() = runBlocking<Unit> {
         database.tsuzuki_titlesQueries.insertTsuzukiTitle(
             id = "other-title",
