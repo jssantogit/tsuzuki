@@ -41,6 +41,10 @@ import java.util.zip.ZipInputStream
 class ProviderAdvancedExtractionInstrumentedTest {
     @Test
     fun bothAdaptersThroughAdvancedExtraction(): Unit = runBlocking {
+        runControlled()
+    }
+
+    internal suspend fun runControlled() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val root = File(context.cacheDir, "advanced-extraction-" + UUID.randomUUID()).apply { mkdirs() }

@@ -57,3 +57,5 @@ The generic resource SDK now uses encoded-size metadata to recursively project o
 ## Session and transport hardening
 
 HTTP cookie state remains private per provider and permission snapshot, with bounded session and cookie counts; changing grants discards the former HTTP session. Cross-origin entity replay is rejected, while existing safe GET redirect handling remains. Browser operations respect invocation-derived deadlines and close on interruption. Browser and HTTP are deliberately separate trust domains; no credential transfer, challenge solver or impersonation. These changes do not establish that any blocked source is accessible.
+
+The single live instrumentation method now runs controlled adapter and local protocol conformance checks before the two live lanes, without additional Gradle builds or emulator startup. It publishes one independent contract verdict plus six live results. The controlled phase never accesses either real source. JSON paging now reuses the owned cached parse tree without re-copying the entire input for every projection. ReaderActivity and production SQLite integration still require independent evidence.

@@ -77,11 +77,16 @@ class DefaultProviderBinaryTransformHostService(
     private val parsedLock = Any()
     private var cachedJson: Pair<ProviderResourceHandle, JsonElement>? = null
 
-    private fun parsed(handle: ProviderResourceHandle, bytes: ByteArray): JsonElement = synchronized(parsedLock) {
-        cachedJson?.takeIf { it.first == handle }?.second ?: ProviderAdvancedExtraction.parseJson(
-            bytes.decodeToString(throwOnInvalidSequence = true),
-            maxInput = 2 * 1024 * 1024,
-        ).also { cachedJson = handle to it }
+    private fun parsed(handle: ProviderResourceHandle): JsonElement = synchronized(parsedLock) {
+        resources.requireOwned(owner, handle)
+        cachedJson?.takeIf { it.first == handle }?.second ?: run {
+            val bytes = resources.read(owner, handle)
+            require(bytes.size <= 2 * 1024 * 1024)
+            ProviderAdvancedExtraction.parseJson(
+                bytes.decodeToString(throwOnInvalidSequence = true),
+                maxInput = 2 * 1024 * 1024,
+            ).also { cachedJson = handle to it }
+        }
     }
 
     override suspend fun release(resourceHandle: ProviderResourceHandle): Boolean = synchronized(parsedLock) {
@@ -96,16 +101,16 @@ class DefaultProviderBinaryTransformHostService(
         argument: String,
     ): String {
         require(argument.length <= 4096 && argument.encodeToByteArray().size <= 4096)
-        val bytes = resources.read(owner, resourceHandle)
+        // JSON paging should not copy the entire resource for every slice.
+        val bytes by lazy { resources.read(owner, resourceHandle) }
         if (operation == "sha256") {
             require(argument.isEmpty())
             return MessageDigest.getInstance("SHA-256").digest(bytes)
                 .joinToString("") { "%02x".format(it.toInt() and 0xff) }
         }
-        require(bytes.size <= 2 * 1024 * 1024)
         return when (operation) {
-            "json-pointer" -> ProviderAdvancedExtraction.jsonPointer(parsed(resourceHandle, bytes), argument)
-            "json-shape" -> ProviderAdvancedExtraction.jsonShape(parsed(resourceHandle, bytes), argument)
+            "json-pointer" -> ProviderAdvancedExtraction.jsonPointer(parsed(resourceHandle), argument)
+            "json-shape" -> ProviderAdvancedExtraction.jsonShape(parsed(resourceHandle), argument)
             "protobuf-fields" -> {
                 require(argument.isEmpty())
                 ProviderAdvancedExtraction.protobufBytes(bytes)
@@ -122,7 +127,7 @@ class DefaultProviderBinaryTransformHostService(
                     return value.content.toIntOrNull() ?: throw ProviderHostServiceException("Invalid JSON page integer")
                 }
                 ProviderAdvancedExtraction.jsonArrayPage(
-                    parsed(resourceHandle, bytes),
+                    parsed(resourceHandle),
                     pointer.content,
                     integer("offset"),
                     integer("limit"),

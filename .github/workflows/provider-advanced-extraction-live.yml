@@ -27,7 +27,9 @@ jobs:
           path: advanced-source
           persist-credentials: false
       - name: Prepare two transient unsigned live candidates
-        run: python3 .github/scripts/build_advanced_extraction_fixtures.py advanced-source --live
+        run: |
+          python3 .github/scripts/build_advanced_extraction_fixtures.py advanced-source
+          python3 .github/scripts/build_advanced_extraction_fixtures.py advanced-source --live
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
         with:
           java-version-file: .github/.java-version

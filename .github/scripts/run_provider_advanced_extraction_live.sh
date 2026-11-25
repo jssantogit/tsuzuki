@@ -32,14 +32,16 @@ if [[ "${MANGABALL_API_APPROVED:-false}" == true ]]; then approved=true; fi
 adb logcat -c
 status=0
 timeout --foreground 330s adb shell am instrument -w -r -e class "$class" -e advancedLive true -e mangaBallApiApproved "$approved" "$runner" >"$raw" 2>&1 || status=$?
-adb logcat -d -s AdvancedLiveGate:I | grep -Eo 'ADVANCED_LIVE\|[a-z-]+\|[a-z-]+\|[A-Z0-9_]+\|ms=[0-9]+' | tee "$out/verdicts.txt" || true
+adb logcat -d -s AdvancedLiveGate:I | grep -Eo 'ADVANCED_LIVE\|[a-z-]+\|[a-z-]+\|[A-Z0-9_]+\|ms=[0-9]+|ADVANCED_CONTRACT\|(PASS|FAIL)' | tee "$out/verdicts.txt" || true
 if [[ "$status" != 0 ]] || ! grep -Fq 'OK (1 test)' "$raw" || ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw"; then
   echo "ADVANCED_LIVE|instrumentation=FAIL|exit=$status" >&2
   exit 5
 fi
 python3 - "$out/verdicts.txt" <<'PY'
 import pathlib, sys
-rows = [line.split("|") for line in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+lines = pathlib.Path(sys.argv[1]).read_text().splitlines()
+assert [line for line in lines if line.startswith("ADVANCED_CONTRACT|")] == ["ADVANCED_CONTRACT|PASS"]
+rows = [line.split("|") for line in lines if line.startswith("ADVANCED_LIVE|")]
 expected = {(source, work) for source in ("mangaall-ball", "mangafire") for work in ("death-note", "punpun", "akame")}
 assert len(rows) == 6 and {(r[1], r[2]) for r in rows} == expected, "Missing or duplicate verdict"
 assert all(len(r) == 5 and r[3] == "PASS" for r in rows), "Live gate not green"

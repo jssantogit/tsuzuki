@@ -15,6 +15,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -74,6 +75,20 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
         )
         val client = ProviderRuntimeClient(context, factory)
         try {
+            // The same JUnit method exercises the controlled contract and live
+            // lanes. Report a failed contract without disguising live outcomes.
+            val controlled = try {
+                withContext(Dispatchers.IO) {
+                    ProviderAdvancedExtractionInstrumentedTest().runControlled()
+                    AdvancedExtractionLocalContract.run(context, root)
+                }
+                true
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                false
+            }
+            Log.i("AdvancedLiveGate", "ADVANCED_CONTRACT|" + if (controlled) "PASS" else "FAIL")
             val results = supervisorScope {
                 listOf("mangaall-ball", "mangafire").map { name ->
                     async(Dispatchers.IO) {
@@ -222,7 +237,7 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
                 }.awaitAll().flatten()
             }
             assertEquals(6, results.size)
-            assertTrue("Live gate: " + results.joinToString(";"), results.all { it.endsWith("|PASS") })
+            assertTrue("Contract=$controlled; live=" + results.joinToString(";"), controlled && results.all { it.endsWith("|PASS") })
         } finally {
             root.deleteRecursively()
         }
