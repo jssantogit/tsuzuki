@@ -3528,11 +3528,23 @@ class CollectProviderReadingEvidenceTest {
         )
     }
 
+    @Test
+    fun `late author qualified alias retains time for native coverage outside lookup deadline`() = runTest {
+        verifyResearchAliasBatch(
+            0,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+            slowLookup = true,
+        )
+    }
+
     private suspend fun verifyResearchAliasBatch(
         batch: Int,
         aliases: List<String>,
         desiredAlias: String,
         expectedQueries: List<String>,
+        slowLookup: Boolean = false,
     ) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
@@ -3567,6 +3579,7 @@ class CollectProviderReadingEvidenceTest {
                     } else {
                         val query = request.titles.single()
                         dotQueries += query
+                        if (slowLookup) delay(5_000)
                         if (query == canonicalTitle.displayTitle) {
                             ProviderCallResult.Success(
                                 ProviderPage(emptyList(), nextCursor = ProviderCursor("broad-page-two")),
@@ -3592,6 +3605,7 @@ class CollectProviderReadingEvidenceTest {
                     }
                 },
                 chaptersHandler = {
+                    if (slowLookup) delay(3_000)
                     ProviderCallResult.Success(
                         ProviderPage(
                             listOf(

@@ -677,8 +677,9 @@ class CollectProviderReadingEvidence private constructor(
             val seenCandidates: MutableSet<ProviderWorkCandidate> = mutableSetOf(),
         )
         val queries = titles.mapIndexed { index, title -> QueryState(index, title) }
+        var nativeLookup: Pair<String, List<ProviderWorkCandidate>>? = null
         withTimeoutOrNull(MAX_RESEARCH_LOOKUP_MILLIS) {
-            while (queries.any { !it.done } && discovered.isEmpty()) {
+            while (queries.any { !it.done } && discovered.isEmpty() && nativeLookup == null) {
                 for (query in queries) {
                     if (query.done) continue
                     val title = query.title
@@ -726,13 +727,14 @@ class CollectProviderReadingEvidence private constructor(
                                     selected = null,
                                     primary = null,
                                 )
-                                ProviderWorkSourcePortfolio.assess(
+                                val assessments = ProviderWorkSourcePortfolio.assess(
                                     descriptor.id,
                                     target.facetId,
                                     title,
                                     canonicalCreators,
                                     exact,
-                                ).forEach {
+                                )
+                                assessments.forEach {
                                     traceWorkSourceAssociation(
                                         canonicalTitleId,
                                         target,
@@ -740,17 +742,29 @@ class CollectProviderReadingEvidence private constructor(
                                         DiagnosticOutcome.CANDIDATES,
                                     )
                                 }
-                                nativePreviews.clear()
-                                observeSourcePortfolio(
-                                    canonicalTitleId,
-                                    title,
-                                    target,
-                                    canonicalCreators,
-                                    exact,
-                                    nativePreviews,
-                                )
-                                    .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
-                                    .forEach { discovered[it.ref] = it }
+                                if (source == "mangadot") {
+                                    // Save the exact author-qualified group before the lookup
+                                    // deadline can cancel its native chapter preview. Preserve
+                                    // every rival HID in the group and the existing bound.
+                                    val eligible = assessments.any {
+                                        it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED &&
+                                            it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED
+                                    }
+                                    if (eligible && exact.size <= MAX_COVERAGE_CONTENDERS) {
+                                        nativeLookup = title to exact
+                                    }
+                                } else {
+                                    observeSourcePortfolio(
+                                        canonicalTitleId,
+                                        title,
+                                        target,
+                                        canonicalCreators,
+                                        exact,
+                                        nativePreviews,
+                                    )
+                                        .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
+                                        .forEach { discovered[it.ref] = it }
+                                }
                             }
                             traceLookupAttempt(
                                 canonicalTitleId,
@@ -786,8 +800,25 @@ class CollectProviderReadingEvidence private constructor(
                             )
                         }
                     }
-                    if (discovered.isNotEmpty()) break
+                    if (discovered.isNotEmpty() || nativeLookup != null) break
                 }
+            }
+        }
+        // Native work attestation is a separate stage, not a search page.
+        // The existing outer provider deadline still bounds the whole lane.
+        nativeLookup?.let { (title, candidates) ->
+            onStageChanged(DiagnosticStage.READ)
+            withTimeoutOrNull(MAX_RESEARCH_NATIVE_PREVIEW_MILLIS) {
+                observeSourcePortfolio(
+                    canonicalTitleId,
+                    title,
+                    target,
+                    canonicalCreators,
+                    candidates,
+                    nativePreviews,
+                )
+                    .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
+                    .forEach { discovered[it.ref] = it }
             }
         }
         if (discovered.isEmpty()) return ProviderReadingEvidenceCollection(complete = false)
@@ -2327,6 +2358,7 @@ class CollectProviderReadingEvidence private constructor(
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
         const val MAX_RESEARCH_LOOKUP_MILLIS = 12_000L
         const val MAX_RESEARCH_QUERY_MILLIS = 6_000L
+        const val MAX_RESEARCH_NATIVE_PREVIEW_MILLIS = 4_000L
 
         // A missing catalog snapshot gets one bounded independent identity
         // fetch before source lookup, not an unbounded provider discovery.
