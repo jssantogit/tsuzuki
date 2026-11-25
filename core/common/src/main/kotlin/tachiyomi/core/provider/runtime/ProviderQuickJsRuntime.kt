@@ -249,6 +249,20 @@ internal fun QuickJs.installHostServices(
         }
         services.binary?.let { binary ->
             define("binary") {
+                asyncFunction("inspect") { args ->
+                    hostFailures.call {
+                        binary.inspect(
+                            ProviderResourceHandle(args.stringArgument(0)),
+                            args.stringArgument(1),
+                            args.stringArgument(2),
+                        )
+                    }
+                }
+                asyncFunction("transform") { args ->
+                    hostFailures.call {
+                        binary.transform(ProviderResourceHandle(args.stringArgument(0)), args.stringArgument(1)).value
+                    }
+                }
                 asyncFunction("fetch") { args ->
                     hostFailures.call { binary.fetch(args.stringArgument(0)).value }
                 }
@@ -287,6 +301,11 @@ internal fun QuickJs.installHostServices(
         }
         services.image?.let { image ->
             define("image") {
+                asyncFunction("compose") { args ->
+                    hostFailures.call {
+                        image.compose(ProviderResourceHandle(args.stringArgument(0)), args.stringArgument(1)).value
+                    }
+                }
                 asyncFunction("crop") { args ->
                     hostFailures.call {
                         image.crop(

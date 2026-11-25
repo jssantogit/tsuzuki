@@ -52,6 +52,12 @@ enum class ProviderManagedResourceFormat {
 }
 
 interface ProviderBinaryHostService {
+    suspend fun inspect(resourceHandle: ProviderResourceHandle, operation: String, argument: String): String =
+        throw ProviderHostServiceException("Provider binary inspection is unavailable")
+
+    suspend fun transform(resourceHandle: ProviderResourceHandle, operation: String): ProviderResourceHandle =
+        throw ProviderHostServiceException("Provider binary transform is unavailable")
+
     suspend fun fetch(url: String): ProviderResourceHandle
 
     suspend fun zipEntry(
@@ -74,6 +80,9 @@ interface ProviderCryptoHostService {
 }
 
 interface ProviderImageHostService {
+    suspend fun compose(resourceHandle: ProviderResourceHandle, layout: String): ProviderResourceHandle =
+        throw ProviderHostServiceException("Provider image composition is unavailable")
+
     suspend fun crop(
         resourceHandle: ProviderResourceHandle,
         x: Int,

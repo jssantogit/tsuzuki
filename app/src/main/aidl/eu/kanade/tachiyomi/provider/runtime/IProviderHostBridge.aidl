@@ -21,4 +21,8 @@ interface IProviderHostBridge {
     // Future code11-only. Append transactions; never renumber existing methods.
     String mangaAllChapterSnapshotStart(String workId, String language);
     String mangaAllChapterSnapshotNext(String workId, String language, String cursor);
+    // Additive extraction transactions. Keep all prior transaction IDs stable.
+    String binaryInspect(String resourceHandle, String operation, String argument);
+    String binaryTransform(String resourceHandle, String operation);
+    String imageCompose(String resourceHandle, String layout);
 }

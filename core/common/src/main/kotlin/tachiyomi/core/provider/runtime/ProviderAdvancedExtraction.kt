@@ -17,8 +17,8 @@ internal object ProviderAdvancedExtraction {
     private const val MAX_FIELDS = 512
     private const val MAX_DEPTH = 64
 
-    fun jsonPointer(document: String, pointer: String): String {
-        checkInput(document)
+    fun jsonPointer(document: String, pointer: String, maxInput: Int = MAX_INPUT): String {
+        checkInput(document, maxInput)
         require(pointer.length <= 2048 && (pointer.isEmpty() || pointer.startsWith('/')))
         checkJsonDepth(document)
         var value = Json.parseToJsonElement(document)
@@ -49,7 +49,11 @@ internal object ProviderAdvancedExtraction {
      */
     fun protobufFields(base64: String): String {
         checkInput(base64)
-        val bytes = Base64.getDecoder().decode(base64)
+        return protobufBytes(Base64.getDecoder().decode(base64))
+    }
+
+    fun protobufBytes(bytes: ByteArray): String {
+        require(bytes.size <= 2 * 1024 * 1024)
         val reader = WireReader(bytes)
         val output = StringBuilder("[")
         var count = 0
@@ -83,8 +87,14 @@ internal object ProviderAdvancedExtraction {
      * Restrict the selector subset to avoid regex and nested predicate abuse.
      * An empty result is distinct from a malformed request.
      */
-    fun queryDocument(document: String, format: String, selector: String, attribute: String?): String {
-        checkInput(document)
+    fun queryDocument(
+        document: String,
+        format: String,
+        selector: String,
+        attribute: String?,
+        maxInput: Int = MAX_INPUT,
+    ): String {
+        checkInput(document, maxInput)
         require(format == "html" || format == "xml")
         require(selector.isNotBlank() && selector.length <= 256)
         require(':' !in selector && '(' !in selector && ')' !in selector && '\\' !in selector)
@@ -113,8 +123,8 @@ internal object ProviderAdvancedExtraction {
         return bounded(result.append(']').toString())
     }
 
-    private fun checkInput(value: String) {
-        require(value.length <= MAX_INPUT && value.encodeToByteArray().size <= MAX_INPUT)
+    private fun checkInput(value: String, maxInput: Int = MAX_INPUT) {
+        require(value.length <= maxInput && value.encodeToByteArray().size <= maxInput)
     }
 
     private fun bounded(value: String): String {

@@ -473,6 +473,21 @@ private fun IProviderHostBridge?.toHostServices(
         },
         binary = if (ProviderHostModule.BINARY in allowedModules) {
             object : ProviderBinaryHostService {
+                override suspend fun inspect(resourceHandle: ProviderResourceHandle, operation: String, argument: String): String =
+                    bridge.binaryInspect(
+                        resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"),
+                        operation.boundedHostArg(32, "binary operation"),
+                        argument.boundedHostArg(4096, "binary argument"),
+                    ).orEmpty().boundedFutureChapterPage()
+
+                override suspend fun transform(resourceHandle: ProviderResourceHandle, operation: String): ProviderResourceHandle =
+                    ProviderResourceHandle(
+                        bridge.binaryTransform(
+                            resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"),
+                            operation.boundedHostArg(32, "binary operation"),
+                        ).orEmpty(),
+                    )
+
                 override suspend fun fetch(url: String): ProviderResourceHandle =
                     ProviderResourceHandle(
                         bridge.binaryFetch(
@@ -523,6 +538,14 @@ private fun IProviderHostBridge?.toHostServices(
         },
         image = if (ProviderHostModule.IMAGE in allowedModules) {
             object : ProviderImageHostService {
+                override suspend fun compose(resourceHandle: ProviderResourceHandle, layout: String): ProviderResourceHandle =
+                    ProviderResourceHandle(
+                        bridge.imageCompose(
+                            resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"),
+                            layout.boundedHostArg(32 * 1024, "image layout"),
+                        ).orEmpty(),
+                    )
+
                 override suspend fun crop(
                     resourceHandle: ProviderResourceHandle,
                     x: Int,

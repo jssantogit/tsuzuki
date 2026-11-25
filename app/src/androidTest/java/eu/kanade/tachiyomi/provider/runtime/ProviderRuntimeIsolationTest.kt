@@ -173,6 +173,15 @@ class ProviderRuntimeIsolationTest {
                 override fun storageRemove(key: String?) = Unit
                 override fun secretGet(key: String?): String? = null
                 override fun binaryFetch(url: String?): String = throw UnsupportedOperationException()
+                override fun binaryInspect(resourceHandle: String?, operation: String?, argument: String?): String =
+                    error("Unexpected binary inspection")
+
+                override fun binaryTransform(resourceHandle: String?, operation: String?): String =
+                    error("Unexpected binary transform")
+
+                override fun imageCompose(resourceHandle: String?, layout: String?): String =
+                    error("Unexpected image composition")
+
                 override fun binaryZipEntry(resourceHandle: String?, entryName: String?): String =
                     throw UnsupportedOperationException()
                 override fun binaryPromote(resourceHandle: String?, format: String?): String =
@@ -367,6 +376,21 @@ class ProviderRuntimeIsolationTest {
 
         override fun binaryFetch(url: String?): String =
             throw UnsupportedOperationException()
+
+        override fun binaryInspect(resourceHandle: String?, operation: String?, argument: String?): String =
+
+            error("Unexpected binary inspection")
+
+
+        override fun binaryTransform(resourceHandle: String?, operation: String?): String =
+
+            error("Unexpected binary transform")
+
+
+        override fun imageCompose(resourceHandle: String?, layout: String?): String =
+
+            error("Unexpected image composition")
+
 
         override fun binaryZipEntry(resourceHandle: String?, entryName: String?): String =
             throw UnsupportedOperationException()

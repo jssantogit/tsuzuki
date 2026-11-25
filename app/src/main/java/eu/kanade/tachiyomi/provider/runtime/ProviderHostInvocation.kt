@@ -454,6 +454,31 @@ private class ProviderHostBridgeAdapter(
     override fun secretGet(key: String?): String? =
         runBlocking { requireService(services.secrets, "secrets").get(key.orEmpty()) }
 
+    override fun binaryInspect(resourceHandle: String?, operation: String?, argument: String?): String =
+        runBlocking {
+            requireService(services.binary, "binary").inspect(
+                ProviderResourceHandle(resourceHandle.orEmpty()),
+                operation.orEmpty(),
+                argument.orEmpty(),
+            )
+        }
+
+    override fun binaryTransform(resourceHandle: String?, operation: String?): String =
+        runBlocking {
+            requireService(services.binary, "binary").transform(
+                ProviderResourceHandle(resourceHandle.orEmpty()),
+                operation.orEmpty(),
+            ).value
+        }
+
+    override fun imageCompose(resourceHandle: String?, layout: String?): String =
+        runBlocking {
+            requireService(services.image, "image").compose(
+                ProviderResourceHandle(resourceHandle.orEmpty()),
+                layout.orEmpty(),
+            ).value
+        }
+
     override fun binaryFetch(url: String?): String =
         runBlocking { requireService(services.binary, "binary").fetch(url.orEmpty()).value }
 

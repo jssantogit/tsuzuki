@@ -1,9 +1,15 @@
 package tachiyomi.core.provider.runtime
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.jsoup.Jsoup
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.util.Base64
+import java.util.zip.GZIPInputStream
 import java.util.zip.ZipInputStream
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
@@ -65,6 +71,60 @@ class DefaultProviderBinaryTransformHostService(
         require(maxTransformBytes > 0) { "Provider binary transform limit must be positive" }
     }
 
+    override suspend fun inspect(
+        resourceHandle: ProviderResourceHandle,
+        operation: String,
+        argument: String,
+    ): String {
+        require(argument.length <= 4096 && argument.encodeToByteArray().size <= 4096)
+        val bytes = resources.read(owner, resourceHandle)
+        require(bytes.size <= 2 * 1024 * 1024)
+        return when (operation) {
+            "json-pointer" -> ProviderAdvancedExtraction.jsonPointer(
+                bytes.decodeToString(throwOnInvalidSequence = true),
+                argument,
+                maxInput = 2 * 1024 * 1024,
+            )
+            "protobuf-fields" -> {
+                require(argument.isEmpty())
+                ProviderAdvancedExtraction.protobufBytes(bytes)
+            }
+            "document-query" -> {
+                val query = Json.parseToJsonElement(argument) as? JsonObject
+                    ?: throw ProviderHostServiceException("Invalid document query")
+                require(query.keys == setOf("format", "selector", "attribute"))
+                fun string(key: String): String {
+                    val value = query[key] as? JsonPrimitive
+                    require(value != null && value.isString)
+                    return value.content
+                }
+                ProviderAdvancedExtraction.queryDocument(
+                    bytes.decodeToString(throwOnInvalidSequence = true),
+                    string("format"),
+                    string("selector"),
+                    if (query["attribute"] == JsonNull) null else string("attribute"),
+                    maxInput = 2 * 1024 * 1024,
+                )
+            }
+            else -> throw ProviderHostServiceException("Unsupported binary inspection")
+        }
+    }
+
+    override suspend fun transform(
+        resourceHandle: ProviderResourceHandle,
+        operation: String,
+    ): ProviderResourceHandle {
+        val bytes = resources.read(owner, resourceHandle)
+        require(bytes.size <= maxTransformBytes)
+        val result = when (operation) {
+            "gzip" -> GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBounded(maxTransformBytes) }
+            "base64" -> Base64.getDecoder().decode(bytes)
+            else -> throw ProviderHostServiceException("Unsupported binary transform")
+        }
+        require(result.size <= maxTransformBytes)
+        return resources.put(owner, ProviderResourceKind.BINARY, result)
+    }
+
     override suspend fun fetch(url: String): ProviderResourceHandle {
         val bytes = try {
             fetcher(url)
@@ -88,13 +148,24 @@ class DefaultProviderBinaryTransformHostService(
 
         try {
             ZipInputStream(ByteArrayInputStream(archive)).use { zip ->
+                var skippedBytes = 0L
+                var entryCount = 0
+                val skipBuffer = ByteArray(DEFAULT_BUFFER_SIZE)
                 while (true) {
                     val entry = zip.nextEntry ?: break
-                    val path = normalizeArchiveEntry(entry.name)
+                    require(++entryCount <= 4096)
+                    val path = normalizeArchiveEntry(if (entry.isDirectory) entry.name.removeSuffix("/") else entry.name)
                     if (!entry.isDirectory && path == entryName) {
                         val bytes = zip.readBounded(maxTransformBytes)
                         zip.closeEntry()
                         return resources.put(owner, ProviderResourceKind.BINARY, bytes)
+                    }
+                    // closeEntry() can inflate an entire skipped entry. Drain it under a cumulative budget.
+                    while (true) {
+                        val count = zip.read(skipBuffer)
+                        if (count < 0) break
+                        skippedBytes += count
+                        require(skippedBytes <= maxTransformBytes.toLong() * 4)
                     }
                     zip.closeEntry()
                 }
