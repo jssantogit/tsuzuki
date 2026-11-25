@@ -58,6 +58,9 @@ enum class ProviderManagedResourceFormat {
 }
 
 interface ProviderBinaryHostService {
+    suspend fun release(resourceHandle: ProviderResourceHandle): Boolean =
+        throw ProviderHostServiceException("Provider resource release is unavailable")
+
     suspend fun inspect(resourceHandle: ProviderResourceHandle, operation: String, argument: String): String =
         throw ProviderHostServiceException("Provider binary inspection is unavailable")
 

@@ -332,13 +332,25 @@ class DefaultProviderHttpHostService(
             ?.value
             ?.toMediaTypeOrNull()
 
+        // OkHttp's String RequestBody appends charset=utf-8 when none was
+        // declared. Preserve an explicitly bare JSON media type on the wire.
+        fun encodeBody(value: String) =
+            if (contentType != null && contentType.type == "application" &&
+                (contentType.subtype == "json" || contentType.subtype.endsWith("+json")) &&
+                contentType.charset() == null
+            ) {
+                value.encodeToByteArray().toRequestBody(contentType)
+            } else {
+                value.toRequestBody(contentType)
+            }
+
         val requestBody = when (method) {
             ProviderHttpMethod.GET -> null
-            ProviderHttpMethod.DELETE -> body?.toRequestBody(contentType)
+            ProviderHttpMethod.DELETE -> body?.let(::encodeBody)
             ProviderHttpMethod.POST,
             ProviderHttpMethod.PUT,
             ProviderHttpMethod.PATCH,
-            -> body.orEmpty().toRequestBody(contentType)
+            -> encodeBody(body.orEmpty())
         }
 
         return Request.Builder()

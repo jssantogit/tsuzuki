@@ -488,6 +488,9 @@ private fun IProviderHostBridge?.toHostServices(
         },
         binary = if (ProviderHostModule.BINARY in allowedModules) {
             object : ProviderBinaryHostService {
+                override suspend fun release(resourceHandle: ProviderResourceHandle): Boolean =
+                    bridge.binaryRelease(resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"))
+
                 override suspend fun inspect(resourceHandle: ProviderResourceHandle, operation: String, argument: String): String =
                     bridge.binaryInspect(
                         resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"),

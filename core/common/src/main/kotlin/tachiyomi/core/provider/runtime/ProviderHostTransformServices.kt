@@ -1,6 +1,7 @@
 package tachiyomi.core.provider.runtime
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -8,6 +9,7 @@ import org.jsoup.Jsoup
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.Base64
 import java.util.zip.GZIPInputStream
 import java.util.zip.ZipInputStream
@@ -71,6 +73,23 @@ class DefaultProviderBinaryTransformHostService(
         require(maxTransformBytes > 0) { "Provider binary transform limit must be positive" }
     }
 
+    // One parsed tree per invocation, never shared across provider identities or handles.
+    private val parsedLock = Any()
+    private var cachedJson: Pair<ProviderResourceHandle, JsonElement>? = null
+
+    private fun parsed(handle: ProviderResourceHandle, bytes: ByteArray): JsonElement = synchronized(parsedLock) {
+        cachedJson?.takeIf { it.first == handle }?.second ?: ProviderAdvancedExtraction.parseJson(
+            bytes.decodeToString(throwOnInvalidSequence = true),
+            maxInput = 2 * 1024 * 1024,
+        ).also { cachedJson = handle to it }
+    }
+
+    override suspend fun release(resourceHandle: ProviderResourceHandle): Boolean = synchronized(parsedLock) {
+        val released = resources.release(owner, resourceHandle)
+        if (cachedJson?.first == resourceHandle) cachedJson = null
+        released
+    }
+
     override suspend fun inspect(
         resourceHandle: ProviderResourceHandle,
         operation: String,
@@ -78,13 +97,15 @@ class DefaultProviderBinaryTransformHostService(
     ): String {
         require(argument.length <= 4096 && argument.encodeToByteArray().size <= 4096)
         val bytes = resources.read(owner, resourceHandle)
+        if (operation == "sha256") {
+            require(argument.isEmpty())
+            return MessageDigest.getInstance("SHA-256").digest(bytes)
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        }
         require(bytes.size <= 2 * 1024 * 1024)
         return when (operation) {
-            "json-pointer" -> ProviderAdvancedExtraction.jsonPointer(
-                bytes.decodeToString(throwOnInvalidSequence = true),
-                argument,
-                maxInput = 2 * 1024 * 1024,
-            )
+            "json-pointer" -> ProviderAdvancedExtraction.jsonPointer(parsed(resourceHandle, bytes), argument)
+            "json-shape" -> ProviderAdvancedExtraction.jsonShape(parsed(resourceHandle, bytes), argument)
             "protobuf-fields" -> {
                 require(argument.isEmpty())
                 ProviderAdvancedExtraction.protobufBytes(bytes)
@@ -101,7 +122,7 @@ class DefaultProviderBinaryTransformHostService(
                     return value.content.toIntOrNull() ?: throw ProviderHostServiceException("Invalid JSON page integer")
                 }
                 ProviderAdvancedExtraction.jsonArrayPage(
-                    bytes.decodeToString(throwOnInvalidSequence = true),
+                    parsed(resourceHandle, bytes),
                     pointer.content,
                     integer("offset"),
                     integer("limit"),

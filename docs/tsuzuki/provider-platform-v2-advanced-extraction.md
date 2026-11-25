@@ -17,6 +17,8 @@ This branch is independent of MangaALL PR #275 and uses the existing V1 contract
 * `protocol.extractionVersion()` exposes additive extraction revision 1; SDK feature detection must still check the required modules.
 * `http.requestResource(method, url, headersJson, body)` supports the existing HTTP methods and policy, returning only status and a scoped resource handle on 2xx. Error responses are never presented as data. Binary and POST responses need not cross Binder as text.
 * `binary.inspect(handle, "json-array-page", JSON.stringify({pointer,offset,limit}))` reads array slices with exact nextOffset/total, max 256 items and 48 KiB output; it fails closed if one item exceeds the envelope. Handles are invocation-scoped, not persistent cursors.
+* JSON shape inspection, SHA-256 and explicit resource release support safe paging and bounded memory. A single parsed JSON tree is reused inside the invocation only; releasing its handle invalidates the cache.
+* HTTP preserves a declared bare JSON Content-Type without implicitly appending a charset.
 
 Pure extraction works inside the isolated runtime with already acquired inline inputs; it does not grant any extra host authority. No source-specific rules or anti-bot circumvention.
 

@@ -27,13 +27,25 @@ export async function requestResource(methodName, url, headers = {}, body = unde
   if (typeof value.resourceHandle !== "string" || !value.resourceHandle.startsWith("res:")) throw new Error("Missing resource");
   return value.resourceHandle;
 }
+export async function release(handle) {
+  return method("binary", "release")(handle);
+}
+export async function digest(handle) {
+  const value = await method("binary", "inspect")(handle, "sha256", "");
+  if (!/^[0-9a-f]{64}$/.test(value)) throw new Error("Malformed digest");
+  return value;
+}
+export async function jsonShape(handle, pointer = "") {
+  return JSON.parse(await method("binary", "inspect")(handle, "json-shape", pointer));
+}
 export async function jsonPointer(handle, pointer) {
   return JSON.parse(await method("binary", "inspect")(handle, "json-pointer", pointer));
 }
 export async function jsonArrayPage(handle, pointer, offset = 0, limit = 128) {
   const page = JSON.parse(await method("binary", "inspect")(handle, "json-array-page", JSON.stringify({pointer, offset, limit})));
   if (!Array.isArray(page.items) || !Number.isInteger(page.total) || page.total < offset ||
-      (page.nextOffset !== null && page.nextOffset !== offset + page.items.length) ||
+      page.items.length > limit || offset + page.items.length > page.total ||
+      (page.nextOffset !== null && (page.items.length === 0 || page.nextOffset !== offset + page.items.length)) ||
       (page.nextOffset === null && offset + page.items.length !== page.total)) throw new Error("Malformed array page");
   return page;
 }

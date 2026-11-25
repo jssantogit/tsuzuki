@@ -481,6 +481,9 @@ private class ProviderHostBridgeAdapter(
     override fun secretGet(key: String?): String? =
         runBlocking { requireService(services.secrets, "secrets").get(key.orEmpty()) }
 
+    override fun binaryRelease(resourceHandle: String?): Boolean =
+        runBlocking { requireService(services.binary, "binary").release(ProviderResourceHandle(resourceHandle.orEmpty())) }
+
     override fun binaryInspect(resourceHandle: String?, operation: String?, argument: String?): String =
         runBlocking {
             requireService(services.binary, "binary").inspect(

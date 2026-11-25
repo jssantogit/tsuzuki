@@ -173,6 +173,9 @@ class ProviderRuntimeIsolationTest {
                 override fun storageRemove(key: String?) = Unit
                 override fun secretGet(key: String?): String? = null
                 override fun binaryFetch(url: String?): String = throw UnsupportedOperationException()
+                override fun binaryRelease(resourceHandle: String?): Boolean =
+                    error("Unexpected binary release")
+
                 override fun httpRequestResource(requestJson: String?): String =
                     error("Unexpected HTTP resource request")
 
@@ -385,6 +388,9 @@ class ProviderRuntimeIsolationTest {
 
         override fun binaryFetch(url: String?): String =
             throw UnsupportedOperationException()
+
+        override fun binaryRelease(resourceHandle: String?): Boolean =
+            error("Unexpected binary release")
 
         override fun httpRequestResource(requestJson: String?): String =
             error("Unexpected HTTP resource request")

@@ -274,6 +274,9 @@ internal fun QuickJs.installHostServices(
         }
         services.binary?.let { binary ->
             define("binary") {
+                asyncFunction("release") { args ->
+                    hostFailures.call { binary.release(ProviderResourceHandle(args.stringArgument(0))) }
+                }
                 asyncFunction("inspect") { args ->
                     hostFailures.call {
                         binary.inspect(

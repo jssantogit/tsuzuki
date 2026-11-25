@@ -3,7 +3,9 @@ package tachiyomi.core.provider.runtime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 import java.util.Base64
@@ -19,13 +21,38 @@ internal object ProviderAdvancedExtraction {
     private const val MAX_DEPTH = 64
 
     fun jsonPointer(document: String, pointer: String, maxInput: Int = MAX_INPUT): String =
-        bounded(resolveJson(document, pointer, maxInput).toString())
+        jsonPointer(parseJson(document, maxInput), pointer)
 
-    private fun resolveJson(document: String, pointer: String, maxInput: Int): JsonElement {
+    fun parseJson(document: String, maxInput: Int = MAX_INPUT): JsonElement {
         checkInput(document, maxInput)
-        require(pointer.length <= 2048 && (pointer.isEmpty() || pointer.startsWith('/')))
         checkJsonDepth(document)
-        var value = Json.parseToJsonElement(document)
+        return Json.parseToJsonElement(document)
+    }
+
+    fun jsonPointer(root: JsonElement, pointer: String): String = bounded(resolveJson(root, pointer).toString())
+
+    fun jsonShape(root: JsonElement, pointer: String): String {
+        val value = resolveJson(root, pointer)
+        fun kind(node: JsonElement): String = when (node) {
+            is JsonObject -> "object"
+            is JsonArray -> "array"
+            JsonNull -> "null"
+            is JsonPrimitive -> if (node.isString) "string" else "scalar"
+        }
+        val result = when (value) {
+            is JsonObject -> {
+                require(value.size <= 128)
+                JsonObject(mapOf("kind" to JsonPrimitive("object"), "keys" to JsonObject(value.mapValues { JsonPrimitive(kind(it.value)) })))
+            }
+            is JsonArray -> JsonObject(mapOf("kind" to JsonPrimitive("array"), "size" to JsonPrimitive(value.size)))
+            else -> JsonObject(mapOf("kind" to JsonPrimitive(kind(value))))
+        }
+        return bounded(result.toString())
+    }
+
+    private fun resolveJson(root: JsonElement, pointer: String): JsonElement {
+        require(pointer.length <= 2048 && (pointer.isEmpty() || pointer.startsWith('/')))
+        var value = root
         if (pointer.isNotEmpty()) {
             val tokens = pointer.substring(1).split('/')
             require(tokens.size <= MAX_DEPTH)
@@ -45,8 +72,8 @@ internal object ProviderAdvancedExtraction {
         return value
     }
 
-    fun jsonArrayPage(document: String, pointer: String, offset: Int, limit: Int): String {
-        val array = resolveJson(document, pointer, 2 * 1024 * 1024) as? JsonArray
+    fun jsonArrayPage(root: JsonElement, pointer: String, offset: Int, limit: Int): String {
+        val array = resolveJson(root, pointer) as? JsonArray
             ?: throw ProviderHostServiceException("JSON pointer does not resolve to an array")
         require(offset in 0..array.size && limit in 1..256)
         val items = StringBuilder()
