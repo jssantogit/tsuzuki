@@ -60,19 +60,30 @@ def parse(log, shard, owners, focused=False):
                 raise ValueError("scope")
             row = json.loads(bytes.fromhex(match[2]).decode("utf-8"))
             if (set(row) != {"index", "catalog", "authors", "artists", "aliases", "queryCount",
-                                 "availableQueryCount", "sources", "candidates"}
+                                 "availableQueryCount", "sources", "attemptedQueries",
+                                 "completedQueries", "candidates"}
                     or row["index"] != index or row["catalog"] != owners[index]
                     or not all(valid_names(row[k]) for k in ("authors", "artists", "aliases"))
                     or type(row["queryCount"]) is not int or type(row["availableQueryCount"]) is not int
-                    or not 1 <= row["queryCount"] <= 6
+                    or not 1 <= row["queryCount"] <= (24 if focused else 6)
                     or not row["queryCount"] <= row["availableQueryCount"] <= 4096
                     or (row["queryCount"] < row["availableQueryCount"] and "COMPLETE" in row["sources"].values())
                     or set(row["sources"]) != SOURCES or not set(row["sources"].values()) <= STATES
+                    or any(not isinstance(row[key], dict) or set(row[key]) != SOURCES
+                           for key in ("attemptedQueries", "completedQueries"))
+                    or any(type(row[key][source]) is not int
+                           for key in ("attemptedQueries", "completedQueries") for source in SOURCES)
+                    or any(not 0 <= row["completedQueries"][source] <= row["attemptedQueries"][source] <= row["queryCount"]
+                           for source in SOURCES)
+                    or any(row["sources"][source] == "COMPLETE" and
+                           row["completedQueries"][source] != row["availableQueryCount"] for source in SOURCES)
                     or not isinstance(row["candidates"], list) or len(row["candidates"]) > 24):
                 raise ValueError("report")
             for c in row["candidates"]:
-                if (set(c) != {"source", "authors", "detail", "coverage", "verification", "edition"}
+                if (set(c) != {"source", "queryOrdinal", "authors", "detail", "coverage", "verification", "edition"}
                         or c["source"] not in SOURCES or not valid_names(c["authors"])
+                        or type(c["queryOrdinal"]) is not int or not 1 <= c["queryOrdinal"] <= row["queryCount"]
+                        or row["attemptedQueries"][c["source"]] == 0
                         or c["detail"] not in DETAILS or c["coverage"] not in COVERAGES
                         or c["verification"] not in VERIFICATIONS or c["edition"] not in EDITIONS):
                     raise ValueError("candidate")
@@ -137,7 +148,9 @@ def selftest():
     row = {"index": 5, "catalog": "shikimori", "authors": ["Public Writer"],
            "artists": [], "aliases": ["공개 작가"], "queryCount": 3, "availableQueryCount": 3,
            "sources": {"mangadex": "COMPLETE", "mangadot": "BOUNDED"},
-           "candidates": [{"source": "mangadex", "authors": ["Writer Public"],
+           "attemptedQueries": {"mangadex": 3, "mangadot": 2},
+           "completedQueries": {"mangadex": 3, "mangadot": 1},
+           "candidates": [{"source": "mangadex", "queryOrdinal": 1, "authors": ["Writer Public"],
                            "detail": "VERIFIED_WITH_ALIASES", "coverage": "EMPTY",
                            "verification": "AUTHOR_CORROBORATED", "edition": "UNRESOLVED"}]}
     line = "MANGAALL_PUBLIC_CREDIT_AUDIT|index=5|payload=" + json.dumps(row).encode().hex()
@@ -152,6 +165,12 @@ def selftest():
     row["availableQueryCount"] = 7
     assert parse("MANGAALL_PUBLIC_CREDIT_AUDIT|index=5|payload=" + json.dumps(row).encode().hex(), 0, owners)["invalid"] == 1
     row["availableQueryCount"] = 3
+    row["completedQueries"]["mangadex"] = 2
+    assert parse("MANGAALL_PUBLIC_CREDIT_AUDIT|index=5|payload=" + json.dumps(row).encode().hex(), 0, owners)["invalid"] == 1
+    row["completedQueries"]["mangadex"] = 3
+    row["candidates"][0]["queryOrdinal"] = 4
+    assert parse("MANGAALL_PUBLIC_CREDIT_AUDIT|index=5|payload=" + json.dumps(row).encode().hex(), 0, owners)["invalid"] == 1
+    row["candidates"][0]["queryOrdinal"] = 1
     row["authors"] = ["https://example.com"]
     assert not parse("MANGAALL_PUBLIC_CREDIT_AUDIT|index=5|payload=" + json.dumps(row).encode().hex(), 0, owners)["works"]
     print("MANGAALL_CREDIT_AUDIT|selftest=PASS")

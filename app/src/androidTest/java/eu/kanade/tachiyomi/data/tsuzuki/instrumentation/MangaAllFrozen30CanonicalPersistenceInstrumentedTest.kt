@@ -465,95 +465,107 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 val availableQueries = (listOf(works[index - 1]) + names).map(String::trim)
                     .filter { it.isNotBlank() && it.length <= 1024 }
                     .distinctBy { it.lowercase().replace(Regex("""\s+"""), " ") }
-                // Align with the live collector's six-variant research limit.
-                // An omitted independently published alias means bounded,
-                // not exhaustive discovery.
-                val queries = availableQueries.take(6)
+                // The six-work opt-in audit may inspect four disjoint
+                // batches. Normal application lookup limits are unchanged.
+                val queries = availableQueries.take(if (auditScope == "REMAINING6") 24 else 6)
                 val observations = mutableListOf<JsonObject>()
                 val sourceStates = mutableMapOf<String, String>()
+                val sourceAttempted = mutableMapOf<String, Int>()
+                val sourceCompleted = mutableMapOf<String, Int>()
                 for (source in listOf("mangadex", "mangadot")) {
                     val initial = ProviderCursor("""{"v":1,"remaining":{"$source":{"c":null,"o":0}}}""")
-                    val cursors = queries.associateWith { initial }.toMutableMap()
-                    val seenCursors = queries.associateWith { mutableSetOf(initial.value) }
                     val seenCandidates = mutableSetOf<String>()
+                    val attemptedQueries = mutableSetOf<String>()
+                    val completedQueries = mutableSetOf<String>()
                     var failed = false
                     var truncated = false
                     var sourceObservations = 0
-                    val completed = withTimeoutOrNull(20_000L) {
-                        repeat(8) {
-                            for (query in queries) {
-                                val cursor = cursors[query] ?: continue
-                                val result = withTimeoutOrNull(6_000L) {
-                                    gateway.lookup(
-                                        id,
-                                        ProviderReadingLookupRequest(
-                                            titles = listOf(query),
-                                            cursor = cursor,
-                                            coverageEvidenceVersion = 1,
-                                            requestedLanguage = "en",
-                                        ),
-                                    )
-                                }
-                                val page = (result as? ProviderCallResult.Success)?.value
-                                if (page == null || page.items.any { !it.externalWorkId.startsWith("$source:") }) {
-                                    failed = true
-                                    cursors.remove(query)
-                                    continue
-                                }
-                                for (candidate in page.items) {
-                                    val assessment = ProviderWorkSourcePortfolio.assess(
-                                        id,
-                                        "en",
-                                        query,
-                                        verifiedNames,
-                                        listOf(candidate),
-                                    ).single()
-                                    if (assessment.workVerification ==
-                                        ProviderWorkVerification.TITLE_UNVERIFIED
-                                    ) {
+                    var allBatchesComplete = true
+                    for (batch in queries.chunked(6)) {
+                        val cursors = batch.associateWith { initial }.toMutableMap()
+                        val seenCursors = batch.associateWith { mutableSetOf(initial.value) }
+                        val completed = withTimeoutOrNull(20_000L) {
+                            repeat(8) {
+                                for (query in batch) {
+                                    val cursor = cursors[query] ?: continue
+                                    attemptedQueries += query
+                                    val result = withTimeoutOrNull(6_000L) {
+                                        gateway.lookup(
+                                            id,
+                                            ProviderReadingLookupRequest(
+                                                titles = listOf(query),
+                                                cursor = cursor,
+                                                coverageEvidenceVersion = 1,
+                                                requestedLanguage = "en",
+                                            ),
+                                        )
+                                    }
+                                    val page = (result as? ProviderCallResult.Success)?.value
+                                    if (page == null || page.items.any { !it.externalWorkId.startsWith("$source:") }) {
+                                        failed = true
+                                        cursors.remove(query)
                                         continue
                                     }
-                                    val key = listOf(
-                                        candidate.externalWorkId,
-                                        candidate.authors.joinToString("|"),
-                                        candidate.detailOutcome?.name.orEmpty(),
-                                        candidate.coverageOutcome?.name.orEmpty(),
-                                        assessment.editionQualification.name,
-                                    ).joinToString("\u0000")
-                                    if (!seenCandidates.add(key)) continue
-                                    if (sourceObservations >= 12) {
-                                        truncated = true
-                                        continue
+                                    for (candidate in page.items) {
+                                        val assessment = ProviderWorkSourcePortfolio.assess(
+                                            id,
+                                            "en",
+                                            query,
+                                            verifiedNames,
+                                            listOf(candidate),
+                                        ).single()
+                                        if (assessment.workVerification ==
+                                            ProviderWorkVerification.TITLE_UNVERIFIED
+                                        ) {
+                                            continue
+                                        }
+                                        val key = listOf(
+                                            candidate.externalWorkId,
+                                            candidate.authors.joinToString("|"),
+                                            candidate.detailOutcome?.name.orEmpty(),
+                                            candidate.coverageOutcome?.name.orEmpty(),
+                                            assessment.editionQualification.name,
+                                        ).joinToString("\u0000")
+                                        if (!seenCandidates.add(key)) continue
+                                        if (sourceObservations >= 12) {
+                                            truncated = true
+                                            continue
+                                        }
+                                        sourceObservations++
+                                        observations += JsonObject(
+                                            mapOf(
+                                                "source" to JsonPrimitive(source),
+                                                "queryOrdinal" to JsonPrimitive(queries.indexOf(query) + 1),
+                                                "authors" to publicCredits(candidate.authors),
+                                                "detail" to JsonPrimitive(candidate.detailOutcome?.name ?: "NONE"),
+                                                "coverage" to JsonPrimitive(candidate.coverageOutcome?.name ?: "NONE"),
+                                                "verification" to JsonPrimitive(assessment.workVerification.name),
+                                                "edition" to JsonPrimitive(assessment.editionQualification.name),
+                                            ),
+                                        )
                                     }
-                                    sourceObservations++
-                                    observations += JsonObject(
-                                        mapOf(
-                                            "source" to JsonPrimitive(source),
-                                            "authors" to publicCredits(candidate.authors),
-                                            "detail" to JsonPrimitive(candidate.detailOutcome?.name ?: "NONE"),
-                                            "coverage" to JsonPrimitive(candidate.coverageOutcome?.name ?: "NONE"),
-                                            "verification" to JsonPrimitive(assessment.workVerification.name),
-                                            "edition" to JsonPrimitive(assessment.editionQualification.name),
-                                        ),
-                                    )
+                                    val next = page.nextCursor
+                                    if (next == null) {
+                                        completedQueries += query
+                                        cursors.remove(query)
+                                    } else if (!seenCursors.getValue(query).add(next.value)) {
+                                        failed = true
+                                        cursors.remove(query)
+                                    } else {
+                                        cursors[query] = next
+                                    }
                                 }
-                                val next = page.nextCursor
-                                if (next == null) {
-                                    cursors.remove(query)
-                                } else if (!seenCursors.getValue(query).add(next.value)) {
-                                    failed = true
-                                    cursors.remove(query)
-                                } else {
-                                    cursors[query] = next
-                                }
+                                if (cursors.isEmpty()) return@withTimeoutOrNull true
                             }
-                            if (cursors.isEmpty()) return@withTimeoutOrNull true
+                            false
                         }
-                        false
+                        if (completed != true) allBatchesComplete = false
                     }
+                    sourceAttempted[source] = attemptedQueries.size
+                    sourceCompleted[source] = completedQueries.size
                     sourceStates[source] = when {
                         failed -> "LOOKUP_FAILURE"
-                        completed == true && !truncated && queries.size == availableQueries.size -> "COMPLETE"
+                        allBatchesComplete && !truncated && completedQueries.size == availableQueries.size -> "COMPLETE"
                         else -> "BOUNDED"
                     }
                 }
@@ -567,6 +579,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                         "queryCount" to JsonPrimitive(queries.size),
                         "availableQueryCount" to JsonPrimitive(availableQueries.size),
                         "sources" to JsonObject(sourceStates.mapValues { JsonPrimitive(it.value) }),
+                        "attemptedQueries" to JsonObject(sourceAttempted.mapValues { JsonPrimitive(it.value) }),
+                        "completedQueries" to JsonObject(sourceCompleted.mapValues { JsonPrimitive(it.value) }),
                         "candidates" to JsonArray(observations),
                     ),
                 ).toString()
