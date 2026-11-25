@@ -197,3 +197,5 @@ jobs:
 # Retry with valid empty-coverage regression fixture; production logic unchanged.
 
 # REMAINING6 is an explicit subset audit, never a full cohort acceptance.
+
+# REMAINING6: up to four separately bounded alias batches, with actual attempted and completed counts.
