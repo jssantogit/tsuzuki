@@ -69,33 +69,56 @@ export async function packManagedCbz(handles) {
   return method("binary", "promote")(archive, "CBZ");
 }
 
-/** Reassemble a bounded top-level API object from one invocation-owned resource. */
+/**
+ * Read a structured response without sending a large nested object through
+ * Binder. Small values use direct projection; large arrays are sliced.
+ * An oversized individual array row remains an explicit failure.
+ */
 export async function readResourceObject(handle, maxItems = 16000) {
-  const shape = await jsonShape(handle);
-  if (shape.kind !== "object" || !shape.keys) throw new Error("Expected response object");
-  const result = Object.create(null);
-  let remaining = maxItems;
-  for (const [key, kind] of Object.entries(shape.keys)) {
-    const pointer = "/" + key.replace(/~/g, "~0").replace(/\//g, "~1");
-    if (kind !== "array") {
-      result[key] = await jsonPointer(handle, pointer);
-      continue;
-    }
-    const rows = [];
-    let offset = 0, total = null;
-    for (let round = 0; round < 256; round++) {
-      const page = await jsonArrayPage(handle, pointer, offset, 256);
-      if (page.total > remaining || (total !== null && total !== page.total)) {
-        throw new Error("Resource array limit or inconsistent total");
-      }
-      total = page.total;
-      for (const item of page.items) rows.push(item);
-      if (page.nextOffset === null) break;
-      offset = page.nextOffset;
-    }
-    if (total === null || rows.length !== total) throw new Error("Incomplete resource array");
-    remaining -= rows.length;
-    result[key] = rows;
+  if (!Number.isSafeInteger(maxItems) || maxItems < 1 || maxItems > 16000) {
+    throw new Error("Invalid resource item budget");
   }
-  return result;
+  let remaining = maxItems, calls = 0;
+  function budget() {
+    if (++calls > 220) throw new Error("Resource extraction operation budget");
+  }
+  async function read(pointer, depth, knownShape = null) {
+    if (depth > 16) throw new Error("Resource extraction depth limit");
+    if (!knownShape) budget();
+    const shape = knownShape || await jsonShape(handle, pointer);
+    if (!Number.isSafeInteger(shape?.bytes) || shape.bytes < 0) throw new Error("Malformed resource shape");
+    if (shape.kind === "array") {
+      if (!Number.isSafeInteger(shape.size) || shape.size < 0 || shape.size > remaining) {
+        throw new Error("Resource array limit");
+      }
+      remaining -= shape.size;
+      const rows = [];
+      let offset = 0;
+      do {
+        budget();
+        const page = await jsonArrayPage(handle, pointer, offset, 256);
+        if (page.total !== shape.size) throw new Error("Inconsistent array total");
+        rows.push(...page.items);
+        if (page.nextOffset === null) break;
+        offset = page.nextOffset;
+      } while (true);
+      if (rows.length !== shape.size) throw new Error("Incomplete resource array");
+      return rows;
+    }
+    if (shape.bytes <= 48 * 1024) {
+      budget();
+      return jsonPointer(handle, pointer);
+    }
+    if (shape.kind !== "object" || !shape.keys) throw new Error("Oversized resource scalar");
+    const result = Object.create(null);
+    for (const key of Object.keys(shape.keys)) {
+      const child = pointer + "/" + key.replace(/~/g, "~0").replace(/\//g, "~1");
+      result[key] = await read(child, depth + 1);
+    }
+    return result;
+  }
+  budget();
+  const root = await jsonShape(handle);
+  if (root.kind !== "object") throw new Error("Expected response object");
+  return read("", 0, root);
 }

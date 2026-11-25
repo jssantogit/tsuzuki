@@ -47,7 +47,9 @@ internal object ProviderAdvancedExtraction {
             is JsonArray -> JsonObject(mapOf("kind" to JsonPrimitive("array"), "size" to JsonPrimitive(value.size)))
             else -> JsonObject(mapOf("kind" to JsonPrimitive(kind(value))))
         }
-        return bounded(result.toString())
+        // The size permits the SDK to select a bounded projection before crossing Binder.
+        val encodedBytes = value.toString().encodeToByteArray().size
+        return bounded(JsonObject(result + ("bytes" to JsonPrimitive(encodedBytes))).toString())
     }
 
     private fun resolveJson(root: JsonElement, pointer: String): JsonElement {
