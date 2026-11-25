@@ -1,4 +1,4 @@
-name: MangaALL — native-title controls for three locked catalog cases (OPT-IN)
+name: MangaALL — native-title controls for four locked catalog cases (OPT-IN)
 on:
   push:
     branches: ['probe/mangaall-dual-source-scale30-*']
