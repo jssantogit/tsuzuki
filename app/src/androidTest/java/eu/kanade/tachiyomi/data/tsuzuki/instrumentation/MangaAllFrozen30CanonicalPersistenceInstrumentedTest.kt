@@ -130,13 +130,17 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val pending14 = setOf(5, 6, 8, 11, 15, 16, 19, 20, 21, 23, 25, 27, 28, 29)
         require(!creditAudit || (pendingMode == "1" && readerMode == "0"))
         val remainingSix = setOf(8, 15, 21, 27, 28, 29)
+        val remainingMode = args.getString("mangaAllCanonicalRemaining6") ?: "0"
+        require(remainingMode in setOf("0", "1"))
+        require(remainingMode == "0" || (pendingMode == "1" && !creditAudit))
         val auditScope = args.getString("mangaAllCreditAuditScope") ?: "PENDING13"
         require(auditScope in setOf("PENDING13", "REMAINING6"))
         require(auditScope == "PENDING13" || creditAudit)
         val indices = (shard * 10 + 1..shard * 10 + 10).filter {
             (pendingMode == "0" || it in pending14) &&
                 (!creditAudit || it != 16) &&
-                (auditScope != "REMAINING6" || it in remainingSix)
+                (auditScope != "REMAINING6" || it in remainingSix) &&
+                (remainingMode != "1" || it in remainingSix)
         }
         val context = instrument.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)

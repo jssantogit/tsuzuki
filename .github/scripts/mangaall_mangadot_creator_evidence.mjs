@@ -19,8 +19,10 @@ function localPersonId(value, url) {
   return parts[0] === "" || exactUrl(parts[0], url) ? parts[1] : null;
 }
 
-const namedType = (value, type) => value === type ||
-  (Array.isArray(value) && value.length <= 8 && value.includes(type));
+const schemaType = (value, type) => value === type ||
+  value === "https://schema.org/" + type || value === "http://schema.org/" + type;
+const namedType = (value, type) => schemaType(value, type) ||
+  (Array.isArray(value) && value.length <= 8 && value.some(entry => schemaType(entry, type)));
 function declaredNames(value, maxCount, maxLength) {
   const list = value == null ? [] : Array.isArray(value) ? value : [value];
   if (list.length > maxCount || list.some(name => typeof name !== "string" ||
@@ -75,28 +77,38 @@ function extractMangaDotWork(raw, id, title) {
   // JSON-LD entity identifiers may have a fragment on the exact work page.
   // Never accept a different origin/path, query, or unrelated object.
   if (work["@id"] != null && !sameDocumentId(work["@id"], url)) return null;
-  // Author remains primary. If omitted, explicitly credited creator or
-  // illustrator Persons of THIS ComicSeries may supply corroboration (the
-  // independent catalog already includes authors and artists). Do not use
-  // publisher, uploader, contributor, unrelated graph Persons or free text.
+  // Explicit work-level credits may coexist (writer, creator and artist).
+  // Preserve provenance: only direct or same-document linked Person objects
+  // attached via these roles, never a publisher, uploader or unrelated person.
   const list = value => value == null ? [] : Array.isArray(value) ? value : [value];
-  const authors = list(work.author);
-  const staff = authors.length ? authors : [...list(work.creator), ...list(work.illustrator)];
-  if (staff.length > 8) return null;
-  const names = [];
-  for (const entry of staff) {
-    let person = entry;
+  const staff = ["author", "creator", "illustrator"].flatMap(role =>
+    list(work[role]).map(entry => [role, entry]));
+  if (staff.length > 12) return null;
+  const resolveLocal = entry => {
     if (entry && typeof entry === "object" && !Array.isArray(entry) &&
         Object.keys(entry).length === 1 && typeof entry["@id"] === "string") {
       const key = localPersonId(entry["@id"], url);
       const resolved = key && definitions.get(key);
-      if (!resolved || resolved.length !== 1) return null;
-      person = resolved[0];
+      return resolved?.length === 1 ? resolved[0] : null;
+    }
+    return entry;
+  };
+  const names = [];
+  for (const [role, entry] of staff) {
+    let person = resolveLocal(entry);
+    // Schema.org Role wrappers must explicitly carry the same relation as
+    // their parent; an unrelated nested person or arbitrary role is not a credit.
+    if (namedType(person?.["@type"], "Role")) {
+      if (namedType(person["@type"], "Organization") || namedType(person["@type"], "Person") ||
+          !person[role] || ["author", "creator", "illustrator"].some(other => other !== role && person[other] != null)) return null;
+      person = resolveLocal(person[role]);
     }
     if (!namedType(person?.["@type"], "Person") || namedType(person?.["@type"], "Organization")) return null;
     const primaryNames = declaredNames(person.name, 1, 128);
     const alternateNames = declaredNames(person.alternateName, 8, 128);
-    if (!primaryNames || primaryNames.length !== 1 || !alternateNames) return null;
+    // A typed Person can explicitly publish only an alternate name. Do not
+    // invent one from the title or accept free text / anonymous Person nodes.
+    if (!primaryNames || !alternateNames || primaryNames.length + alternateNames.length === 0) return null;
     for (const name of [...primaryNames, ...alternateNames]) {
       if (!names.some(old => exactName(old) === exactName(name))) names.push(name);
     }
@@ -108,6 +120,32 @@ function extractMangaDotWork(raw, id, title) {
 export function extractMangaDotCreators(raw, id, title) {
   const record = extractMangaDotWork(raw, id, title);
   return record?.authors.length ? record.authors : null;
+}
+
+// Conservative fallback for source pages which publish a credit in semantic
+// HTML instead of JSON-LD. The ComicSeries itemid must be the very same HID;
+// only direct typed Person roles and their direct itemprop=name are eligible.
+// No unstructured author label, site metadata, guessed name or external fetch.
+const MICRODATA_ROLES = ["author", "creator", "illustrator"];
+const MICRODATA_TYPES = ["https://schema.org/", "http://schema.org/"];
+async function observeExactMicrodataCredits(host, handle, id) {
+  const url = "https://mangadot.net/manga/" + id;
+  const selectors = role => MICRODATA_TYPES.flatMap(prefix => [url, url + "/"].map(workUrl =>
+    `[itemscope][itemtype="${prefix}ComicSeries"][itemid="${workUrl}"] > [itemprop="${role}"][itemscope][itemtype="${prefix}Person"] > [itemprop="name"]`
+  )).join(", ");
+  const result = [];
+  for (const role of MICRODATA_ROLES) {
+    try {
+      const value = await host.dom.selectText(handle, selectors(role));
+      if (typeof value !== "string" || value.length > 128 ||
+          !/^[\p{L}\p{M}\p{N}][\p{L}\p{M}\p{N} .,'’·_()\-]{0,127}$/u.test(value.trim())) continue;
+      const name = value.trim();
+      if (!result.some(old => exactName(old) === exactName(name))) result.push(name);
+    } catch {
+      // Missing/ambiguous semantic markup never creates author evidence.
+    }
+  }
+  return result;
 }
 
 export async function observeMangaDotCreators(candidate, host = globalThis.tsuzuki) {
@@ -130,8 +168,9 @@ export async function observeMangaDotCreators(candidate, host = globalThis.tsuzu
   if (!record) return { detailOutcome: "IDENTITY_MISMATCH" };
   // Verified work identity without a published person is distinct from
   // mismatch. It supplies no author authority and cannot pass the portfolio.
+  const authors = record.authors.length ? record.authors : await observeExactMicrodataCredits(host, handle, match[1]);
   return {detailOutcome: record.aliases.length ? "VERIFIED_WITH_ALIASES" : "VERIFIED_NO_ALIASES",
-    authors:record.authors, ...(record.aliases.length ? {aliases:record.aliases} : {})};
+    authors, ...(record.aliases.length ? {aliases:record.aliases} : {})};
 }
 export function mangaDotExactTitle(candidate, title) {
   return !!exactName(title) && exactName(candidate?.title) === exactName(title);

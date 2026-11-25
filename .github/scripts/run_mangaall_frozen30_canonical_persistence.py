@@ -16,14 +16,30 @@ TEST = ("eu.kanade.tachiyomi.data.tsuzuki.instrumentation."
 OUT = Path(".github/results/mangaall-frozen30-canonical-persistence")
 FOCUSED_OUT = Path(".github/results/mangaall-frozen30-pending14-persistence")
 PENDING14 = frozenset((5, 6, 8, 11, 15, 16, 19, 20, 21, 23, 25, 27, 28, 29))
+REMAINING6 = frozenset((8, 15, 21, 27, 28, 29))
+REMAINING_OUT = Path(".github/results/mangaall-frozen30-remaining6-persistence")
+
+
+def focused_indices(focused):
+    if focused == "remaining6":
+        return REMAINING6
+    return PENDING14 if focused else frozenset(range(1, 31))
+
+
+def report_root(focused):
+    if focused == "remaining6":
+        return REMAINING_OUT
+    return FOCUSED_OUT if focused else OUT
 
 
 def expected_indices(shard, focused=False):
     indices = set(range(shard * 10 + 1, shard * 10 + 11))
-    return indices & PENDING14 if focused else indices
+    return indices & focused_indices(focused)
 
 
 def receipt_scope(focused):
+    if focused == "remaining6":
+        return "CANONICAL_FROZEN30_REMAINING6_RESTART"
     return ("CANONICAL_FROZEN30_PENDING14_RESTART" if focused
             else "CANONICAL_COLLECTOR_SQLITE_SELECTED_OPTION_RESTART")
 
@@ -186,6 +202,8 @@ def invoke(shard, phase, catalog, reader=False, focused=False):
           "-e", "mangaAllFrozen30Shard", str(shard)]
     if focused:
         args.extend(["-e", "mangaAllCanonicalPending14", "1"])
+    if focused == "remaining6":
+        args.extend(["-e", "mangaAllCanonicalRemaining6", "1"])
     if plan_digest:
         args.extend(["-e","mangaAllCanonicalPlanSha256",plan_digest])
     args.extend(["-e","mangaAllCanonicalReaderProbe","1" if reader and phase == "RESTORE" else "0"])
@@ -232,7 +250,7 @@ def run(shard, catalog, reader=False, focused=False):
     tests = list(Path("app/build/outputs/apk/androidTest/debug").rglob("*.apk"))
     if len(target) != 1 or len(tests) != 1:
         raise SystemExit("APK_INPUT_COUNT")
-    output = (FOCUSED_OUT if focused else OUT) / f"shard-{shard}"
+    output = report_root(focused) / f"shard-{shard}"
     output.mkdir(parents=True, exist_ok=True)
     try:
         adb("install", "-r", str(target[0]))
@@ -273,7 +291,7 @@ def aggregate(catalog, reader=False, focused=False):
     complete = True
     decoded = 0
     for shard in range(3):
-        path = (FOCUSED_OUT if focused else OUT) / f"shard-{shard}" / "verdict.json"
+        path = report_root(focused) / f"shard-{shard}" / "verdict.json"
         if not path.is_file():
             complete = False
             continue
@@ -301,7 +319,7 @@ def aggregate(catalog, reader=False, focused=False):
                     or data.get("invalid") != 0 or [r.get("index") for r in rows] != expected
                     or any(r.get("status") != success or r.get("catalog") != (owners.get(r["index"]) if owners is not None else catalog) for r in rows)):
                 complete = False
-    total = len(PENDING14) if focused else 30
+    total = len(focused_indices(focused))
     if reader:
         print(f"MANGAALL_CANONICAL_READER|decoded={decoded}|expected={total}|ui=NOT_TESTED")
     print(f"MANGAALL_CANONICAL_PERSISTENCE|outcome={'PASS' if complete else 'RED'}"
@@ -370,6 +388,14 @@ def selftest():
     assert evaluate(0, fc, fr, True, reader=True, focused=True)["outcome"] == "PASS"
     assert evaluate(0, fc, fr, True, reader=True, focused=True)["scope"] != receipt_scope(False)
     assert not parse_reader(reader_log, 0, fr, True, "mangaupdates", None, focused=True)["complete"]
+    assert set.union(*(expected_indices(shard, "remaining6") for shard in range(3))) == REMAINING6
+    assert [len(expected_indices(shard, "remaining6")) for shard in range(3)] == [1, 1, 4]
+    assert report_root("remaining6") != report_root(True) != report_root(False)
+    assert receipt_scope("remaining6") not in (receipt_scope(True), receipt_scope(False))
+    six_subset = "\n".join(line for line in first.splitlines() if "PROCESS|" in line or "|index=8|" in line)
+    assert parse_phase(six_subset, 0, "COLLECT", True, focused="remaining6")["complete"]
+    assert not parse_phase(six_subset, 0, "COLLECT", True, focused=True)["complete"]
+    assert not parse_phase(subset, 0, "COLLECT", True, focused="remaining6")["complete"]
     print("MANGAALL_CANONICAL_PERSISTENCE|selftest=PASS")
 
 
@@ -377,7 +403,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--catalog", choices=("mangaupdates", "shikimori", "explicit_plan"), default="mangaupdates")
     parser.add_argument("--reader", action="store_true")
-    parser.add_argument("--pending14", action="store_true", help="Exact previously failed indices only; never certifies all 30")
+    focus = parser.add_mutually_exclusive_group()
+    focus.add_argument("--pending14", action="store_true", help="Original pending fourteen; never certifies all 30")
+    focus.add_argument("--remaining6", action="store_true", help="Exact remaining six; never certifies all 30")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--shard", type=int, choices=range(3))
     group.add_argument("--aggregate", action="store_true")
@@ -387,10 +415,11 @@ def main():
     if args.selftest:
         selftest()
         return
-    if args.pending14 and (args.catalog != "explicit_plan" or not args.reader):
-        parser.error("--pending14 requires the original explicit catalog plan and Reader probe")
-    raise SystemExit(0 if (aggregate(args.catalog, args.reader, args.pending14) if args.aggregate
-                           else run(args.shard, args.catalog, args.reader, args.pending14)) else 1)
+    focused = "remaining6" if args.remaining6 else args.pending14
+    if focused and (args.catalog != "explicit_plan" or not args.reader):
+        parser.error("Focused runs require the original explicit catalog plan and Reader probe")
+    raise SystemExit(0 if (aggregate(args.catalog, args.reader, focused) if args.aggregate
+                           else run(args.shard, args.catalog, args.reader, focused)) else 1)
 
 
 if __name__ == "__main__":

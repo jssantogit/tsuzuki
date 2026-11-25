@@ -36,6 +36,15 @@ assert.equal(parse({...series, author:null, publisher:series.author}), null);
 assert.equal(parse({...series, author:null, contributor:series.author}), null);
 assert.equal(parse({...series, author:"Unverified author", creator:series.author}), null);
 assert.equal(parse({...series, author:null, illustrator:{"@type":"Organization",name:"Publisher"}}), null);
+assert.deepEqual(parse({...series, creator:{...series.author,name:"Co-Creator"},
+  illustrator:{...series.author,name:"Illustrator"}}), ["Example Creator","Co-Creator","Illustrator"]);
+assert.deepEqual(parse({...series, "@type":"https://schema.org/ComicSeries",
+  author:{"@type":"https://schema.org/Person",alternateName:"Published Pen Name"}}), ["Published Pen Name"]);
+assert.deepEqual(parse({...series, author:{"@type":"Role",author:series.author}}), ["Example Creator"]);
+assert.equal(parse({...series, author:{"@type":"Role",creator:series.author}}), null);
+assert.equal(parse({...series, author:{"@type":"Role",author:series.author,creator:series.author}}), null);
+assert.equal(parse({...series, author:{"@type":"Person"}}), null);
+assert.equal(parse({...series, author:{"@type":"Person",alternateName:[""]}}), null);
 const person = {"@id":url+"#writer","@type":"Person",name:"Linked Creator",alternateName:"Linked Alias"};
 const linked = {...series,author:{"@id":"#writer"}};
 const graph = nodes => extractMangaDotCreators(JSON.stringify({"@graph":nodes}), "42", series.name);
@@ -83,5 +92,26 @@ assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",tit
   {detailOutcome:"VERIFIED_WITH_ALIASES",authors:["Example Creator","Original Creator"],aliases:["Native Title"]});
 const noAuthor = {http:host.http,dom:{selectText:async()=>raw({...series,author:null})}};
 assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",title:series.name},noAuthor),
+  {detailOutcome:"VERIFIED_NO_ALIASES",authors:[]});
+const semanticCalls = [];
+const microdataHost = {http:host.http,dom:{selectText:async(handle,selector)=>{
+  assert.equal(handle,"res:opaque");
+  if (selector === "script[type=application/ld+json]") return raw({...series,author:null});
+  semanticCalls.push(selector);
+  assert.ok(selector.includes('[itemid="'+url+'"]'));
+  assert.ok(selector.includes('[itemtype="https://schema.org/ComicSeries"]'));
+  assert.ok(selector.includes(' > [itemprop="name"]'));
+  if (selector.includes('[itemprop="author"]')) return "Published Author";
+  if (selector.includes('[itemprop="illustrator"]')) return "Published Artist";
+  throw Error("missing credit");
+}}};
+assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",title:series.name},microdataHost),
+  {detailOutcome:"VERIFIED_NO_ALIASES",authors:["Published Author","Published Artist"]});
+assert.equal(semanticCalls.length,3);
+const unrelatedMicrodata = {http:host.http,dom:{selectText:async(handle,selector)=>{
+  if (selector === "script[type=application/ld+json]") return raw({...series,author:null});
+  throw Error("no exact typed work scope");
+}}};
+assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",title:series.name},unrelatedMicrodata),
   {detailOutcome:"VERIFIED_NO_ALIASES",authors:[]});
 console.log("MANGAALL_DOT_CREATOR|strictParser=PASS|opaqueHandle=PASS|canonical=NOT_TESTED");
