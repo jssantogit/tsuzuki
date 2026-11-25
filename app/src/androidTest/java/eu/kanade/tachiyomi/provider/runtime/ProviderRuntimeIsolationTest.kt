@@ -173,6 +173,9 @@ class ProviderRuntimeIsolationTest {
                 override fun storageRemove(key: String?) = Unit
                 override fun secretGet(key: String?): String? = null
                 override fun binaryFetch(url: String?): String = throw UnsupportedOperationException()
+                override fun httpRequestResource(requestJson: String?): String =
+                    error("Unexpected HTTP resource request")
+
                 override fun browserQuery(url: String?, cssSelector: String?, attribute: String?): String =
                     error("Unexpected browser query")
 
@@ -382,6 +385,9 @@ class ProviderRuntimeIsolationTest {
 
         override fun binaryFetch(url: String?): String =
             throw UnsupportedOperationException()
+
+        override fun httpRequestResource(requestJson: String?): String =
+            error("Unexpected HTTP resource request")
 
         override fun browserQuery(url: String?, cssSelector: String?, attribute: String?): String =
             error("Unexpected browser query")

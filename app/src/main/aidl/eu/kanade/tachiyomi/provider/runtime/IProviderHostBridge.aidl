@@ -27,4 +27,5 @@ interface IProviderHostBridge {
     String imageCompose(String resourceHandle, String layout);
     String browserQuery(String url, String cssSelector, String attribute);
     String imagePackPages(String handlesJson);
+    String httpRequestResource(String requestJson);
 }

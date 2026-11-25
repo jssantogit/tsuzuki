@@ -89,6 +89,24 @@ class DefaultProviderBinaryTransformHostService(
                 require(argument.isEmpty())
                 ProviderAdvancedExtraction.protobufBytes(bytes)
             }
+            "json-array-page" -> {
+                val page = Json.parseToJsonElement(ProviderAdvancedExtraction.jsonPointer(argument, "")) as? JsonObject
+                    ?: throw ProviderHostServiceException("Invalid JSON array page")
+                require(page.keys == setOf("pointer", "offset", "limit"))
+                val pointer = page["pointer"] as? JsonPrimitive
+                require(pointer != null && pointer.isString)
+                fun integer(key: String): Int {
+                    val value = page[key] as? JsonPrimitive
+                    require(value != null && !value.isString)
+                    return value.content.toIntOrNull() ?: throw ProviderHostServiceException("Invalid JSON page integer")
+                }
+                ProviderAdvancedExtraction.jsonArrayPage(
+                    bytes.decodeToString(throwOnInvalidSequence = true),
+                    pointer.content,
+                    integer("offset"),
+                    integer("limit"),
+                )
+            }
             "document-query" -> {
                 val query = Json.parseToJsonElement(ProviderAdvancedExtraction.jsonPointer(argument, "")) as? JsonObject
                     ?: throw ProviderHostServiceException("Invalid document query")

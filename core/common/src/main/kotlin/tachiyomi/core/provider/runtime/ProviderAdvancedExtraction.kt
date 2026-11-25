@@ -2,6 +2,7 @@ package tachiyomi.core.provider.runtime
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
@@ -17,7 +18,10 @@ internal object ProviderAdvancedExtraction {
     private const val MAX_FIELDS = 512
     private const val MAX_DEPTH = 64
 
-    fun jsonPointer(document: String, pointer: String, maxInput: Int = MAX_INPUT): String {
+    fun jsonPointer(document: String, pointer: String, maxInput: Int = MAX_INPUT): String =
+        bounded(resolveJson(document, pointer, maxInput).toString())
+
+    private fun resolveJson(document: String, pointer: String, maxInput: Int): JsonElement {
         checkInput(document, maxInput)
         require(pointer.length <= 2048 && (pointer.isEmpty() || pointer.startsWith('/')))
         checkJsonDepth(document)
@@ -38,7 +42,28 @@ internal object ProviderAdvancedExtraction {
                 } ?: throw ProviderHostServiceException("JSON pointer does not resolve")
             }
         }
-        return bounded(value.toString())
+        return value
+    }
+
+    fun jsonArrayPage(document: String, pointer: String, offset: Int, limit: Int): String {
+        val array = resolveJson(document, pointer, 2 * 1024 * 1024) as? JsonArray
+            ?: throw ProviderHostServiceException("JSON pointer does not resolve to an array")
+        require(offset in 0..array.size && limit in 1..256)
+        val items = StringBuilder()
+        var next = offset
+        var bytes = 0
+        while (next < array.size && next - offset < limit) {
+            val item = array[next].toString()
+            val itemBytes = item.encodeToByteArray().size + if (next == offset) 0 else 1
+            if (bytes + itemBytes > MAX_OUTPUT - 128) break
+            if (next != offset) items.append(',')
+            items.append(item)
+            bytes += itemBytes
+            next++
+        }
+        require(next > offset || offset == array.size) { "One JSON item exceeds the result limit" }
+        val nextOffset = if (next == array.size) "null" else next.toString()
+        return bounded("{\"items\":[$items],\"nextOffset\":$nextOffset,\"total\":${array.size}}")
     }
 
     /**

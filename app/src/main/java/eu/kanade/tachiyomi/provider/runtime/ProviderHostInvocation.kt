@@ -367,6 +367,15 @@ private class ProviderHostBridgeAdapter(
     override fun httpGetResource(url: String?): String =
         runBlocking { requireService(services.http, "http").getResource(url.orEmpty()).value }
 
+    override fun httpRequestResource(requestJson: String?): String =
+        runBlocking {
+            ProviderHttpProtocol.encodeResourceResponse(
+                requireService(services.http, "http").requestResource(
+                    ProviderHttpProtocol.decodeRequest(requestJson.orEmpty()),
+                ),
+            )
+        }
+
     override fun httpRequest(requestJson: String?): String =
         runBlocking {
             ProviderHttpProtocol.encodeResponse(

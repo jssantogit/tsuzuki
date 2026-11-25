@@ -72,6 +72,19 @@ class DefaultProviderHttpHostService(
         require(invocationTimeoutMs > 0L) { "Provider HTTP invocation timeout must be positive" }
     }
 
+    override suspend fun requestResource(request: ProviderHttpRequest): ProviderHttpResourceResponse =
+        withContext(Dispatchers.IO) {
+            execute(request = request, requireSuccessful = false) { statusCode, body ->
+                val handle = if (statusCode in 200..299) {
+                    val bytes = body?.readBoundedBytes(maxResponseBytes) ?: ByteArray(0)
+                    resources.put(owner, ProviderResourceKind.BINARY, bytes).value
+                } else {
+                    null
+                }
+                ProviderHttpResourceResponse(statusCode, handle)
+            }
+        }
+
     override suspend fun request(request: ProviderHttpRequest): ProviderHttpResponse =
         withContext(Dispatchers.IO) {
             execute(

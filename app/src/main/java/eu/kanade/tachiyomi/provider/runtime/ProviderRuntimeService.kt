@@ -380,6 +380,14 @@ private fun IProviderHostBridge?.toHostServices(
         },
         http = if (ProviderHostModule.HTTP in allowedModules) {
             object : ProviderHttpHostService {
+                override suspend fun requestResource(request: ProviderHttpRequest): tachiyomi.core.provider.runtime.ProviderHttpResourceResponse {
+                    val encoded = ProviderHttpProtocol.encodeRequest(request)
+                    val response = bridge.httpRequestResource(
+                        encoded.boundedHostArg(ProviderHttpProtocol.MAX_REQUEST_JSON_CHARS, "HTTP resource request"),
+                    ).orEmpty()
+                    return ProviderHttpProtocol.decodeResourceResponse(response)
+                }
+
                 override suspend fun request(request: ProviderHttpRequest): ProviderHttpResponse {
                     val encoded = ProviderHttpProtocol.encodeRequest(request)
                     val response = bridge.httpRequest(

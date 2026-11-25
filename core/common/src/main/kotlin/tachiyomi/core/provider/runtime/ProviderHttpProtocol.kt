@@ -88,6 +88,18 @@ data class ProviderHttpResponse(
     }
 }
 
+@Serializable
+data class ProviderHttpResourceResponse(
+    val statusCode: Int,
+    val resourceHandle: String? = null,
+) {
+    init {
+        require(statusCode in 100..599)
+        require((statusCode in 200..299) == (resourceHandle != null))
+        require(resourceHandle == null || Regex("res:[0-9a-fA-F-]{36}").matches(resourceHandle))
+    }
+}
+
 object ProviderHttpProtocol {
     const val MAX_REQUEST_JSON_CHARS = 96 * 1024
 
@@ -111,6 +123,14 @@ object ProviderHttpProtocol {
         } catch (error: Exception) {
             throw ProviderHostServiceException("Provider HTTP request is malformed", error)
         }
+    }
+
+    fun encodeResourceResponse(response: ProviderHttpResourceResponse): String =
+        json.encodeToString(response).also { require(it.length <= 1024) }
+
+    fun decodeResourceResponse(value: String): ProviderHttpResourceResponse {
+        require(value.length <= 1024)
+        return json.decodeFromString(value)
     }
 
     fun encodeResponse(response: ProviderHttpResponse): String =

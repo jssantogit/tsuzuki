@@ -135,6 +135,21 @@ internal fun QuickJs.installHostServices(
                 asyncFunction("getResource") { args ->
                     hostFailures.call { http.getResource(args.stringArgument(0)).value }
                 }
+                asyncFunction("requestResource") { args ->
+                    hostFailures.call {
+                        val method = ProviderHttpMethod.valueOf(args.stringArgument(0).uppercase())
+                        ProviderHttpProtocol.encodeResourceResponse(
+                            http.requestResource(
+                                ProviderHttpRequest(
+                                    method = method,
+                                    url = args.stringArgument(1),
+                                    headers = decodeHttpHeaders(args.stringArgument(2)),
+                                    body = args.optionalStringArgument(3),
+                                ),
+                            ),
+                        )
+                    }
+                }
                 asyncFunction("request") { args ->
                     hostFailures.call {
                         val method = try {

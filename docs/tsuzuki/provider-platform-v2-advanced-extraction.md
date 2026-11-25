@@ -15,6 +15,8 @@ This branch is independent of MangaALL PR #275 and uses the existing V1 contract
 * `browser.query(url, selector, attributeOrNull)` reads an ordered bounded array of text/attributes from a rendered page, preserving browser origin policy and the deadline. No general page-context evaluation or session-cookie export.
 * `image.packPages(handlesJson)` packs only Host-created transformed PNG handles into a bounded CBZ resource, which can use the existing `binary.promote(handle, "CBZ")` managed delivery contract.
 * `protocol.extractionVersion()` exposes additive extraction revision 1; SDK feature detection must still check the required modules.
+* `http.requestResource(method, url, headersJson, body)` supports the existing HTTP methods and policy, returning only status and a scoped resource handle on 2xx. Error responses are never presented as data. Binary and POST responses need not cross Binder as text.
+* `binary.inspect(handle, "json-array-page", JSON.stringify({pointer,offset,limit}))` reads array slices with exact nextOffset/total, max 256 items and 48 KiB output; it fails closed if one item exceeds the envelope. Handles are invocation-scoped, not persistent cursors.
 
 Pure extraction works inside the isolated runtime with already acquired inline inputs; it does not grant any extra host authority. No source-specific rules or anti-bot circumvention.
 
