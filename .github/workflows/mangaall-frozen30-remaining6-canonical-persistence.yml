@@ -207,3 +207,5 @@ jobs:
 # Exact six remaining indices only; no full cohort acceptance or automatic reruns.
 
 # Explicit six-work live after consolidated offline GREEN at dafe1763; no full cohort rerun.
+
+# Explicit remaining-six acceptance after offline GREEN #45702043267 at b3035f14; frozen corpus unchanged.
