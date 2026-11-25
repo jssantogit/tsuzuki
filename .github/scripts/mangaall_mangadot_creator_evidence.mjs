@@ -114,7 +114,52 @@ function extractMangaDotWork(raw, id, title) {
     }
     if (names.length > 8) return null;
   }
-  return {authors:names, aliases};
+  return {authors:names, aliases, catalogReferences: work.sameAs};
+}
+
+// Bibliographic links are evidence of a work, not of a particular edition,
+// translation, chapter or author. No request follows a source-supplied URL.
+// This read-only proof uses the exact validated ComicSeries scope above.
+function decodeMangaUpdatesReference(value) {
+  if (typeof value !== "string" || value.length > 512) return null;
+  const match = /^https:\/\/(?:www\.)?mangaupdates\.com\/series\/([a-z0-9]{1,12})(?:\/[a-z0-9-]{1,200})?\/?$/.exec(value);
+  if (!match) return null;
+  let id = 0n;
+  for (const char of match[1]) {
+    id = id * 36n + BigInt(parseInt(char, 36));
+  }
+  return id > 0n && id < 1000000000000000000n ? id.toString() : null;
+}
+
+// This helper deliberately has no side effects and is not yet part of the
+// V1 lookup result. A caller must provide the freshly verified independent
+// catalog ID, never a value obtained by following this same source's link.
+export function assessMangaDotCatalogReference(raw, id, title, independentMangaUpdatesId) {
+  const record = extractMangaDotWork(raw, id, title);
+  if (!record) return {status:"SOURCE_DETAIL_UNVERIFIED", referenceCount:0};
+  const refs = record.catalogReferences == null ? [] :
+    Array.isArray(record.catalogReferences) ? record.catalogReferences : [record.catalogReferences];
+  if (refs.length > 32 || refs.some(ref => typeof ref !== "string" || ref.length > 512)) {
+    return {status:"INVALID_REFERENCES", referenceCount:0};
+  }
+  const ids = new Set();
+  for (const ref of refs) {
+    const decoded = decodeMangaUpdatesReference(ref);
+    if (decoded) ids.add(decoded);
+    else if (/^https:\/\/(?:www\.)?mangaupdates\.com(?:[/:?#]|$)/i.test(ref)) {
+      // Unsupported or malformed references on the relevant host are not
+      // silently ignored beside a valid one: they could refer to another work.
+      return {status:"INVALID_REFERENCES", referenceCount:0};
+    }
+  }
+  const referenceCount = ids.size;
+  const expected = independentMangaUpdatesId;
+  if (typeof expected !== "string" || !/^[1-9][0-9]{0,17}$/.test(expected)) {
+    return {status:"INDEPENDENT_UNVERIFIED", referenceCount};
+  }
+  if (ids.size === 0) return {status:"NO_SUPPORTED_REFERENCE", referenceCount};
+  if (ids.size === 1 && ids.has(expected)) return {status:"EXACT_CATALOG_LINK", referenceCount};
+  return {status:ids.has(expected) ? "CONFLICTING_CATALOG_LINKS" : "DIFFERENT_CATALOG_LINK", referenceCount};
 }
 
 export function extractMangaDotCreators(raw, id, title) {

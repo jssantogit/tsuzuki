@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { extractMangaDotCreators, observeMangaDotCreators, mangaDotExactTitle } from "./mangaall_mangadot_creator_evidence.mjs";
+import { extractMangaDotCreators, observeMangaDotCreators, mangaDotExactTitle, assessMangaDotCatalogReference } from "./mangaall_mangadot_creator_evidence.mjs";
 
 const url = "https://mangadot.net/manga/42";
 const series = { "@type": "ComicSeries", name: "Example’s Work", url,
@@ -63,6 +63,42 @@ assert.equal(extractMangaDotCreators(raw(series), "../42", series.name), null);
 assert.equal(extractMangaDotCreators("{malformed", "42", series.name), null);
 assert.equal(mangaDotExactTitle({title:series.name}, "Example's Work"), true);
 assert.equal(mangaDotExactTitle({title:series.name+" (Novel)"}, series.name), false);
+
+// Catalog crosswalk is independent of credits; do not synthesize a creator.
+const mu = "https://www.mangaupdates.com/series/abc123/example";
+const muId = String(parseInt("abc123", 36));
+const creditless = {...series,author:null,sameAs:[mu]};
+const proof = (node, expected=muId) => assessMangaDotCatalogReference(raw(node),"42",series.name,expected);
+assert.equal(parse(creditless),null);
+assert.deepEqual(proof(creditless),{status:"EXACT_CATALOG_LINK",referenceCount:1});
+assert.deepEqual(proof({...creditless,sameAs:[mu,mu]}),{status:"EXACT_CATALOG_LINK",referenceCount:1});
+assert.deepEqual(proof(creditless,String(Number(muId)+1)),{status:"DIFFERENT_CATALOG_LINK",referenceCount:1});
+assert.deepEqual(proof(creditless,""),{status:"INDEPENDENT_UNVERIFIED",referenceCount:1});
+assert.deepEqual(proof({...creditless,sameAs:[mu,"https://mangaupdates.com/series/abc124/example"]}),
+  {status:"CONFLICTING_CATALOG_LINKS",referenceCount:2});
+assert.deepEqual(proof({...creditless,sameAs:"https://mangaupdates.com/series/123/example"}, "1371"),
+  {status:"EXACT_CATALOG_LINK",referenceCount:1});
+assert.deepEqual(proof({...creditless,sameAs:[mu,"https://www.mangaupdates.com/series.html?id=42"]}),
+  {status:"INVALID_REFERENCES",referenceCount:0});
+assert.deepEqual(proof({...creditless,sameAs:[mu,"https://www.mangaupdates.com:8443/series/abc123/example"]}),
+  {status:"INVALID_REFERENCES",referenceCount:0});
+assert.deepEqual(proof({...creditless,sameAs:"https://www.mangaupdates.com.evil.invalid/series/abc123/example"}),
+  {status:"NO_SUPPORTED_REFERENCE",referenceCount:0});
+assert.deepEqual(proof({...creditless,sameAs:"https://www.mangaupdates.com/series/abc123/example?x=1"}),
+  {status:"INVALID_REFERENCES",referenceCount:0});
+assert.deepEqual(proof({...creditless,url:url+"0"}),{status:"SOURCE_DETAIL_UNVERIFIED",referenceCount:0});
+assert.deepEqual(proof({...creditless,"@id":url+"0#comicseries"}),{status:"SOURCE_DETAIL_UNVERIFIED",referenceCount:0});
+assert.deepEqual(proof({...creditless,name:"Wrong work"}),{status:"SOURCE_DETAIL_UNVERIFIED",referenceCount:0});
+assert.deepEqual(proof({...creditless,sameAs:[mu,{}]}),{status:"INVALID_REFERENCES",referenceCount:0});
+assert.deepEqual(proof({...creditless,sameAs:Array(33).fill(mu)}),{status:"INVALID_REFERENCES",referenceCount:0});
+assert.deepEqual(assessMangaDotCatalogReference(JSON.stringify([creditless,creditless]),"42",series.name,muId),
+  {status:"SOURCE_DETAIL_UNVERIFIED",referenceCount:0});
+const large = "zzzzzzzzzzz";
+let precise = 0n;
+for (const char of large) precise=precise*36n+BigInt(parseInt(char,36));
+assert.deepEqual(proof({...creditless,sameAs:"https://mangaupdates.com/series/"+large+"/example"},precise.toString()),
+  {status:"EXACT_CATALOG_LINK",referenceCount:1});
+console.log("MANGAALL_DOT_CATALOG_REFERENCE|strictParser=PASS|identityOnly=YES|reader=NOT_AUTHORIZED");
 
 let calls = 0;
 const host = { http: {getResource: async requested => {
