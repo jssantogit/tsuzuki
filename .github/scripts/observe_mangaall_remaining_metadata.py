@@ -120,7 +120,111 @@ def publisher_series_id(value):
     return None
 
 
-def detail_counts(body, work_url, query, index=None):
+def mangaupdates_series_id(value):
+    """Decode only the exact public series route; never fetch source-supplied URLs.
+
+    Modern /series IDs are base36, even when composed entirely of digits.
+    The legacy series.html?id= numeric route uses its own identifier space;
+    do not assume its value is the API series_id.
+    """
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        if (parsed.scheme != "https" or parsed.username is not None
+                or parsed.hostname not in {"mangaupdates.com", "www.mangaupdates.com"}
+                or parsed.port not in (None, 443) or parsed.query or parsed.fragment):
+            return None
+        match = re.fullmatch(r"/series/([a-z0-9]{1,12})(?:/[a-z0-9-]{1,200})?/?", parsed.path)
+        if match:
+            identity = int(match[1], 36)
+            if 0 < identity < 10**18:
+                return identity
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def catalog_record_names(record):
+    associated = record.get("associated", [])
+    if not isinstance(associated, list) or len(associated) > 512:
+        return set()
+    return {norm(value) for value in [record.get("title")] +
+            [row.get("title") for row in associated if isinstance(row, dict)]} - {""}
+
+
+def independently_resolve_mu(query, original):
+    """Search independent of source links; require complete unique Manhwa identity and detail."""
+    search = "https://api.mangaupdates.com/v1/series/search"
+    hits = {}
+    seen = set()
+    expected_total = None
+    for page in range(1, 13):
+        data = dict(search=query, page=page, perpage=25,
+                    type=["Manhwa"], filter_types=["drama cd", "novel"])
+        code, body = request(search, "application/json", json.dumps(data).encode())
+        if body is None:
+            return code, None
+        try:
+            obj = json.loads(body)
+            rows = obj.get("results")
+            total = obj.get("total_hits")
+            if (not isinstance(rows, list) or len(rows) > 25 or type(total) is not int
+                    or not 0 <= total <= 300 or obj.get("page") != page
+                    or (expected_total is not None and expected_total != total)):
+                return "INCOMPLETE_OR_SCHEMA", None
+            expected_total = total
+            for item in rows:
+                record = item.get("record")
+                identity = record.get("series_id")
+                if type(identity) is not int or not 0 < identity < 10**18 or identity in seen:
+                    return "INCOMPLETE_OR_SCHEMA", None
+                seen.add(identity)
+                # Exact primary or independently published associated name.
+                if norm(query) in catalog_record_names(record) or norm(original) in catalog_record_names(record):
+                    hits[identity] = record
+            if len(seen) == total:
+                break
+            if not rows or len(seen) > total:
+                return "INCOMPLETE_OR_SCHEMA", None
+        except (ValueError, TypeError, AttributeError, KeyError):
+            return "SCHEMA_ERROR", None
+        time.sleep(1)
+    if len(seen) != expected_total:
+        return "INCOMPLETE_OR_SCHEMA", None
+    if len(hits) != 1:
+        return "AMBIGUOUS" if hits else "NOT_FOUND", None
+    identity = next(iter(hits))
+    code, body = request("https://api.mangaupdates.com/v1/series/" + str(identity), "application/json")
+    if body is None:
+        return code, None
+    try:
+        row = json.loads(body)
+        if (row.get("series_id") != identity or row.get("type") != "Manhwa"
+                or not {norm(query), norm(original)} <= catalog_record_names(row)
+                or not isinstance(row.get("authors"), list) or not row["authors"]):
+            return "DETAIL_UNVERIFIED", None
+        if not any(isinstance(author, dict) and isinstance(author.get("name"), str)
+                   and author["name"].strip() for author in row["authors"]):
+            return "DETAIL_UNVERIFIED", None
+    except (ValueError, TypeError, AttributeError):
+        return "SCHEMA_ERROR", None
+    return "VERIFIED", identity
+
+
+def compare_catalog_links(refs, expected):
+    ids = {identity for ref in refs if (identity := mangaupdates_series_id(ref))}
+    # No inference from sameAs pointing to a domain or a different record.
+    if expected is None:
+        return "INDEPENDENT_UNVERIFIED", len(ids)
+    if not ids:
+        return "NO_SUPPORTED_REFERENCE", 0
+    if ids == {expected}:
+        return "EXACT_CATALOG_LINK", 1
+    if expected in ids:
+        return "CONFLICTING_CATALOG_LINKS", len(ids)
+    return "DIFFERENT_CATALOG_LINK", len(ids)
+
+
+def detail_counts(body, work_url, query, index=None, expected_mu=None):
     parser = Detail()
     parser.feed(body.decode("utf-8", "replace"))
     def exact_ref(value):
@@ -160,6 +264,7 @@ def detail_counts(body, work_url, query, index=None):
             continue
     spin_off = sum(bool(re.search(r"\b(?:spin[- ]?off|sequel|side story)\b", n, re.I))
                    for obj in matches for n in names(obj) if isinstance(n, str))
+    crosswalk, mu_count = compare_catalog_links(refs[:32], expected_mu) if len(matches) == 1 else ("AMBIGUOUS_DETAIL", 0)
     publisher_ids = {identity for ref in refs[:32] if (identity := publisher_series_id(ref))}
     original = OFFICIAL_WEBTOON.get(index)
     variant = OFFICIAL_VARIANT.get(index)
@@ -171,10 +276,22 @@ def detail_counts(body, work_url, query, index=None):
                 catalogHostNames=",".join(sorted(reference_hosts)) or "NONE",
                 exactOriginalPublisher=int(original is not None and original in publisher_ids),
                 exactVariantPublisher=int(variant is not None and variant in publisher_ids),
-                otherPublisherIds=len(publisher_ids - {original, variant}))
+                otherPublisherIds=len(publisher_ids - {original, variant}),
+                muReferenceIds=mu_count, muCrosswalk=crosswalk)
 
 
 def observe_dot(works):
+    # Obtain an independent catalog identity before inspecting any source link.
+    # Do not change the existing catalog owner plan or treat an observation
+    # as a verified canonical binding. Retry only via a future explicit run.
+    expected = {}
+    for index in (15, 21, 27):
+        status, identity = independently_resolve_mu(works[index - 1], works[index - 1])
+        print(f"MU_INDEPENDENT|index={index}|status={status}", flush=True)
+        expected[index] = identity
+        if status in ("HTTP403", "HTTP429"):
+            break
+        time.sleep(1)
     # Frozen diagnostics only; do not infer absence from bounded title searches.
     # Korean publisher's exact native title for Teenage Mercenary:
     # https://comic.naver.com/webtoon/list?mobile=y&titleId=758150
@@ -223,7 +340,7 @@ def observe_dot(works):
             url = "https://mangadot.net/manga/" + hid
             time.sleep(1)
             code, body = request(url, "text/html")
-            counts = detail_counts(body, url, query, index) if body is not None else {}
+            counts = detail_counts(body, url, query, index, expected.get(index)) if body is not None else {}
             print(f"DOT_DETAIL_WIRE|index={index}|ordinal={ordinal}|status={code}|searchCreditFields={fields}"
                   + "".join(f"|{key}={value}" for key, value in counts.items()), flush=True)
             if code in ("HTTP403", "HTTP429"):
@@ -281,6 +398,22 @@ def selftest():
     assert detail_counts(linked, url + "0", "Fictional work")["knownCatalogHosts"] == 0
     assert detail_counts(html, url + "0", "Fictional work")["exactSeries"] == 0
     assert detail_counts(html, url, "Other work")["structuredRoles"] == 0
+    mu = "https://www.mangaupdates.com/series/abc123/example"
+    identity = int("abc123", 36)
+    assert mangaupdates_series_id(mu) == identity
+    assert mangaupdates_series_id("https://www.mangaupdates.com/series/123/example") == int("123", 36)
+    for invalid in ("https://www.mangaupdates.com.evil.invalid/series/abc123/example",
+                    "https://user@www.mangaupdates.com/series/abc123/example",
+                    "https://www.mangaupdates.com/series.html?id=123",
+                    "https://www.mangaupdates.com/series/abc123/example?x=1",
+                    "https://www.mangaupdates.com:8443/series/abc123/example"):
+        assert mangaupdates_series_id(invalid) is None
+    assert compare_catalog_links([mu], identity) == ("EXACT_CATALOG_LINK", 1)
+    assert compare_catalog_links([mu], None) == ("INDEPENDENT_UNVERIFIED", 1)
+    assert compare_catalog_links([mu], identity + 1) == ("DIFFERENT_CATALOG_LINK", 1)
+    assert compare_catalog_links([mu, "https://www.mangaupdates.com/series/abc124/example"], identity) == ("CONFLICTING_CATALOG_LINKS", 2)
+    assert compare_catalog_links([mu, mu], identity) == ("EXACT_CATALOG_LINK", 1)
+    assert catalog_record_names({"title":"Work", "associated":[{"title":"Alias"}]}) == {"work", "alias"}
     print("MANGAALL_METADATA_WIRE|selftest=PASS")
 
 

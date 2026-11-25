@@ -28,3 +28,5 @@ jobs:
 # Follow-up: native title and explicit structured reference/variant diagnostics only.
 
 # Compare exact public publisher series IDs, not host-only matches; never grant Reader authority.
+
+# Independent complete MangaUpdates search/detail before exact sameAs comparison; no reading or identity promotion.
