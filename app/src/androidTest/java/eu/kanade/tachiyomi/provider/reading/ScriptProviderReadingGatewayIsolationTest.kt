@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import eu.kanade.tachiyomi.App
 import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.data.tsuzuki.instrumentation.MangaAllInstrumentationVerdict
 import eu.kanade.tachiyomi.provider.runtime.AndroidProviderBrowserHostService
@@ -37,8 +38,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
+import okhttp3.CookieJar
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
+import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
@@ -51,7 +54,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
+import tachiyomi.core.provider.runtime.DefaultProviderHttpHostService
+import tachiyomi.core.provider.runtime.ProviderHttpFailureFamily
+import tachiyomi.core.provider.runtime.ProviderHttpMethod
+import tachiyomi.core.provider.runtime.ProviderHttpProtocol
+import tachiyomi.core.provider.runtime.ProviderHttpRequest
+import tachiyomi.core.provider.runtime.ProviderHttpSessionStore
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
+import tachiyomi.core.provider.runtime.ProviderResourceOwner
+import tachiyomi.core.provider.runtime.ProviderResourceStore
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
@@ -93,6 +104,8 @@ import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -4257,6 +4270,257 @@ class ScriptProviderReadingGatewayIsolationTest {
         publish("MANGABALL_PACKAGE_BROWSER_SUMMARY|accepted=$valid|candidateWorks=$candidateWorks|expected=3|chapters=NOT_TESTED|reader=NOT_TESTED")
         assertEquals(3, valid)
         assertEquals(3, candidateWorks)
+    }
+
+
+    /**
+     * Compare the same request/fixture at native client, HTTP broker and real
+     * unsigned package/Binder levels. No upstream network or real account
+     * cookies. The native clone retains ordinary application interceptors but
+     * uses a terminal synthetic response and a disabled cache/cookie jar.
+     */
+    @Test(timeout = 180_000L)
+    fun mangaBallDevelopmentArchive_nativeHttpOfflineParity() = runBlocking {
+        val instrument = InstrumentationRegistry.getInstrumentation()
+        assertEquals("app.tsuzuki.dev", instrument.targetContext.packageName)
+        assertEquals(
+            "I_ACCEPT_OFFLINE_TRANSPORT_PARITY",
+            InstrumentationRegistry.getArguments().getString("mangaBallTransportParityOptIn"),
+        )
+        val archive = instrument.context.assets.open("mangaball/development-unsigned.tsz")
+            .use { it.readBytes() }
+        assertEquals(
+            "524849196f9cbe1e3f5bf4ce5dc943e58c6dfdc70d52d2f63ea7992019642260",
+            tachiyomi.core.provider.supplychain.sha256Hex(archive),
+        )
+        val manifest = ProviderPackageParser().parse(archive).manifest
+        val provider = ProviderId(manifest.id)
+        val origins = requireNotNull(manifest.permissions.network).origins
+        assertEquals("app.tsuzuki.mangaall.mangaball", provider.value)
+        assertEquals(setOf("https://mangaball.com"), origins)
+
+        val title = "Synthetic Transport Title"
+        val small = """
+            {"code":200,"data":[{"id":"fixture-work","name":"Synthetic Transport Title"}],
+            "pagination":{"current_page":1,"last_page":1}}
+        """.trimIndent()
+        val limit = ProviderHttpProtocol.MAX_RESPONSE_BODY_CHARS
+        val large = small + " ".repeat(limit + 1 - small.length)
+        val captured = AtomicReference<Request?>(null)
+
+        fun fixtureResponse(request: Request, status: Int, body: String): Response =
+            Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(status)
+                .message("Synthetic offline transport fixture")
+                .body(body.toResponseBody())
+                .build()
+
+        fun checkRequest(request: Request) {
+            assertEquals("GET", request.method)
+            assertEquals("https", request.url.scheme)
+            assertEquals("mangaball.com", request.url.host)
+            assertEquals("/api/v1/title/search-advanced", request.url.encodedPath)
+            assertEquals(title, request.url.queryParameter("keyword"))
+            assertEquals("application/json", request.header("Accept"))
+            assertEquals("https://mangaball.com", request.header("Origin"))
+            assertEquals("https://mangaball.com/", request.header("Referer"))
+            assertFalse(request.header("User-Agent").isNullOrBlank())
+            assertEquals(null, request.header("Cookie"))
+            assertEquals(null, request.header("Authorization"))
+        }
+
+        fun fixtureClient(status: Int, body: String, calls: AtomicInteger): OkHttpClient =
+            OkHttpClient.Builder()
+                .dns { throw UnknownHostException("Offline fixture must not reach DNS") }
+                .addInterceptor { chain ->
+                    checkRequest(chain.request())
+                    assertEquals(1, calls.incrementAndGet())
+                    captured.set(chain.request())
+                    fixtureResponse(chain.request(), status, body)
+                }
+                .build()
+
+        suspend fun lookup(client: OkHttpClient) = gateway(
+            main = "",
+            providerId = provider,
+            networkOrigins = origins,
+            localNetwork = false,
+            includePages = false,
+            packageBytesOverride = archive,
+            baseHttpClient = client,
+            packageVersionName = manifest.version.name,
+            packageVersionCode = manifest.version.code,
+        ).lookup(provider, ProviderReadingLookupRequest(listOf(title)))
+
+        val scriptCalls = AtomicInteger(0)
+        val script = lookup(fixtureClient(200, small, scriptCalls))
+        assertTrue(script is ProviderCallResult.Success)
+        assertEquals("mangaball:fixture-work", (script as ProviderCallResult.Success).value.items.single().externalWorkId)
+        assertEquals(1, scriptCalls.get())
+        val request = requireNotNull(captured.get())
+        val httpRequest = ProviderHttpRequest(
+            method = ProviderHttpMethod.GET,
+            url = request.url.toString(),
+            headers = request.headers.names().associateWith { requireNotNull(request.header(it)) },
+        )
+
+        val app = instrument.targetContext.applicationContext as App
+        val inherited = app.graph.networkHelper.client
+        assertTrue(inherited.cookieJar is eu.kanade.tachiyomi.network.AndroidCookieJar)
+        assertTrue(inherited.interceptors.any { it.javaClass.simpleName == "CloudflareInterceptor" })
+        assertTrue(inherited.interceptors.any { it.javaClass.simpleName == "UserAgentInterceptor" })
+
+        suspend fun nativeBody(body: String): String = withContext(Dispatchers.IO) {
+            val calls = AtomicInteger(0)
+            val client = inherited.newBuilder()
+                .cache(null)
+                .cookieJar(CookieJar.NO_COOKIES)
+                .dns { throw UnknownHostException("Offline fixture must not reach DNS") }
+                .addInterceptor { chain ->
+                    checkRequest(chain.request())
+                    assertEquals(1, calls.incrementAndGet())
+                    fixtureResponse(chain.request(), 200, body)
+                }
+                .build()
+            client.newCall(request).execute().use { response ->
+                assertEquals(200, response.code)
+                assertEquals(1, calls.get())
+                requireNotNull(response.body).string()
+            }
+        }
+
+        val sessions = ProviderHttpSessionStore()
+        val failure = AtomicReference<ProviderHttpFailureFamily?>(null)
+        fun broker(client: OkHttpClient) = DefaultProviderHttpHostService(
+            owner = ProviderResourceOwner(provider.value, "offline-parity"),
+            resources = ProviderResourceStore(),
+            policy = ProviderNetworkPolicy(origins),
+            cookieJar = sessions.cookieJar(provider.value),
+            baseClient = client,
+            diagnosticSink = { detail -> detail.failureFamily?.let { failure.set(it) } },
+        )
+
+        assertEquals(small, nativeBody(small))
+        val hostCalls = AtomicInteger(0)
+        broker(fixtureClient(200, small, hostCalls)).use {
+            val response = it.request(httpRequest)
+            assertEquals(200, response.statusCode)
+            assertEquals(small, response.body)
+        }
+        assertEquals(1, hostCalls.get())
+
+        // An intentionally valid but oversized synthetic JSON body isolates
+        // the Host text bound from native transport and parser behavior.
+        assertEquals(large, nativeBody(large))
+        val oversizedCalls = AtomicInteger(0)
+        broker(fixtureClient(200, large, oversizedCalls)).use {
+            assertTrue(runCatching { it.request(httpRequest) }.isFailure)
+        }
+        assertEquals(ProviderHttpFailureFamily.RESPONSE_LIMIT, failure.get())
+        assertEquals(1, oversizedCalls.get())
+        val oversizedScriptCalls = AtomicInteger(0)
+        assertFalse(lookup(fixtureClient(200, large, oversizedScriptCalls)) is ProviderCallResult.Success)
+        assertEquals(1, oversizedScriptCalls.get())
+
+        // A denial stays a denial. No automatic alternative transport, retry,
+        // challenge simulation or session transfer.
+        val deniedCalls = AtomicInteger(0)
+        assertFalse(lookup(fixtureClient(403, "denied", deniedCalls)) is ProviderCallResult.Success)
+        assertEquals(1, deniedCalls.get())
+
+        instrument.sendStatus(
+            0,
+            android.os.Bundle().apply {
+                putString(
+                    "stream",
+                    "MANGABALL_OFFLINE_PARITY|native=PASS|host=PASS|quickjs=PASS|" +
+                        "limit=RESPONSE_LIMIT|denial=REJECTED|live=NOT_TESTED",
+                )
+            },
+        )
+    }
+
+    /**
+     * Manual device-only diagnostic: one ordinary lookup using the exact
+     * package, normal Host and truthful adapter identity. No warmup, session
+     * import, automatic retry or alternate transport. Deliberately excluded
+     * from CI; requires a separate explicit opt-in when running on the phone.
+     */
+    @Test(timeout = 90_000L)
+    fun mangaBallDevelopmentArchive_manualDeviceLookup() = runBlocking {
+        val instrument = InstrumentationRegistry.getInstrumentation()
+        assertEquals("app.tsuzuki.dev", instrument.targetContext.packageName)
+        assertEquals(
+            "I_ACCEPT_ONE_MANGABALL_LOOKUP",
+            InstrumentationRegistry.getArguments().getString("mangaBallDeviceLookupOptIn"),
+        )
+        val archive = instrument.context.assets.open("mangaball/development-unsigned.tsz")
+            .use { it.readBytes() }
+        assertEquals(
+            "524849196f9cbe1e3f5bf4ce5dc943e58c6dfdc70d52d2f63ea7992019642260",
+            tachiyomi.core.provider.supplychain.sha256Hex(archive),
+        )
+        val manifest = ProviderPackageParser().parse(archive).manifest
+        val provider = ProviderId(manifest.id)
+        val origins = requireNotNull(manifest.permissions.network).origins
+        assertEquals("app.tsuzuki.mangaall.mangaball", provider.value)
+        assertEquals(setOf("https://mangaball.com"), origins)
+        val title = "Oyasumi Punpun"
+        val attempted = AtomicInteger(0)
+        val networkCalls = AtomicInteger(0)
+        val status = AtomicInteger(0)
+        val client = OkHttpClient.Builder()
+            .retryOnConnectionFailure(false)
+            .addInterceptor { chain ->
+                val request = chain.request()
+                if (attempted.incrementAndGet() != 1 ||
+                    request.method != "GET" ||
+                    request.url.scheme != "https" ||
+                    request.url.host != "mangaball.com" ||
+                    request.url.encodedPath != "/api/v1/title/search-advanced" ||
+                    request.url.queryParameter("keyword") != title
+                ) {
+                    throw IOException("Additional diagnostic request not permitted")
+                }
+                networkCalls.incrementAndGet()
+                chain.proceed(request).also { status.set(it.code) }
+            }
+            .build()
+        val result = gateway(
+            main = "",
+            providerId = provider,
+            networkOrigins = origins,
+            localNetwork = false,
+            includePages = false,
+            packageBytesOverride = archive,
+            baseHttpClient = client,
+            packageVersionName = manifest.version.name,
+            packageVersionCode = manifest.version.code,
+        ).lookup(provider, ProviderReadingLookupRequest(listOf(title)))
+        val count = (result as? ProviderCallResult.Success)?.value?.items?.size ?: 0
+        val outcome = when {
+            status.get() == 0 -> "NO_HTTP_RESPONSE"
+            status.get() !in 200..299 -> "HTTP_REJECTED"
+            attempted.get() != 1 -> "ADDITIONAL_REQUEST_DENIED"
+            result !is ProviderCallResult.Success -> "ADAPTER_OR_HOST_REJECTED"
+            count == 0 -> "EMPTY_LOOKUP"
+            else -> "LOOKUP_OBSERVED"
+        }
+        instrument.sendStatus(
+            0,
+            android.os.Bundle().apply {
+                putString(
+                    "stream",
+                    "MANGABALL_DEVICE_LOOKUP|status=" + status.get() +
+                        "|requests=" + networkCalls.get() + "|outcome=" + outcome +
+                        "|candidates=" + count + "|chapters=NOT_TESTED|reader=NOT_TESTED",
+                )
+            },
+        )
+        assertEquals(1, networkCalls.get())
+        assertEquals("LOOKUP_OBSERVED", outcome)
     }
 
     private fun gateway(
