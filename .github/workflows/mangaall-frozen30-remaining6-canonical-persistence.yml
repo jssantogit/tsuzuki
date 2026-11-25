@@ -209,3 +209,5 @@ jobs:
 # Explicit six-work live after consolidated offline GREEN at dafe1763; no full cohort rerun.
 
 # Explicit remaining-six acceptance after offline GREEN #45702043267 at b3035f14; frozen corpus unchanged.
+
+# Explicit remaining-six regression after consolidated offline GREEN #45709695806 and bounded chapter metadata observation #45710635126; retain all strict receipt checks.
