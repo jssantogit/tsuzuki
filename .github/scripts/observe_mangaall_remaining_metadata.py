@@ -168,15 +168,20 @@ def independently_resolve_mu(query, original):
             rows = obj.get("results")
             total = obj.get("total_hits")
             if (not isinstance(rows, list) or len(rows) > 25 or type(total) is not int
-                    or not 0 <= total <= 300 or obj.get("page") != page
-                    or (expected_total is not None and expected_total != total)):
-                return "INCOMPLETE_OR_SCHEMA", None
+                    or total < 0 or obj.get("page") != page):
+                return "SCHEMA_ERROR", None
+            if total > 300:
+                return "SEARCH_BUDGET_EXCEEDED", None
+            if expected_total is not None and expected_total != total:
+                return "SEARCH_TOTAL_CHANGED", None
             expected_total = total
             for item in rows:
                 record = item.get("record")
                 identity = record.get("series_id")
-                if type(identity) is not int or not 0 < identity < 10**18 or identity in seen:
-                    return "INCOMPLETE_OR_SCHEMA", None
+                if type(identity) is not int or not 0 < identity < 10**18:
+                    return "SCHEMA_ERROR", None
+                if identity in seen:
+                    return "DUPLICATE_RECORD", None
                 seen.add(identity)
                 # Exact primary or independently published associated name.
                 if norm(query) in catalog_record_names(record) or norm(original) in catalog_record_names(record):
@@ -184,12 +189,12 @@ def independently_resolve_mu(query, original):
             if len(seen) == total:
                 break
             if not rows or len(seen) > total:
-                return "INCOMPLETE_OR_SCHEMA", None
+                return "PAGINATION_INCONSISTENT", None
         except (ValueError, TypeError, AttributeError, KeyError):
             return "SCHEMA_ERROR", None
         time.sleep(1)
     if len(seen) != expected_total:
-        return "INCOMPLETE_OR_SCHEMA", None
+        return "SEARCH_INCOMPLETE", None
     if len(hits) != 1:
         return "AMBIGUOUS" if hits else "NOT_FOUND", None
     identity = next(iter(hits))
@@ -286,8 +291,13 @@ def observe_dot(works):
     # as a verified canonical binding. Retry only via a future explicit run.
     expected = {}
     for index in (15, 21, 27):
-        status, identity = independently_resolve_mu(works[index - 1], works[index - 1])
-        print(f"MU_INDEPENDENT|index={index}|status={status}", flush=True)
+        original = works[index - 1]
+        # The independently published native title is a retrieval hint;
+        # detail must corroborate BOTH names. No source-selected catalog ID.
+        query = "재혼황후" if index == 27 else original
+        status, identity = independently_resolve_mu(query, original)
+        scope = "NATIVE" if index == 27 else "PRIMARY"
+        print(f"MU_INDEPENDENT|index={index}|scope={scope}|status={status}", flush=True)
         expected[index] = identity
         if status in ("HTTP403", "HTTP429"):
             break
@@ -347,24 +357,14 @@ def observe_dot(works):
                 return
 
 
-def observe_catalog(rows):
+def observe_catalog(rows, works):
+    # The failed Android run classified these two as CATALOG_UNAVAILABLE.
+    # Test complete independent search/detail, not only HTTP reachability.
     for index in (28, 29):
         row = rows[index - 1]
-        data = dict(search=row["searchTitle"], page=1, perpage=25,
-                    type=["Manhwa"], filter_types=["drama cd", "novel"])
-        code, body = request("https://api.mangaupdates.com/v1/series/search",
-                             "application/json", json.dumps(data).encode())
-        count = -1
-        if body is not None:
-            try:
-                results = json.loads(body).get("results")
-                if not isinstance(results, list) or len(results) > 25:
-                    raise ValueError("rows")
-                count = len(results)
-            except (ValueError, TypeError, AttributeError):
-                code = "SCHEMA_ERROR"
-        print(f"MU_WIRE|index={index}|status={code}|firstPageRows={count}|identity=NOT_TESTED", flush=True)
-        if code in ("HTTP403", "HTTP429"):
+        status, identity = independently_resolve_mu(row["searchTitle"], works[index - 1])
+        print(f"MU_INDEPENDENT|index={index}|scope=NATIVE|status={status}", flush=True)
+        if status in ("HTTP403", "HTTP429"):
             return
         time.sleep(2)
 
@@ -428,4 +428,4 @@ if __name__ == "__main__":
     elif args.mode == "dot":
         observe_dot(works)
     else:
-        observe_catalog(rows)
+        observe_catalog(rows, works)
