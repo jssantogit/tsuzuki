@@ -41,7 +41,7 @@ class AndroidProviderImageHostService(
             ?: throw ProviderHostServiceException("Provider image resource could not be decoded")
 
         try {
-            if (x < 0 || y < 0 || x + width > source.width || y + height > source.height) {
+            if (x < 0 || y < 0 || x.toLong() + width > source.width || y.toLong() + height > source.height) {
                 throw ProviderHostServiceException("Provider image crop is outside source bounds")
             }
             val cropped = Bitmap.createBitmap(source, x, y, width, height)
@@ -99,7 +99,7 @@ class AndroidProviderImageHostService(
 
     private fun validatePixelCount(width: Int, height: Int) {
         val pixels = width.toLong() * height.toLong()
-        if (pixels <= 0L || pixels > maxPixels) {
+        if (width !in 1..maxDimension || height !in 1..maxDimension || pixels <= 0L || pixels > maxPixels) {
             throw ProviderHostServiceException("Provider image pixel count exceeds the configured limit")
         }
     }

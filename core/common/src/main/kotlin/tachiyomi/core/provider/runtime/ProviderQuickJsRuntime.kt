@@ -102,6 +102,30 @@ internal fun QuickJs.installHostServices(
     hostFailures: ProviderHostFailureTracker,
 ) {
     define("tsuzuki") {
+        // Pure bounded extraction operates only on data already held by this VM.
+        // It does not grant network, filesystem, browser or resource-handle access.
+        define("protocol") {
+            asyncFunction("jsonPointer") { args ->
+                hostFailures.call {
+                    ProviderAdvancedExtraction.jsonPointer(args.stringArgument(0), args.stringArgument(1))
+                }
+            }
+            asyncFunction("protobufFields") { args ->
+                hostFailures.call { ProviderAdvancedExtraction.protobufFields(args.stringArgument(0)) }
+            }
+        }
+        define("document") {
+            asyncFunction("query") { args ->
+                hostFailures.call {
+                    ProviderAdvancedExtraction.queryDocument(
+                        args.stringArgument(0),
+                        args.stringArgument(1),
+                        args.stringArgument(2),
+                        args.optionalStringArgument(3),
+                    )
+                }
+            }
+        }
         services.http?.let { http ->
             define("http") {
                 asyncFunction("get") { args ->

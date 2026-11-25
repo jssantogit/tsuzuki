@@ -67,6 +67,8 @@ class AndroidProviderBrowserHostService(
         val finished = AtomicBoolean(false)
         val latch = CountDownLatch(1)
         val webView = AtomicReference<WebView?>(null)
+        // Ignore callbacks from an earlier main-frame navigation.
+        val navigationGeneration = java.util.concurrent.atomic.AtomicInteger(0)
 
         fun complete(outcome: Result<String>) {
             if (!finished.compareAndSet(false, true)) return
@@ -159,6 +161,10 @@ class AndroidProviderBrowserHostService(
                         complete(Result.failure(ProviderHostServiceException(reason)))
                     }
 
+                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                        navigationGeneration.incrementAndGet()
+                    }
+
                     override fun onPageFinished(
                         view: WebView?,
                         url: String?,
@@ -171,19 +177,39 @@ class AndroidProviderBrowserHostService(
                             return
                         }
 
+                        val generation = navigationGeneration.incrementAndGet()
                         val selector = JSONObject.quote(cssSelector)
-                        view.evaluateJavascript(
-                            """
-                            (() => {
-                              const node = document.querySelector($selector);
-                              return node ? node.textContent : null;
-                            })()
-                            """.trimIndent(),
-                        ) { raw ->
-                            runCatching { decodeJavascriptText(raw) }
-                                .onSuccess { complete(Result.success(it)) }
-                                .onFailure { complete(Result.failure(it)) }
+                        fun probe() {
+                            if (finished.get() || generation != navigationGeneration.get()) return
+                            val currentUrl = view.url ?: return
+                            runCatching {
+                                policy.validate(currentUrl, resolveAddress = false)
+                            }.onFailure { error ->
+                                complete(Result.failure(error))
+                                return
+                            }
+                            view.evaluateJavascript(
+                                """
+                                (() => {
+                                  const node = document.querySelector($selector);
+                                  return node ? node.textContent : null;
+                                })()
+                                """.trimIndent(),
+                            ) { raw ->
+                                if (!finished.get() && generation == navigationGeneration.get()) {
+                                    if (raw == "null") {
+                                        // A rendered SPA may populate the requested node after load.
+                                        // The original operation deadline and origin policy still apply.
+                                        mainHandler.postDelayed({ probe() }, 150L)
+                                    } else {
+                                        runCatching { decodeJavascriptText(raw) }
+                                            .onSuccess { complete(Result.success(it)) }
+                                            .onFailure { complete(Result.failure(it)) }
+                                    }
+                                }
+                            }
                         }
+                        probe()
                     }
 
                     override fun onReceivedError(
