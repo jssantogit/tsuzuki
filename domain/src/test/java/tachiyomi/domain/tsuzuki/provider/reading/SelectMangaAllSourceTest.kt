@@ -84,7 +84,9 @@ class SelectMangaAllSourceTest {
             val initial = SelectMangaAllSource(fakeAssociations(listOf(associated(english))), selections)
             initial.select(title, english, 30) shouldBe MangaAllSourceSelectionResult.SELECTED
             val updated = SelectMangaAllSource(
-                fakeAssociations(listOf(associated(english), associated(foreign).copy(workVerification = verification))),
+                fakeAssociations(
+                    listOf(associated(english), associated(foreign).copy(workVerification = verification)),
+                ),
                 selections,
             )
             updated.select(title, foreign, 60) shouldBe MangaAllSourceSelectionResult.BLOCKED
