@@ -23,3 +23,7 @@ Metadata-only CI #45619010687 verified exact MangaUpdates identities for indices
 ## Stale binding negative-evidence regression
 
 The offline Reader resolver excludes catalog-only and catalog-conflicting work associations even when a stale automatic or user-confirmed edition binding exists. This is a fail-closed metadata decision; no evidence, chapter progress or preference is deleted. The no-match audit uses the same exclusion. Synthetic regressions cover both classifications and persistence of the prior preference; the offline gate explicitly runs both Reader resolver and source-selection tests. No change grants reading authority to catalog links.
+
+## Persistence after incomplete metadata refresh
+
+A durable catalog-reference conflict must not disappear merely because a later lookup lacks catalog references or supplies only creator evidence. The local work-association UPSERT retains that conflict against weaker observations, including newer ones. A fresh catalog-corroborated assessment may replace the conflict but remains non-authoritative for reading; creator-only assessments cannot resolve a bibliographic disagreement. No schema migration, canonical identity transfer, binding deletion, or Reader permission is introduced. The in-memory test repository mirrors the SQLite policy, with a regression for the newer weaker observations and later catalog reassessment.

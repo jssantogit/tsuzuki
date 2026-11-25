@@ -24,6 +24,8 @@ interface ProviderWorkSourceAssociationRepository {
     /**
      * Write only if this HID is not already owned by another canonical title.
      * Newer observations may replace older verification status, never title identity.
+     * Catalog conflict persists until a newer catalog assessment, not missing metadata
+     * or author-only corroboration. Conflict wins equal-timestamp observations.
      * Returns false if the HID is already associated to another title.
      */
     suspend fun observe(association: ProviderWorkSourceAssociation): Boolean

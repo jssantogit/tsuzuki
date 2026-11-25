@@ -4304,7 +4304,15 @@ class CollectProviderReadingEvidenceTest {
         override suspend fun observe(association: ProviderWorkSourceAssociation): Boolean {
             val current = values[association.ref]
             if (current != null && current.canonicalTitleId != association.canonicalTitleId) return false
-            if (current == null || association.observedAt > current.observedAt) values[association.ref] = association
+            val conflict = ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+            val freshCatalog = association.workVerification == conflict ||
+                association.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED
+            if (current?.workVerification == conflict && !freshCatalog) return true
+            if (current == null || association.observedAt > current.observedAt ||
+                (association.observedAt == current.observedAt && association.workVerification == conflict)
+            ) {
+                values[association.ref] = association
+            }
             return true
         }
 

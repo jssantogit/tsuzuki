@@ -210,6 +210,29 @@ class ProviderReadingBindingRepositoryImplTest {
     }
 
     @Test
+    fun `catalog conflict survives newer weaker observations until fresh catalog proof`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val conflict = workSource("catalog-review").copy(
+            workVerification = ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT,
+        )
+        portfolio.observe(conflict) shouldBe true
+        for (state in listOf(
+            ProviderWorkVerification.AUTHOR_CORROBORATED,
+            ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE,
+            ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED,
+        )) {
+            portfolio.observe(conflict.copy(workVerification = state, observedAt = 200L)) shouldBe true
+            portfolio.get(conflict.ref) shouldBe conflict
+        }
+        val reviewed = conflict.copy(
+            workVerification = ProviderWorkVerification.CATALOG_CORROBORATED,
+            observedAt = 201L,
+        )
+        portfolio.observe(reviewed) shouldBe true
+        portfolio.get(conflict.ref) shouldBe reviewed
+    }
+
+    @Test
     fun `shadow association cannot take a HID already preferred by another canonical work`() = runBlocking<Unit> {
         database.tsuzuki_titlesQueries.insertTsuzukiTitle(
             id = "other-title",
