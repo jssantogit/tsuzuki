@@ -77,16 +77,26 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
         try {
             // The same JUnit method exercises the controlled contract and live
             // lanes. Report a failed contract without disguising live outcomes.
-            val controlled = try {
-                withContext(Dispatchers.IO) {
-                    ProviderAdvancedExtractionInstrumentedTest().runControlled()
-                    AdvancedExtractionLocalContract.run(context, root)
+            suspend fun contract(name: String, block: suspend () -> Unit): Boolean {
+                val passed = try {
+                    withTimeout(45_000L) { withContext(Dispatchers.IO) { block() } }
+                    true
+                } catch (_: TimeoutCancellationException) {
+                    false
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    false
+                } catch (_: AssertionError) {
+                    false
                 }
-                true
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Throwable) {
-                false
+                Log.i("AdvancedLiveGate", "ADVANCED_CONTRACT_DETAIL|$name|" + if (passed) "PASS" else "FAIL")
+                return passed
+            }
+            val controlled = supervisorScope {
+                val adapters = async { contract("ADAPTERS_SQLITE") { ProviderAdvancedExtractionInstrumentedTest().runControlled() } }
+                val primitives = async { contract("PROTOCOL_SESSION") { AdvancedExtractionLocalContract.run(context, root) } }
+                awaitAll(adapters, primitives).all { it }
             }
             Log.i("AdvancedLiveGate", "ADVANCED_CONTRACT|" + if (controlled) "PASS" else "FAIL")
             val results = supervisorScope {

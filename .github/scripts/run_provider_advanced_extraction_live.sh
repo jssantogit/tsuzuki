@@ -32,7 +32,7 @@ if [[ "${MANGABALL_API_APPROVED:-false}" == true ]]; then approved=true; fi
 adb logcat -c
 status=0
 timeout --foreground 330s adb shell am instrument -w -r -e class "$class" -e advancedLive true -e mangaBallApiApproved "$approved" "$runner" >"$raw" 2>&1 || status=$?
-adb logcat -d -s AdvancedLiveGate:I | grep -Eo 'ADVANCED_LIVE\|[a-z-]+\|[a-z-]+\|[A-Z0-9_]+\|ms=[0-9]+|ADVANCED_CONTRACT\|(PASS|FAIL)' | tee "$out/verdicts.txt" || true
+adb logcat -d -s AdvancedLiveGate:I | grep -Eo 'ADVANCED_LIVE\|[a-z-]+\|[a-z-]+\|[A-Z0-9_]+\|ms=[0-9]+|ADVANCED_CONTRACT\|(PASS|FAIL)|ADVANCED_CONTRACT_DETAIL\|[A-Z_]+\|(PASS|FAIL)' | tee "$out/verdicts.txt" || true
 if [[ "$status" != 0 ]] || ! grep -Fq 'OK (1 test)' "$raw" || ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw"; then
   echo "ADVANCED_LIVE|instrumentation=FAIL|exit=$status" >&2
   exit 5

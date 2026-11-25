@@ -28,6 +28,7 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef
 import java.io.ByteArrayOutputStream
@@ -114,6 +115,7 @@ class ProviderAdvancedExtractionInstrumentedTest {
             ProviderHostInvocationFactory(context, storageRoot = root, baseHttpClient = http, managedFiles = managed),
         )
         val failures = mutableListOf<String>()
+        val observed = mutableListOf<ProviderBindingRef>()
         try {
             for (name in listOf("mangaall-ball", "mangafire")) {
                 try {
@@ -182,11 +184,13 @@ class ProviderAdvancedExtractionInstrumentedTest {
                         }
                         assertNull(zip.nextEntry)
                     }
+                    observed += ProviderBindingRef(ProviderId(manifest.id), "en", work)
                 } catch (failure: Throwable) {
                     failures += "$name: " + (failure.message ?: failure.javaClass.simpleName)
                 }
             }
             assertTrue(failures.joinToString("\n"), failures.isEmpty())
+            AdvancedExtractionPersistenceContract.run(context, observed)
         } finally {
             root.deleteRecursively()
         }
