@@ -3691,12 +3691,24 @@ class CollectProviderReadingEvidenceTest {
         )
     }
 
+    @Test
+    fun `slow rival preview does not discard already verified native coverage`() = runTest {
+        verifyResearchAliasBatch(
+            0,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+            slowRival = true,
+        )
+    }
+
     private suspend fun verifyResearchAliasBatch(
         batch: Int,
         aliases: List<String>,
         desiredAlias: String,
         expectedQueries: List<String>,
         slowLookup: Boolean = false,
+        slowRival: Boolean = false,
     ) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
@@ -3747,7 +3759,19 @@ class CollectProviderReadingEvidenceTest {
                                             authors = listOf("Yonghwan Kim"),
                                             detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
                                         ),
-                                    ),
+                                    ) + if (slowRival) {
+                                        listOf(
+                                            ProviderWorkCandidate(
+                                                externalWorkId = "mangadot:318",
+                                                title = desiredAlias,
+                                                url = "https://mangadot.net/manga/318",
+                                                authors = listOf("Yonghwan Kim"),
+                                                detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                            ),
+                                        )
+                                    } else {
+                                        emptyList()
+                                    },
                                     nextCursor = null,
                                 ),
                             )
@@ -3756,8 +3780,12 @@ class CollectProviderReadingEvidenceTest {
                         }
                     }
                 },
-                chaptersHandler = {
-                    if (slowLookup) delay(3_000)
+                chaptersHandler = { request ->
+                    if (slowRival && request.binding.externalWorkId == "mangadot:318") {
+                        delay(30_000)
+                        error("rival preview must time out")
+                    }
+                    if (slowLookup) delay(5_000)
                     ProviderCallResult.Success(
                         ProviderPage(
                             listOf(
@@ -4353,8 +4381,10 @@ class CollectProviderReadingEvidenceTest {
             )
             if (current?.workVerification == authorConflict && !freshAuthor) return true
             if (current == null || association.observedAt > current.observedAt ||
-                (association.observedAt == current.observedAt &&
-                    association.workVerification in setOf(conflict, authorConflict))
+                (
+                    association.observedAt == current.observedAt &&
+                        association.workVerification in setOf(conflict, authorConflict)
+                    )
             ) {
                 values[association.ref] = association
             }

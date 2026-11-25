@@ -803,7 +803,9 @@ class CollectProviderReadingEvidence private constructor(
                                             it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED &&
                                             it.ref.externalWorkId !in catalogConflicts
                                     }
-                                    if (eligible && exact.size <= MAX_COVERAGE_CONTENDERS) {
+                                    if (eligible &&
+                                        exact.map { it.externalWorkId }.distinct().size <= MAX_COVERAGE_CONTENDERS
+                                    ) {
                                         val remaining = exact.filterNot { it.externalWorkId in catalogConflicts }
                                         nativeLookup = title to remaining
                                     }
@@ -862,19 +864,17 @@ class CollectProviderReadingEvidence private constructor(
         // The existing outer provider deadline still bounds the whole lane.
         nativeLookup?.let { (title, candidates) ->
             onStageChanged(DiagnosticStage.READ)
-            withTimeoutOrNull(MAX_RESEARCH_NATIVE_PREVIEW_MILLIS) {
-                observeSourcePortfolio(
-                    canonicalTitleId,
-                    title,
-                    target,
-                    canonicalCreators,
-                    candidates,
-                    nativePreviews,
-                    independentlyVerifiedMangaUpdatesId = independentCatalogId,
-                )
-                    .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
-                    .forEach { discovered[it.ref] = it }
-            }
+            observeSourcePortfolio(
+                canonicalTitleId,
+                title,
+                target,
+                canonicalCreators,
+                candidates,
+                nativePreviews,
+                independentlyVerifiedMangaUpdatesId = independentCatalogId,
+            )
+                .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
+                .forEach { discovered[it.ref] = it }
         }
         if (discovered.isEmpty()) return ProviderReadingEvidenceCollection(complete = false)
         onStageChanged(DiagnosticStage.READ)
@@ -1309,7 +1309,7 @@ class CollectProviderReadingEvidence private constructor(
             return emptyList()
         }
         val contenders = candidates.filter { it.externalWorkId.startsWith("mangadot:") }
-        if (contenders.size > MAX_COVERAGE_CONTENDERS) return emptyList()
+        if (contenders.map { it.externalWorkId }.distinct().size > MAX_COVERAGE_CONTENDERS) return emptyList()
         val assessments = ProviderWorkSourcePortfolio.assess(
             descriptor.id,
             target.facetId,
@@ -1319,73 +1319,103 @@ class CollectProviderReadingEvidence private constructor(
             independentlyVerifiedMangaUpdatesId,
         ).associateBy { it.ref.externalWorkId }
         val previews = mutableListOf<ProviderWorkCandidate>()
-        for (candidate in contenders) {
-            val assessment = assessments[candidate.externalWorkId] ?: continue
-            val catalogIdentity = if (assessment.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED) {
-                independentlyVerifiedMangaUpdatesId ?: continue
-            } else {
-                if (assessment.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED) continue
-                null
-            }
-            if (assessment.editionQualification != ProviderSourceEditionQualification.UNRESOLVED) continue
-            if (catalogIdentity != null && verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity) {
-                continue
-            }
-            val fingerprint = if (catalogIdentity != null) {
-                catalogCursorFingerprint(target.registration.configurationFingerprint, catalogIdentity)
-            } else {
-                target.registration.configurationFingerprint
-            }
-            // A native snapshot has exactly one generation per provider.
-            // Starting a new preview destroys a valid saved continuation,
-            // even if the same work is requested. Validate the saved page
-            // first, keeping chapter collection on that exact generation.
-            val saved = provisionalCursorRepository?.get(
+        var activePreview: ProviderBindingRef? = null
+        suspend fun catalogIsCurrent(identity: String?): Boolean =
+            identity == null || verifiedMangaUpdatesResearchIdentity(canonicalTitleId) == identity
+
+        suspend fun fetchPreview(
+            ref: ProviderBindingRef,
+            cursor: ProviderCursor?,
+        ): ProviderCallResult<ProviderPage<ProviderChapterObservation>> {
+            activePreview = ref
+            val started = System.nanoTime()
+            traceChapterRequest(canonicalTitleId, target, ref, 1, DiagnosticOutcome.STARTED)
+            val result = gateway.chapters(descriptor.id, ProviderReadingChaptersRequest(ref, cursor = cursor))
+            val page = (result as? ProviderCallResult.Success)?.value
+            val error = (result as? ProviderCallResult.Failure)?.error
+            traceChapterRequest(
                 canonicalTitleId,
-                assessment.ref,
-                descriptor.version.code,
-                fingerprint,
+                target,
+                ref,
+                1,
+                if (page != null) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.FAILED,
+                itemCount = page?.items?.size,
+                errorCode = error?.code,
+                elapsedMillis = (System.nanoTime() - started) / 1_000_000L,
             )
-            val previewObservedAt = clock()
-            val initial = gateway.chapters(
-                descriptor.id,
-                ProviderReadingChaptersRequest(assessment.ref, cursor = saved?.nextCursor),
-            )
-            val restart = saved != null && initial is ProviderCallResult.Failure &&
-                initial.error.code == ProviderErrorCode.SOURCE_READ_ERROR &&
-                initial.error.httpStatus == null && initial.error.sourceFailureCode == null
-            if (catalogIdentity != null && verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity) {
-                continue
+            activePreview = null
+            return result
+        }
+
+        // Keep completed native previews even if a later contender consumes
+        // the bounded preview budget. The 20 s outer lane deadline stays intact.
+        withTimeoutOrNull(MAX_RESEARCH_NATIVE_PREVIEW_MILLIS) {
+            for (candidate in contenders) {
+                if (previews.any { it.externalWorkId == candidate.externalWorkId }) continue
+                val assessment = assessments[candidate.externalWorkId] ?: continue
+                val catalogOnly = assessment.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED
+                val catalogIdentity = if (catalogOnly) {
+                    independentlyVerifiedMangaUpdatesId ?: continue
+                } else {
+                    if (assessment.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED) continue
+                    null
+                }
+                if (assessment.editionQualification != ProviderSourceEditionQualification.UNRESOLVED) continue
+                if (!catalogIsCurrent(catalogIdentity)) continue
+                val fingerprint = if (catalogIdentity != null) {
+                    catalogCursorFingerprint(target.registration.configurationFingerprint, catalogIdentity)
+                } else {
+                    target.registration.configurationFingerprint
+                }
+                // A fresh preview of this exact HID can replace its saved generation.
+                // Validate a saved continuation before attempting a fresh start.
+                val saved = provisionalCursorRepository?.get(
+                    canonicalTitleId,
+                    assessment.ref,
+                    descriptor.version.code,
+                    fingerprint,
+                )
+                val previewObservedAt = clock()
+                val initial = fetchPreview(assessment.ref, saved?.nextCursor)
+                val restart = saved != null && initial is ProviderCallResult.Failure &&
+                    initial.error.code == ProviderErrorCode.SOURCE_READ_ERROR &&
+                    initial.error.httpStatus == null && initial.error.sourceFailureCode == null
+                if (!catalogIsCurrent(catalogIdentity)) continue
+                val result = if (restart) {
+                    // Exact same independently corroborated work; the old snapshot may
+                    // have expired or been replaced. Only one fresh start, not
+                    // an arbitrary retry or an authoritative inventory.
+                    fetchPreview(assessment.ref, null)
+                } else {
+                    initial
+                }
+                val page = (result as? ProviderCallResult.Success)?.value ?: continue
+                val preview = MangaAllMangaDotNativeCoverage.fromObservedPage(
+                    descriptor.version.code,
+                    assessment.ref,
+                    candidate,
+                    page,
+                    independentlyVerifiedMangaUpdatesId = catalogIdentity,
+                )
+                if (preview == null) {
+                    traceChapterRequest(canonicalTitleId, target, assessment.ref, 1, DiagnosticOutcome.REJECTED)
+                    continue
+                }
+                if (!catalogIsCurrent(catalogIdentity)) continue
+                if (restart && saved != null) {
+                    // Clearing an unusable operational hint never advances past
+                    // unwritten evidence. CAS protects a concurrently newer cursor.
+                    provisionalCursorRepository?.discard(saved, clock())
+                }
+                nativePreviews?.set(
+                    assessment.ref,
+                    NativeChapterPreview(if (restart) null else saved?.nextCursor, page, previewObservedAt),
+                )
+                previews += preview
             }
-            val result = if (restart) {
-                // Exact same independently corroborated work; the old snapshot may
-                // have expired or been replaced. Only one fresh start, not
-                // an arbitrary retry or an authoritative inventory.
-                gateway.chapters(descriptor.id, ProviderReadingChaptersRequest(assessment.ref))
-            } else {
-                initial
-            }
-            val page = (result as? ProviderCallResult.Success)?.value ?: continue
-            val preview = MangaAllMangaDotNativeCoverage.fromObservedPage(
-                descriptor.version.code,
-                assessment.ref,
-                candidate,
-                page,
-                independentlyVerifiedMangaUpdatesId = catalogIdentity,
-            ) ?: continue
-            if (catalogIdentity != null && verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity) {
-                continue
-            }
-            if (restart && saved != null) {
-                // Clearing an unusable operational hint never advances past
-                // unwritten evidence. CAS protects a concurrently newer cursor.
-                provisionalCursorRepository?.discard(saved, clock())
-            }
-            nativePreviews?.set(
-                assessment.ref,
-                NativeChapterPreview(if (restart) null else saved?.nextCursor, page, previewObservedAt),
-            )
-            previews += preview
+        }
+        activePreview?.let {
+            traceChapterRequest(canonicalTitleId, target, it, 1, DiagnosticOutcome.TIMEOUT)
         }
         return previews
     }
@@ -2540,7 +2570,7 @@ class CollectProviderReadingEvidence private constructor(
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
         const val MAX_RESEARCH_LOOKUP_MILLIS = 12_000L
         const val MAX_RESEARCH_QUERY_MILLIS = 6_000L
-        const val MAX_RESEARCH_NATIVE_PREVIEW_MILLIS = 4_000L
+        const val MAX_RESEARCH_NATIVE_PREVIEW_MILLIS = 7_000L
 
         // A missing catalog snapshot gets one bounded independent identity
         // fetch before source lookup, not an unbounded provider discovery.

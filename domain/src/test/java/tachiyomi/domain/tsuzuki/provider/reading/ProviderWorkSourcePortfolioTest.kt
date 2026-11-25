@@ -91,14 +91,22 @@ class ProviderWorkSourcePortfolioTest {
         val variant = exact.copy(aliases = listOf("Chainsaw Man (Colored)"))
         for (items in listOf(listOf(exact, conflicting), listOf(conflicting, exact))) {
             val result = ProviderWorkSourcePortfolio.assess(
-                provider, "en", exact.title, exact.authors.toSet(), items,
+                provider,
+                "en",
+                exact.title,
+                exact.authors.toSet(),
+                items,
             ).single()
             result.workVerification shouldBe ProviderWorkVerification.AUTHOR_CONFLICT
             result.canCollectProvisionalChapters shouldBe false
         }
         for (items in listOf(listOf(exact, variant), listOf(variant, exact))) {
             val result = ProviderWorkSourcePortfolio.assess(
-                provider, "en", exact.title, exact.authors.toSet(), items,
+                provider,
+                "en",
+                exact.title,
+                exact.authors.toSet(),
+                items,
             ).single()
             result.editionQualification shouldBe ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT
             result.canCollectProvisionalChapters shouldBe false
