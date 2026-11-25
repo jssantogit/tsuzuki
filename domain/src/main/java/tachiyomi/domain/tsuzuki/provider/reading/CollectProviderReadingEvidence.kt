@@ -780,7 +780,8 @@ class CollectProviderReadingEvidence private constructor(
                                                 it.workVerification ==
                                                 ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
                                         }.filter {
-                                            it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT ||
+                                            it.workVerification ==
+                                                ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT ||
                                                 it.ref.externalWorkId !in catalogConflicts
                                         }.forEach {
                                             recordResearchCatalogAssessment(
@@ -803,7 +804,8 @@ class CollectProviderReadingEvidence private constructor(
                                             it.ref.externalWorkId !in catalogConflicts
                                     }
                                     if (eligible && exact.size <= MAX_COVERAGE_CONTENDERS) {
-                                        nativeLookup = title to exact.filterNot { it.externalWorkId in catalogConflicts }
+                                        val remaining = exact.filterNot { it.externalWorkId in catalogConflicts }
+                                        nativeLookup = title to remaining
                                     }
                                 } else {
                                     observeSourcePortfolio(
