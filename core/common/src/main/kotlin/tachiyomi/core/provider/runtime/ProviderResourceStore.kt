@@ -100,6 +100,16 @@ class ProviderResourceStore(
         return entry.bytes.copyOf()
     }
 
+    /** Validate a live handle without allocating a copy of the underlying bytes. */
+    @Synchronized
+    fun requireOwned(owner: ProviderResourceOwner, handle: ProviderResourceHandle) {
+        val entry = resources[handle]
+            ?: throw ProviderResourceAccessException("Provider resource handle is invalid")
+        if (entry.owner != owner) {
+            throw ProviderResourceAccessException("Provider resource handle belongs to another invocation")
+        }
+    }
+
     @Synchronized
     fun release(
         owner: ProviderResourceOwner,

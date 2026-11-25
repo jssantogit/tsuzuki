@@ -26,12 +26,24 @@ import javax.net.ssl.SSLException
 
 class ProviderHttpSessionStore {
 
-    private val sessions = ConcurrentHashMap<String, CookieJar>()
+    // A grant change cannot revive cookies from an older permission snapshot.
+    // Access order bounds idle provider sessions without sharing across identities.
+    private val sessions = LinkedHashMap<String, Session>(16, 0.75f, true)
 
-    fun cookieJar(providerId: String): CookieJar {
+    @Synchronized
+    fun cookieJar(providerId: String, origins: Set<String> = emptySet(), allowLocalNetwork: Boolean = false): CookieJar {
         require(PROVIDER_ID.matches(providerId)) { "Provider ID is invalid" }
-        return sessions.computeIfAbsent(providerId) { InMemoryProviderCookieJar() }
+        val scope = Scope(origins.toSet(), allowLocalNetwork)
+        val existing = sessions[providerId]
+        if (existing?.scope == scope) return existing.jar
+        val jar = InMemoryProviderCookieJar()
+        sessions[providerId] = Session(scope, jar)
+        while (sessions.size > 128) sessions.remove(sessions.keys.first())
+        return jar
     }
+
+    private data class Scope(val origins: Set<String>, val local: Boolean)
+    private data class Session(val scope: Scope, val jar: CookieJar)
 
     private companion object {
         val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
@@ -202,6 +214,11 @@ class DefaultProviderHttpHostService(
                     val validated = policy.validate(redirected.toString(), resolveAddress = false)
 
                     if (!sameOrigin(currentUrl, validated)) {
+                        // Never replay an entity body or credentials to another origin.
+                        // 301/302/303 may still perform the existing bodyless GET transition.
+                        if (currentMethod != ProviderHttpMethod.GET && received.code !in REDIRECT_TO_GET_CODES) {
+                            throw ProviderHostServiceException("Provider cross-origin method redirect rejected")
+                        }
                         currentHeaders = emptyMap()
                     }
                     if (
@@ -402,7 +419,9 @@ private class InMemoryProviderCookieJar : CookieJar {
                         incoming.path == existing.path
                 }
         }
-        this.cookies += cookies.filter { it.expiresAt > now }
+        this.cookies += cookies.filter { it.expiresAt > now && it.toString().length <= 4096 }
+        // The remote server must not grow provider-owned process memory indefinitely.
+        while (this.cookies.size > 128) this.cookies.removeAt(0)
     }
 
     @Synchronized

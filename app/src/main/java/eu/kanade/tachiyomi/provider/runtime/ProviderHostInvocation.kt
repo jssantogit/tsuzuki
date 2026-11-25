@@ -161,7 +161,7 @@ class ProviderHostInvocationFactory(
                         allowedOrigins = origins,
                         allowLocalNetwork = policy.allowLocalNetwork,
                     ),
-                    cookieJar = httpSessions.cookieJar(policy.providerId),
+                    cookieJar = httpSessions.cookieJar(policy.providerId, origins, policy.allowLocalNetwork),
                     baseClient = baseHttpClient,
                     invocationTimeoutMs = invocationTimeoutMs,
                     diagnosticSink = { diagnostic ->
@@ -183,6 +183,7 @@ class ProviderHostInvocationFactory(
                         allowLocalNetwork = policy.allowLocalNetwork,
                     ),
                     providerProfileName = providerProfileName(policy.providerId),
+                    timeoutSeconds = ((invocationTimeoutMs + 999L) / 1000L).coerceIn(1L, 15L),
                 )
                 object : ProviderBrowserHostService, AutoCloseable {
                     override suspend fun readText(url: String, cssSelector: String): String =

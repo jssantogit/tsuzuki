@@ -82,8 +82,8 @@ class AndroidProviderBrowserHostService(
         fun complete(outcome: Result<String>) {
             if (!finished.compareAndSet(false, true)) return
 
-            activeCancellations.remove(operationId)
             result.set(outcome)
+            activeCancellations.remove(operationId)
             val destroy = {
                 webView.getAndSet(null)?.let { view ->
                     runCatching { view.stopLoading() }
@@ -292,12 +292,19 @@ class AndroidProviderBrowserHostService(
             }
         }
 
-        if (!latch.await(timeoutSeconds, TimeUnit.SECONDS)) {
-            complete(
-                Result.failure(
-                    ProviderHostServiceException("Provider browser operation timed out"),
-                ),
-            )
+        try {
+            if (!latch.await(timeoutSeconds, TimeUnit.SECONDS)) {
+                complete(Result.failure(ProviderHostServiceException("Provider browser operation timed out")))
+                // A callback may already have won the completion race. Its
+                // result is published before cleanup; do not read a null result.
+                if (!latch.await(1, TimeUnit.SECONDS)) {
+                    throw ProviderHostServiceException("Provider browser completion timed out")
+                }
+            }
+        } catch (error: InterruptedException) {
+            complete(Result.failure(ProviderHostServiceException("Provider browser operation cancelled")))
+            Thread.currentThread().interrupt()
+            throw ProviderHostServiceException("Provider browser operation cancelled", error)
         }
 
         return requireNotNull(result.get()) {
