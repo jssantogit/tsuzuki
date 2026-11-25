@@ -755,7 +755,8 @@ class CollectProviderReadingEvidence private constructor(
                                     if (independentCatalogId != null) {
                                         assessments.filter {
                                             it.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED ||
-                                                it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+                                                it.workVerification ==
+                                                ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
                                         }.forEach {
                                             recordResearchCatalogAssessment(
                                                 canonicalTitleId,

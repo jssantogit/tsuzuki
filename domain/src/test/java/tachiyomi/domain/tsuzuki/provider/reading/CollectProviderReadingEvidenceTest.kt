@@ -3436,7 +3436,9 @@ class CollectProviderReadingEvidenceTest {
         val collector = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(
                 canonicalTitle,
-                listOf(ExternalIdentity(canonicalTitle.id, owner.value, independentId, verified = true, createdAt = 1L)),
+                listOf(
+                    ExternalIdentity(canonicalTitle.id, owner.value, independentId, verified = true, createdAt = 1L),
+                ),
             ),
             providerRegistry = registry(provider = mangaAll, versionCode = 11),
             gateway = gateway(
