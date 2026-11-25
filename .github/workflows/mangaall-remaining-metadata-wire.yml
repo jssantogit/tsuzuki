@@ -24,3 +24,5 @@ jobs:
           python3 -m py_compile .github/scripts/observe_mangaall_remaining_metadata.py
           python3 .github/scripts/observe_mangaall_remaining_metadata.py selftest
           python3 .github/scripts/observe_mangaall_remaining_metadata.py ${{ matrix.scope }}
+
+# Follow-up: native title and explicit structured reference/variant diagnostics only.

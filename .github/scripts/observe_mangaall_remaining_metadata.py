@@ -116,15 +116,44 @@ def detail_counts(body, work_url, query):
         matches.append(obj)
     roles = sum(bool(obj.get(field)) for obj in matches for field in FIELDS)
     editions = sum(bool(EDITION_MARKER.search(n)) for obj in matches for n in names(obj) if isinstance(n, str))
+    # Only exact structured references from the matched work. A host or a
+    # URL alone is a diagnostic, not cross-catalog identity authority.
+    refs = []
+    for obj in matches:
+        value = obj.get("sameAs")
+        if isinstance(value, str):
+            refs.append(value)
+        elif isinstance(value, list):
+            refs.extend(v for v in value[:32] if isinstance(v, str))
+    trusted = {"www.webtoons.com", "webtoons.com", "comic.naver.com",
+               "m.comic.naver.com", "shikimori.io", "www.mangaupdates.com",
+               "mangaupdates.com", "mangadex.org"}
+    reference_hosts = set()
+    for value in refs[:32]:
+        try:
+            parsed = urllib.parse.urlsplit(value)
+            if parsed.scheme == "https" and parsed.username is None and parsed.hostname in trusted:
+                reference_hosts.add(parsed.hostname)
+        except ValueError:
+            continue
+    spin_off = sum(bool(re.search(r"\b(?:spin[- ]?off|sequel|side story)\b", n, re.I))
+                   for obj in matches for n in names(obj) if isinstance(n, str))
     return dict(jsonLd=len(parser.json_ld), exactSeries=len(matches), structuredRoles=roles,
                 semanticRoleNodes=parser.semantic_roles, visibleRoleLabels=parser.role_labels,
-                roleClassNodes=parser.role_class_nodes, editionMarkers=editions)
+                roleClassNodes=parser.role_class_nodes, editionMarkers=editions,
+                spinOffMarkers=spin_off, structuredSameAs=len(refs),
+                knownCatalogHosts=len(reference_hosts))
 
 
 def observe_dot(works):
     # Frozen diagnostics only; do not infer absence from bounded title searches.
-    for index in (15, 21, 27):
-        query = works[index - 1]
+    # Korean publisher's exact native title for Teenage Mercenary:
+    # https://comic.naver.com/webtoon/list?mobile=y&titleId=758150
+    # Both spellings are retrieval hints only; record-specific credits
+    # or explicit independent links must still prove identity.
+    for index, query, scope in ((15, works[14], "PRIMARY"),
+                                (21, "입학용병", "NATIVE"),
+                                (27, works[26], "PRIMARY")):
         found = {}
         state = "BOUNDED"
         for page in (1, 2):
@@ -157,7 +186,7 @@ def observe_dot(works):
                 state = "SCHEMA_ERROR"
                 break
             time.sleep(1)
-        print(f"DOT_WIRE|index={index}|state={state}|exactRecords={len(found)}", flush=True)
+        print(f"DOT_WIRE|index={index}|scope={scope}|state={state}|exactRecords={len(found)}", flush=True)
         if state in ("HTTP403", "HTTP429"):
             return
         for ordinal, (hid, fields) in enumerate(list(found.items())[:3], 1):
@@ -201,6 +230,14 @@ def selftest():
             '</script><div class="author">Author:</div>').encode()
     good = detail_counts(html, url, "Fictional work")
     assert good["exactSeries"] == good["structuredRoles"] == good["visibleRoleLabels"] == 1
+    series["sameAs"] = ["https://www.webtoons.com/en/test/list?title_no=42",
+                        "https://www.webtoons.com.evil.invalid/42",
+                        "https://user@comic.naver.com/webtoon/list?titleId=42"]
+    series["alternateName"] = ["Fictional work: Spin-off"]
+    linked = ('<script type="application/ld+json">' + json.dumps(series) + '</script>').encode()
+    observed = detail_counts(linked, url, "Fictional work")
+    assert observed["knownCatalogHosts"] == observed["spinOffMarkers"] == 1
+    assert detail_counts(linked, url + "0", "Fictional work")["knownCatalogHosts"] == 0
     assert detail_counts(html, url + "0", "Fictional work")["exactSeries"] == 0
     assert detail_counts(html, url, "Other work")["structuredRoles"] == 0
     print("MANGAALL_METADATA_WIRE|selftest=PASS")
