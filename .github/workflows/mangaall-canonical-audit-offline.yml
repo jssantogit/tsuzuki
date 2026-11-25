@@ -6,6 +6,7 @@ on:
     branches: ['probe/mangaall-dual-source-scale30-*']
     paths:
       - '.github/workflows/mangaall-canonical-audit-offline.yml'
+      - '.github/mangaall-frozen30-catalog-plan.json'
       - '.github/scripts/mangaall_code11_dual_source_unsigned.py'
       - '.github/scripts/mangaall_mangadot_search_policy.mjs'
       - '.github/scripts/test_mangaall_mangadot_search_policy.mjs'

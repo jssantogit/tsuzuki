@@ -15,3 +15,7 @@ Wire audit #45613879462 confirmed exact MangaUpdates series references for froze
 ## Native provisional metadata after catalog corroboration
 
 The nonshipping code11 collector now allows a creditless, exact catalog-linked record to contribute source-scoped provisional chapter metadata only after a valid native page. It rechecks the same independent identity and current consent before and after the native request, before publishing provisional metadata and before committing cursors. Cursor fingerprints include a hash of the independently verified catalog identity and active configuration. Existing author-based cursor keys remain unchanged. No schema change, no authoritative snapshot, no automatic edition selection, no Reader eligibility for the new catalog-only classification. Regressions use synthetic chapter metadata and exercise consent revocation, precise reference matching and version gating.
+
+## Independent identity results for the remaining catalog cases
+
+Metadata-only CI #45619010687 verified exact MangaUpdates identities for indices 15, 21, 27 (native query), 28 and 29. Index 27's first examined MangaDot record linked to the verified catalog work; the second linked to a different series. This is negative evidence for that competing record, not authority to select a chapter release or a preferred edition. The explicit research plan uses MangaUpdates and the native title for index 27, preserving the same fixed corpus and all other owner assignments. Plan changes now trigger the offline audit; no live Reader workflow is dispatched.
