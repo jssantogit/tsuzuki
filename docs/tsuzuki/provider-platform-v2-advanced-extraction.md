@@ -47,3 +47,7 @@ negative limits, cancellation, Reader UI, canonical resolution and SQLite restar
 still need integrated coverage. Production SDK adoption and permitted live source
 access must be completed before declaring the feature ready. MangaBall API
 authorization remains pending; a controlled pass cannot change that status.
+
+## Focused live gate — three works
+
+Death Note, Oyasumi Punpun (Goodnight Punpun), Akame ga Kill!; English; two provider lanes, sequential works per lane, one emulator, one debug build and one instrumentation method. Exact title/alias, terminal lookup/chapter pagination (max four chapter result pages), chapter 1, one original page through the existing Reader transport and sampled Android bitmap decode. 15s per invocation, 75s per work, 330s instrumentation cap and 35min job cap including cold build. Stop a source on observed 403/429. No synthetic substitution, challenge retries, automatic CDN grant expansion or content logging. MangaBall approval is an explicit external setting, not inferred; missing approval cannot pass. Pinned experimental source adapters, resource SDK used by MangaBall POST and MangaFire GET. Actual ReaderActivity, editorial binding and SQLite remain pending. No request marker committed, no live executed.

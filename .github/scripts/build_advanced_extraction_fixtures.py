@@ -7,6 +7,8 @@ import sys
 import zipfile
 
 source = pathlib.Path(sys.argv[1]).resolve()
+live = len(sys.argv) == 3 and sys.argv[2] == "--live"
+assert len(sys.argv) == (3 if live else 2)
 expected = "89b5979fff297c2a099359258c9f9249e0089db4"
 assert subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip() == expected
 sdk = pathlib.Path("docs/tsuzuki/provider-sdk/advanced-extraction.mjs").read_text()
@@ -61,12 +63,29 @@ for name in ("mangaall-ball", "mangafire"):
 ''' + anchor,
         )
         files[path] = http.encode()
+    if live and name == "mangafire":
+        path = "modules/api.js"
+        api = files[path].decode()
+        start = api.index("async function browserJson(")
+        end = api.index("export async function searchTitles(", start)
+        api = api[:start] + '''export async function apiJson(path, params = {}) {
+  const url = signedApiUrl(BASE_URL, path, pairsFromObject(params));
+  const handle = await requestResource("GET", url, {Accept:"application/json"});
+  try {
+    const value = await readResourceObject(handle);
+    if (value.error === "captcha_required") throw new Error("MangaFire challenge required");
+    return value;
+  } finally { await release(handle); }
+}
+
+''' + api[end:]
+        files[path] = ('import { requestResource, readResourceObject, release } from "./advanced-extraction.mjs";\n' + api).encode()
     files["manifest.json"] = json.dumps(manifest).encode()
-    files["main.js"] = wrapper.encode()
+    files["main.js"] = ('import source from "./original.js";\nexport default source;\n' if live else wrapper).encode()
     files["original.js"] = original.encode()
     files["modules/advanced-extraction.mjs"] = sdk.encode()
-    target = assets / ("advanced-" + name + "-unsigned.zip")
+    target = assets / ("advanced-" + ("live-" if live else "") + name + "-unsigned.zip")
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
         for path, content in sorted(files.items()):
             archive.writestr(path, content)
-    print("CONTROLLED_PACKAGE=" + name + "|UNSIGNED=true|LIVE=false")
+    print("CANDIDATE=" + name + "|UNSIGNED=true|LIVE=" + str(live).lower())
