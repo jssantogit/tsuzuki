@@ -89,7 +89,8 @@ internal object AdvancedExtractionLocalContract {
             server.enqueue(MockResponse(body = "three"))
             assertNull(invoke("""await tsuzuki.http.get("$origin/cookie")""", "app.tsuzuki.test.other").failure)
             // Drain the known five calls; no blocking wait for an unexpected request.
-            val requests = (1..5).map { requireNotNull(server.takeRequest(1, java.util.concurrent.TimeUnit.SECONDS)) }
+            assertEquals(5, server.requestCount)
+            val requests = (1..5).map { requireNotNull(server.takeRequest()) }
             assertEquals("probe=alpha", requests[3].headers["Cookie"])
             assertNull(requests[4].headers["Cookie"])
             server.enqueue(
