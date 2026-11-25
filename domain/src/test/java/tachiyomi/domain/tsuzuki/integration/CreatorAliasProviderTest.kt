@@ -58,6 +58,30 @@ class CreatorAliasProviderTest {
         resolveVerifiedCreatorAliases(metadata, mapOf(owner to "42"), listOf(provider)) shouldBe emptySet()
     }
 
+    @Test
+    fun `reviewed bibliographic alias requires exact independent catalog identity and role`() {
+        val reference = ReviewedCreatorAliasReference(
+            catalogOwner = owner,
+            catalogWorkId = "42",
+            role = CreatorCreditRole.AUTHOR,
+            creditedName = "Son Jeho",
+            creditUrl = "https://publisher.example/work/42",
+            aliases = mapOf("Published Alias" to "https://library.example/book/123"),
+        )
+        val verified = mapOf(owner to "42")
+        resolveReviewedCreatorAliases(metadata, verified, listOf(reference)) shouldBe setOf("Published Alias")
+        resolveReviewedCreatorAliases(metadata, emptyMap(), listOf(reference)) shouldBe emptySet()
+        for (invalid in listOf(
+            reference.copy(catalogWorkId = "43"),
+            reference.copy(role = CreatorCreditRole.ARTIST),
+            reference.copy(creditedName = "Another Person"),
+            reference.copy(aliases = mapOf("Fake" to "http://library.example/book/123")),
+            reference.copy(aliases = mapOf("Fake" to "https://publisher.example/other")),
+        )) {
+            resolveReviewedCreatorAliases(metadata, verified, listOf(invalid)) shouldBe emptySet()
+        }
+    }
+
     private fun source(entry: CatalogCreatorAliasEvidence) = object : CreatorAliasProvider {
         override val integrationId = owner
         override suspend fun getDetails(externalId: String): Result<CatalogItem> = error("Unused")

@@ -24,7 +24,18 @@ def plan():
     assert doc["schemaVersion"]==1 and doc["scope"]=="RESEARCH_EXPLICIT_OWNERS_NO_FALLBACK"
     assert doc["corpusSha256"]==DIGEST and [r["index"] for r in rows]==list(range(1,31))
     for row in rows:
-        assert set(row)<= {"index","catalog","searchTitle"}
+        assert set(row)<= {"index","catalog","searchTitle","reviewedCreatorReferences"}
+        references=row.get("reviewedCreatorReferences",[])
+        assert isinstance(references,list) and len(references)<=8
+        for ref in references:
+            assert set(ref)=={"nativeTitle","role","creditedName","creditUrl","aliases"}
+            assert isinstance(ref["nativeTitle"],str) and re.fullmatch(r"[가-힣 ]{2,128}",ref["nativeTitle"])
+            assert ref["role"] in ("AUTHOR","ARTIST")
+            assert isinstance(ref["creditedName"],str) and 0<len(ref["creditedName"].strip())<=128
+            assert isinstance(ref["creditUrl"],str) and ref["creditUrl"].startswith("https://")
+            assert isinstance(ref["aliases"],dict) and 1<=len(ref["aliases"])<=8
+            assert all(isinstance(name,str) and 0<len(name.strip())<=128 and isinstance(url,str)
+                       and url.startswith("https://") for name,url in ref["aliases"].items())
         assert row["catalog"] in SCOPES
         hint=row.get("searchTitle")
         assert hint is None or (row["catalog"]=="mangaupdates" and isinstance(hint,str) and 0<len(hint)<=256)

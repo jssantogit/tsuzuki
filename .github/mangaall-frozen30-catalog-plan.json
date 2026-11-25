@@ -111,7 +111,18 @@
     },
     {
       "index": 27,
-      "catalog": "shikimori"
+      "catalog": "shikimori",
+      "reviewedCreatorReferences": [
+        {
+          "nativeTitle": "재혼황후",
+          "role": "AUTHOR",
+          "creditedName": "Alphatart",
+          "creditUrl": "https://yenpress.com/series/the-remarried-empress",
+          "aliases": {
+            "Alpha Tart": "https://www.youtube.com/watch?v=rnCQtC0jTmQ"
+          }
+        }
+      ]
     },
     {
       "index": 28,
@@ -121,7 +132,20 @@
     {
       "index": 29,
       "catalog": "mangaupdates",
-      "searchTitle": "치즈인더트랩"
+      "searchTitle": "치즈인더트랩",
+      "reviewedCreatorReferences": [
+        {
+          "nativeTitle": "치즈인더트랩",
+          "role": "AUTHOR",
+          "creditedName": "Soonkki",
+          "creditUrl": "https://www.webtoons.com/en/drama/cheese-in-the-trap/list?title_no=99",
+          "aliases": {
+            "Sunkki": "https://vpl.bibliocommons.com/v2/search?page=7&query=%EC%A7%80%EC%9D%B4&searchType=author",
+            "순끼": "https://vpl.bibliocommons.com/v2/search?page=7&query=%EC%A7%80%EC%9D%B4&searchType=author",
+            "Soon Ki": "https://www.harum.io/products/cheese-in-the-trap-season-1-set-manhwa"
+          }
+        }
+      ]
     },
     {
       "index": 30,

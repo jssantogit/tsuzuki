@@ -98,6 +98,7 @@ const microdataHost = {http:host.http,dom:{selectText:async(handle,selector)=>{
   assert.equal(handle,"res:opaque");
   if (selector === "script[type=application/ld+json]") return raw({...series,author:null});
   semanticCalls.push(selector);
+  assert.ok(selector.startsWith(":tsuzuki-unique "));
   assert.ok(selector.includes('[itemid="'+url+'"]'));
   assert.ok(selector.includes('[itemtype="https://schema.org/ComicSeries"]'));
   assert.ok(selector.includes(' > [itemprop="name"]'));

@@ -27,6 +27,11 @@ class DefaultProviderDomHostService(
             throw ProviderHostServiceException("Provider DOM selector is invalid")
         }
 
+        // An opt-in uniqueness constraint narrows existing DOM access.
+        val uniqueText = cssSelector.startsWith(UNIQUE_TEXT_PREFIX)
+        val selector = cssSelector.removePrefix(UNIQUE_TEXT_PREFIX)
+        if (selector.isBlank()) throw ProviderHostServiceException("Provider DOM selector is invalid")
+
         val html = resources
             .read(owner, resourceHandle, ProviderResourceKind.HTML)
             .decodeToString()
@@ -36,8 +41,10 @@ class DefaultProviderDomHostService(
                 // Structured metadata is data, not executable script. Refuse
                 // ambiguous documents instead of selecting their first block.
                 document.select(cssSelector).singleOrNull()
+            } else if (uniqueText) {
+                document.select(selector).singleOrNull()
             } else {
-                document.selectFirst(cssSelector)
+                document.selectFirst(selector)
             }
         } catch (error: Exception) {
             throw ProviderHostServiceException("Provider DOM selector is invalid", error)
@@ -54,6 +61,7 @@ class DefaultProviderDomHostService(
 
     private companion object {
         const val JSON_LD_SELECTOR = "script[type=application/ld+json]"
+        const val UNIQUE_TEXT_PREFIX = ":tsuzuki-unique "
         const val MAX_SELECTOR_CHARS = 2 * 1024
         const val MAX_DOM_RESULT_CHARS = 64 * 1024
     }

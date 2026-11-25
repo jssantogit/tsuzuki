@@ -136,7 +136,7 @@ async function observeExactMicrodataCredits(host, handle, id) {
   const result = [];
   for (const role of MICRODATA_ROLES) {
     try {
-      const value = await host.dom.selectText(handle, selectors(role));
+      const value = await host.dom.selectText(handle, ":tsuzuki-unique " + selectors(role));
       if (typeof value !== "string" || value.length > 128 ||
           !/^[\p{L}\p{M}\p{N}][\p{L}\p{M}\p{N} .,'’·_()\-]{0,127}$/u.test(value.trim())) continue;
       const name = value.trim();

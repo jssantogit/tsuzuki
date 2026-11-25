@@ -32,9 +32,11 @@ import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.ReviewedCreatorAliasReference
 import tachiyomi.domain.tsuzuki.integration.interactor.ResolveCanonicalMetadata
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshotRepository
+import tachiyomi.domain.tsuzuki.integration.resolveReviewedCreatorAliases
 import tachiyomi.domain.tsuzuki.integration.resolveVerifiedCreatorAliases
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
@@ -111,12 +113,14 @@ class CollectProviderReadingEvidence private constructor(
     private val provisionalCursorRepository: ProviderProvisionalCursorRepository?,
     private val nativeMangaDotPortfolioResearch: Boolean,
     private val researchTitleQueryBatch: Int,
+    private val researchCreatorReferences: List<ReviewedCreatorAliasReference>,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
 
     init {
         require(researchTitleQueryBatch in 0..3)
         require(researchTitleQueryBatch == 0 || nativeMangaDotPortfolioResearch)
+        require(researchCreatorReferences.isEmpty() || nativeMangaDotPortfolioResearch)
     }
 
     @Inject
@@ -148,6 +152,7 @@ class CollectProviderReadingEvidence private constructor(
         provisionalCursorRepository = provisionalCursorRepository,
         nativeMangaDotPortfolioResearch = false,
         researchTitleQueryBatch = 0,
+        researchCreatorReferences = emptyList(),
         constructorMarker = Unit,
     )
 
@@ -167,6 +172,7 @@ class CollectProviderReadingEvidence private constructor(
         provisionalCursorRepository: ProviderProvisionalCursorRepository? = null,
         nativeMangaDotPortfolioResearch: Boolean = false,
         researchTitleQueryBatch: Int = 0,
+        researchCreatorReferences: List<ReviewedCreatorAliasReference> = emptyList(),
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -183,6 +189,7 @@ class CollectProviderReadingEvidence private constructor(
         provisionalCursorRepository = provisionalCursorRepository,
         nativeMangaDotPortfolioResearch = nativeMangaDotPortfolioResearch,
         researchTitleQueryBatch = researchTitleQueryBatch,
+        researchCreatorReferences = researchCreatorReferences,
         constructorMarker = Unit,
     )
 
@@ -277,8 +284,9 @@ class CollectProviderReadingEvidence private constructor(
                             .mapNotNull { (provider, entries) ->
                                 entries.map { it.externalId }.distinct().singleOrNull()?.let { provider to it }
                             }.toMap()
-                        resolveVerifiedCreatorAliases(resolved, verifiedIds, providers)
-                            .filter { normalizedCreator(it) != null }
+                        val published = resolveVerifiedCreatorAliases(resolved, verifiedIds, providers)
+                        val reviewed = resolveReviewedCreatorAliases(resolved, verifiedIds, researchCreatorReferences)
+                        (published + reviewed).filter { normalizedCreator(it) != null }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (_: Exception) {

@@ -65,6 +65,18 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
+    fun `unique semantic text rejects duplicate matches without changing ordinary selectors`(): Unit = runBlocking {
+        val html = "<div><span class='author'>Writer</span><span class='author'>Other</span>" +
+            "<span class='artist'>Artist</span></div>"
+        val handle = store.put(owner, ProviderResourceKind.HTML, html.encodeToByteArray())
+        val dom = DefaultProviderDomHostService(owner, store)
+        dom.selectText(handle, ".author") shouldBe "Writer"
+        dom.selectText(handle, ":tsuzuki-unique .artist") shouldBe "Artist"
+        runCatching { dom.selectText(handle, ":tsuzuki-unique .author") }.isFailure shouldBe true
+        runCatching { dom.selectText(handle, ":tsuzuki-unique .missing") }.isFailure shouldBe true
+    }
+
+    @Test
     fun `zip extraction keeps archive and entry bytes behind opaque handles`(): Unit = runBlocking {
         val archive = store.put(
             owner = owner,

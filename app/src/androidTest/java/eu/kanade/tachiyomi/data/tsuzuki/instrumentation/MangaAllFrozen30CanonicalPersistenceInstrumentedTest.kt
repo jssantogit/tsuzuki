@@ -56,15 +56,18 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider
+import tachiyomi.domain.tsuzuki.integration.CreatorCreditRole
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.MetadataProvider
 import tachiyomi.domain.tsuzuki.integration.RatingsProvider
+import tachiyomi.domain.tsuzuki.integration.ReviewedCreatorAliasReference
 import tachiyomi.domain.tsuzuki.integration.SearchProvider
 import tachiyomi.domain.tsuzuki.integration.TrackingProvider
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshot
+import tachiyomi.domain.tsuzuki.integration.resolveReviewedCreatorAliases
 import tachiyomi.domain.tsuzuki.integration.resolveVerifiedCreatorAliases
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
@@ -100,6 +103,7 @@ import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
+import java.text.Normalizer
 
 /**
  * Nonshipping live gate using the real Android database, production collector,
@@ -309,7 +313,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 }
             }
         }
-        fun refreshForBatch(batch: Int): RefreshChapterEvidence {
+        fun refreshForBatch(
+            batch: Int,
+            references: List<ReviewedCreatorAliasReference> = emptyList(),
+        ): RefreshChapterEvidence {
             val collector = CollectProviderReadingEvidence(
                 canonicalTitleRepository = titles,
                 providerRegistry = registry,
@@ -325,6 +332,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 provisionalCursorRepository = cursors,
                 nativeMangaDotPortfolioResearch = catalogScope == "explicit_plan",
                 researchTitleQueryBatch = batch,
+                researchCreatorReferences = references,
             )
             return RefreshChapterEvidence(
                 registry = metadataRegistry,
@@ -446,6 +454,27 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             ) {
                 return "CATALOG_FORMAT_OR_CREATOR_UNVERIFIED"
             }
+            // The fresh independent owner must publish the complete native
+            // title before reviewed citations can attach to its exact ID.
+            fun nativeKey(value: String): String? {
+                val compact = Normalizer.normalize(value, Normalizer.Form.NFC).filterNot(Char::isWhitespace)
+                return compact.takeIf { it.isNotEmpty() && it.all { char -> char in '가'..'힣' } }
+            }
+            val publishedNames = listOf(owner.title) + owner.titles.values
+            val references = plan.getOrNull(index - 1)?.get("reviewedCreatorReferences")?.jsonArray.orEmpty()
+                .mapNotNull { raw ->
+                    val entry = raw.jsonObject
+                    val native = nativeKey(entry.getValue("nativeTitle").jsonPrimitive.content)
+                    if (native == null || publishedNames.none { nativeKey(it) == native }) return@mapNotNull null
+                    ReviewedCreatorAliasReference(
+                        catalogOwner = IntegrationId(owner.provider),
+                        catalogWorkId = owner.providerId,
+                        role = CreatorCreditRole.valueOf(entry.getValue("role").jsonPrimitive.content),
+                        creditedName = entry.getValue("creditedName").jsonPrimitive.content,
+                        creditUrl = entry.getValue("creditUrl").jsonPrimitive.content,
+                        aliases = entry.getValue("aliases").jsonObject.mapValues { it.value.jsonPrimitive.content },
+                    )
+                }
             if (creditAudit) {
                 // Separate opt-in report: only public credit spellings for the
                 // locked research corpus. No HIDs, URLs, titles, raw responses,
@@ -462,7 +491,12 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     mapOf(ownerId to owner.providerId),
                     metadataRegistry.metadataProviders(),
                 )
-                val verifiedNames = (published + aliases).toSet()
+                val reviewed = resolveReviewedCreatorAliases(
+                    provenance,
+                    mapOf(ownerId to owner.providerId),
+                    references,
+                )
+                val verifiedNames = (published + aliases + reviewed).toSet()
                 val names = (owner.titles + ("source:primary" to owner.title)).entries.sortedWith(
                     compareBy(
                         { if (it.key.lowercase() in setOf("en", "english")) 0 else 1 },
@@ -625,7 +659,9 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     it.baseNumber == 1 && it.part == null && it.alphaSuffix == null &&
                     it.decimalFraction == null && it.confirmation != CanonicalChapterConfirmation.CONFLICTED
             }
-            if (refreshForBatch(0).execute(titleId, forceRefresh = true).isFailure) return "REFRESH_FAILED"
+            if (refreshForBatch(0, references).execute(titleId, forceRefresh = true).isFailure) {
+                return "REFRESH_FAILED"
+            }
             if (catalogScope == "explicit_plan") {
                 for (batch in 1..3) {
                     val observed = exactChapterOnes()
@@ -635,7 +671,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     if (observed.singleOrNull()?.let { resolver.options(it.id).isNotEmpty() } == true) break
                     // Each refresh uses the same source/lane budget; only the
                     // bounded window of independently observed names changes.
-                    if (refreshForBatch(batch).execute(titleId, forceRefresh = true).isFailure) {
+                    if (refreshForBatch(batch, references).execute(titleId, forceRefresh = true).isFailure) {
                         return "REFRESH_FAILED"
                     }
                 }
