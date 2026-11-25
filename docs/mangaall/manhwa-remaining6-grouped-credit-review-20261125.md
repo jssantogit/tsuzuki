@@ -19,3 +19,7 @@ The nonshipping code11 collector now allows a creditless, exact catalog-linked r
 ## Independent identity results for the remaining catalog cases
 
 Metadata-only CI #45619010687 verified exact MangaUpdates identities for indices 15, 21, 27 (native query), 28 and 29. Index 27's first examined MangaDot record linked to the verified catalog work; the second linked to a different series. This is negative evidence for that competing record, not authority to select a chapter release or a preferred edition. The explicit research plan uses MangaUpdates and the native title for index 27, preserving the same fixed corpus and all other owner assignments. Plan changes now trigger the offline audit; no live Reader workflow is dispatched.
+
+## Stale binding negative-evidence regression
+
+The offline Reader resolver excludes catalog-only and catalog-conflicting work associations even when a stale automatic or user-confirmed edition binding exists. This is a fail-closed metadata decision; no evidence, chapter progress or preference is deleted. The no-match audit uses the same exclusion. Synthetic regressions cover both classifications and persistence of the prior preference; the offline gate explicitly runs both Reader resolver and source-selection tests. No change grants reading authority to catalog links.

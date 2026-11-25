@@ -110,6 +110,7 @@ jobs:
             --tests '*CollectProviderReadingEvidenceTest' --tests '*CollectProviderReadingEvidenceEligibilityTest' \
             --tests '*RefreshProviderReadingChaptersTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' \
             --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' \
+            --tests '*ResolveProviderChapterReadingTest' --tests '*SelectMangaAllSourceTest' \
             :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' \
             :app:testDebugUnitTest --tests '*ShikimoriApiTest' \
             --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' \

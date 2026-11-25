@@ -552,6 +552,35 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `catalog only or conflicting work cannot reuse stale Reader bindings`(): Unit = runBlocking {
+        val observed = evidence(binding, "source-1", mappedChapterId = chapter.id)
+        for (verification in listOf(
+            ProviderWorkVerification.CATALOG_CORROBORATED,
+            ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT,
+        )) {
+            val association = ProviderWorkSourceAssociation(
+                canonicalTitleId = chapter.canonicalTitleId,
+                ref = binding.ref,
+                workVerification = verification,
+                editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+                observedAt = 100L,
+            )
+            val savedBindings = listOf(binding, binding.copy(verification = ProviderBindingVerification.USER_CONFIRMED))
+            for (saved in savedBindings) {
+                val reader = resolver(
+                    bindings = listOf(saved),
+                    evidence = listOf(observed),
+                    sourceAssociations = listOf(association),
+                    gateway = gateway { error("Catalog-only or conflicting work must not invoke pages") },
+                )
+                reader.options(chapter.id) shouldBe emptyList()
+                reader.auditNoMatch(chapter.id).eligibleSourceCount shouldBe 0
+                reader.auditNoMatch(chapter.id).reason shouldBe ProviderReadingNoMatchReason.NO_ELIGIBLE_SOURCE
+            }
+        }
+    }
+
+    @Test
     fun `Reader rejects volume-sized page deliveries for unqualified regular chapter zero`(): Unit = runBlocking {
         val zero = chapter.copy(
             id = "chapter-canonical-0",
