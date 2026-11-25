@@ -90,7 +90,7 @@ class DefaultProviderBinaryTransformHostService(
                 ProviderAdvancedExtraction.protobufBytes(bytes)
             }
             "document-query" -> {
-                val query = Json.parseToJsonElement(argument) as? JsonObject
+                val query = Json.parseToJsonElement(ProviderAdvancedExtraction.jsonPointer(argument, "")) as? JsonObject
                     ?: throw ProviderHostServiceException("Invalid document query")
                 require(query.keys == setOf("format", "selector", "attribute"))
                 fun string(key: String): String {

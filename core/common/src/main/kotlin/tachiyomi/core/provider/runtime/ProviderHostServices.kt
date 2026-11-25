@@ -17,6 +17,9 @@ interface ProviderDomHostService {
 }
 
 interface ProviderBrowserHostService {
+    suspend fun query(url: String, cssSelector: String, attribute: String?): String =
+        throw ProviderHostServiceException("Provider browser query is unavailable")
+
     suspend fun readText(
         url: String,
         cssSelector: String,
@@ -80,6 +83,9 @@ interface ProviderCryptoHostService {
 }
 
 interface ProviderImageHostService {
+    suspend fun packPages(handlesJson: String): ProviderResourceHandle =
+        throw ProviderHostServiceException("Provider image archive creation is unavailable")
+
     suspend fun compose(resourceHandle: ProviderResourceHandle, layout: String): ProviderResourceHandle =
         throw ProviderHostServiceException("Provider image composition is unavailable")
 

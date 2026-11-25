@@ -185,7 +185,13 @@ class ProviderHostInvocationFactory(
                     providerProfileName = providerProfileName(policy.providerId),
                 )
                 object : ProviderBrowserHostService, AutoCloseable {
-                    override suspend fun readText(url: String, cssSelector: String): String {
+                    override suspend fun readText(url: String, cssSelector: String): String =
+                        observed(url) { delegate.readText(url, cssSelector) }
+
+                    override suspend fun query(url: String, cssSelector: String, attribute: String?): String =
+                        observed(url) { delegate.query(url, cssSelector, attribute) }
+
+                    private suspend fun observed(url: String, block: suspend () -> String): String {
                         val operationId = UUID.randomUUID().toString()
                         val startedNanos = System.nanoTime()
                         fun emit(phase: ProviderBrowserDiagnosticPhase, failure: ProviderBrowserFailure? = null) {
@@ -206,7 +212,7 @@ class ProviderHostInvocationFactory(
                         }
                         emit(ProviderBrowserDiagnosticPhase.STARTED)
                         return try {
-                            delegate.readText(url, cssSelector).also {
+                            block().also {
                                 emit(ProviderBrowserDiagnosticPhase.SUCCEEDED)
                             }
                         } catch (error: Throwable) {
@@ -409,6 +415,18 @@ private class ProviderHostBridgeAdapter(
                 cssSelector.orEmpty(),
             )
         }
+
+    override fun browserQuery(url: String?, cssSelector: String?, attribute: String?): String =
+        runBlocking {
+            requireService(services.browser, "browser").query(
+                url.orEmpty(),
+                cssSelector.orEmpty(),
+                attribute?.takeIf { it.isNotEmpty() },
+            )
+        }
+
+    override fun imagePackPages(handlesJson: String?): String =
+        runBlocking { requireService(services.image, "image").packPages(handlesJson.orEmpty()).value }
 
     override fun browserReadText(url: String?, cssSelector: String?): String =
         runBlocking {

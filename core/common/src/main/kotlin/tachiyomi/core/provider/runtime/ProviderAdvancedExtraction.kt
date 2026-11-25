@@ -98,6 +98,7 @@ internal object ProviderAdvancedExtraction {
         require(format == "html" || format == "xml")
         require(selector.isNotBlank() && selector.length <= 256)
         require(':' !in selector && '(' !in selector && ')' !in selector && '\\' !in selector)
+        require("~=" !in selector) // Jsoup interprets this operator as a regular expression.
         require(attribute == null || Regex("[A-Za-z_][A-Za-z0-9_.:-]{0,63}").matches(attribute))
         val parsed = if (format == "xml") {
             // Jsoup parses XML without external entity resolution or network access.

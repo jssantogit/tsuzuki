@@ -25,4 +25,6 @@ interface IProviderHostBridge {
     String binaryInspect(String resourceHandle, String operation, String argument);
     String binaryTransform(String resourceHandle, String operation);
     String imageCompose(String resourceHandle, String layout);
+    String browserQuery(String url, String cssSelector, String attribute);
+    String imagePackPages(String handlesJson);
 }

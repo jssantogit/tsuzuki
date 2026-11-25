@@ -433,6 +433,13 @@ private fun IProviderHostBridge?.toHostServices(
         },
         browser = if (ProviderHostModule.BROWSER in allowedModules) {
             object : ProviderBrowserHostService {
+                override suspend fun query(url: String, cssSelector: String, attribute: String?): String =
+                    bridge.browserQuery(
+                        url.boundedHostArg(MAX_HOST_URL_CHARS, "browser URL"),
+                        cssSelector.boundedHostArg(MAX_HOST_SELECTOR_CHARS, "browser selector"),
+                        attribute.orEmpty().boundedHostArg(64, "browser attribute"),
+                    ).orEmpty().boundedExtractionResult()
+
                 override suspend fun readText(
                     url: String,
                     cssSelector: String,
@@ -478,7 +485,7 @@ private fun IProviderHostBridge?.toHostServices(
                         resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"),
                         operation.boundedHostArg(32, "binary operation"),
                         argument.boundedHostArg(4096, "binary argument"),
-                    ).orEmpty().boundedFutureChapterPage()
+                    ).orEmpty().boundedExtractionResult()
 
                 override suspend fun transform(resourceHandle: ProviderResourceHandle, operation: String): ProviderResourceHandle =
                     ProviderResourceHandle(
@@ -538,6 +545,11 @@ private fun IProviderHostBridge?.toHostServices(
         },
         image = if (ProviderHostModule.IMAGE in allowedModules) {
             object : ProviderImageHostService {
+                override suspend fun packPages(handlesJson: String): ProviderResourceHandle =
+                    ProviderResourceHandle(
+                        bridge.imagePackPages(handlesJson.boundedHostArg(32 * 1024, "image handles")).orEmpty(),
+                    )
+
                 override suspend fun compose(resourceHandle: ProviderResourceHandle, layout: String): ProviderResourceHandle =
                     ProviderResourceHandle(
                         bridge.imageCompose(
@@ -586,6 +598,13 @@ private fun IProviderHostBridge?.toHostServices(
             null
         },
     )
+}
+
+private fun String.boundedExtractionResult(): String {
+    if (length > 48 * 1024 || encodeToByteArray().size > 48 * 1024) {
+        throw tachiyomi.core.provider.runtime.ProviderHostServiceException("Extraction result exceeds Binder limit")
+    }
+    return this
 }
 
 private fun String.boundedFutureChapterPage(): String {

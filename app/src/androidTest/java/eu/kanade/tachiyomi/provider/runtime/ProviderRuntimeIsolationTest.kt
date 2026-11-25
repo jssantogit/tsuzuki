@@ -173,6 +173,12 @@ class ProviderRuntimeIsolationTest {
                 override fun storageRemove(key: String?) = Unit
                 override fun secretGet(key: String?): String? = null
                 override fun binaryFetch(url: String?): String = throw UnsupportedOperationException()
+                override fun browserQuery(url: String?, cssSelector: String?, attribute: String?): String =
+                    error("Unexpected browser query")
+
+                override fun imagePackPages(handlesJson: String?): String =
+                    error("Unexpected image packing")
+
                 override fun binaryInspect(resourceHandle: String?, operation: String?, argument: String?): String =
                     error("Unexpected binary inspection")
 
@@ -376,6 +382,12 @@ class ProviderRuntimeIsolationTest {
 
         override fun binaryFetch(url: String?): String =
             throw UnsupportedOperationException()
+
+        override fun browserQuery(url: String?, cssSelector: String?, attribute: String?): String =
+            error("Unexpected browser query")
+
+        override fun imagePackPages(handlesJson: String?): String =
+            error("Unexpected image packing")
 
         override fun binaryInspect(resourceHandle: String?, operation: String?, argument: String?): String =
 

@@ -105,6 +105,7 @@ internal fun QuickJs.installHostServices(
         // Pure bounded extraction operates only on data already held by this VM.
         // It does not grant network, filesystem, browser or resource-handle access.
         define("protocol") {
+            asyncFunction("extractionVersion") { _ -> "1" }
             asyncFunction("jsonPointer") { args ->
                 hostFailures.call {
                     ProviderAdvancedExtraction.jsonPointer(args.stringArgument(0), args.stringArgument(1))
@@ -188,6 +189,15 @@ internal fun QuickJs.installHostServices(
         }
         services.browser?.let { browser ->
             define("browser") {
+                asyncFunction("query") { args ->
+                    hostFailures.call {
+                        browser.query(
+                            args.stringArgument(0),
+                            args.stringArgument(1),
+                            args.optionalStringArgument(2),
+                        )
+                    }
+                }
                 asyncFunction("readText") { args ->
                     hostFailures.call {
                         browser.readText(
@@ -301,6 +311,9 @@ internal fun QuickJs.installHostServices(
         }
         services.image?.let { image ->
             define("image") {
+                asyncFunction("packPages") { args ->
+                    hostFailures.call { image.packPages(args.stringArgument(0)).value }
+                }
                 asyncFunction("compose") { args ->
                     hostFailures.call {
                         image.compose(ProviderResourceHandle(args.stringArgument(0)), args.stringArgument(1)).value

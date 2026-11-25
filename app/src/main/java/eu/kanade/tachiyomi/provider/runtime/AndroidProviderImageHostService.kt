@@ -14,6 +14,8 @@ import tachiyomi.core.provider.runtime.ProviderResourceOwner
 import tachiyomi.core.provider.runtime.ProviderResourceStore
 import java.io.ByteArrayOutputStream
 import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class AndroidProviderImageHostService(
     private val owner: ProviderResourceOwner,
@@ -25,6 +27,43 @@ class AndroidProviderImageHostService(
     init {
         require(maxDimension > 0) { "Provider image dimension limit must be positive" }
         require(maxPixels > 0L) { "Provider image pixel limit must be positive" }
+    }
+
+    /** Pack previously transformed PNG resources into the existing managed CBZ delivery path. */
+    override suspend fun packPages(handlesJson: String): ProviderResourceHandle {
+        require(handlesJson.length <= 32 * 1024 && handlesJson.encodeToByteArray().size <= 32 * 1024)
+        val handles = JSONArray(handlesJson)
+        require(handles.length() in 1..64)
+        val output = ByteArrayOutputStream()
+        val seen = mutableSetOf<String>()
+        var totalBytes = 0L
+        ZipOutputStream(object : java.io.OutputStream() {
+            override fun write(value: Int) {
+                require(output.size() < 16 * 1024 * 1024)
+                output.write(value)
+            }
+
+            override fun write(bytes: ByteArray, offset: Int, count: Int) {
+                require(output.size().toLong() + count <= 16L * 1024L * 1024L)
+                output.write(bytes, offset, count)
+            }
+        }).use { zip ->
+            for (index in 0 until handles.length()) {
+                val handle = handles.get(index) as? String
+                    ?: throw ProviderHostServiceException("Invalid image handle")
+                require(handle.length <= 256 && seen.add(handle))
+                // Only Host-created transformed image resources may be packed.
+                val bytes = resources.read(owner, ProviderResourceHandle(handle), ProviderResourceKind.IMAGE)
+                totalBytes += bytes.size
+                require(totalBytes <= 16L * 1024L * 1024L)
+                validateEncodedImageBounds(bytes)
+                require(bytes.size >= 8 && bytes.copyOfRange(0, 8).contentEquals(PNG_SIGNATURE))
+                zip.putNextEntry(ZipEntry(String.format(Locale.US, "%05d.png", index + 1)))
+                zip.write(bytes)
+                zip.closeEntry()
+            }
+        }
+        return resources.put(owner, ProviderResourceKind.ARCHIVE, output.toByteArray())
     }
 
     /**
@@ -172,6 +211,10 @@ class AndroidProviderImageHostService(
             throw ProviderHostServiceException("Provider image dimensions exceed the configured limit")
         }
         validatePixelCount(options.outWidth, options.outHeight)
+    }
+
+    private companion object {
+        val PNG_SIGNATURE = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
     }
 
     private fun validatePixelCount(width: Int, height: Int) {

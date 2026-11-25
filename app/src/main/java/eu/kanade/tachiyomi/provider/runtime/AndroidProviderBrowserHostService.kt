@@ -47,9 +47,17 @@ class AndroidProviderBrowserHostService(
         require(maxTextChars > 0) { "Provider browser text limit must be positive" }
     }
 
-    override suspend fun readText(
+    override suspend fun readText(url: String, cssSelector: String): String =
+        read(url, cssSelector, attribute = null, multiple = false)
+
+    override suspend fun query(url: String, cssSelector: String, attribute: String?): String =
+        read(url, cssSelector, attribute, multiple = true)
+
+    private suspend fun read(
         url: String,
         cssSelector: String,
+        attribute: String?,
+        multiple: Boolean,
     ): String {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "Provider Browser Host Service must not block the Android main thread"
@@ -58,6 +66,7 @@ class AndroidProviderBrowserHostService(
             throw ProviderHostServiceException("Provider browser selector is invalid")
         }
 
+        require(attribute == null || Regex("[A-Za-z_][A-Za-z0-9_.:-]{0,63}").matches(attribute))
         if (closed.get()) {
             throw ProviderHostServiceException("Provider browser broker is closed")
         }
@@ -179,6 +188,32 @@ class AndroidProviderBrowserHostService(
 
                         val generation = navigationGeneration.incrementAndGet()
                         val selector = JSONObject.quote(cssSelector)
+                        val quotedAttribute = attribute?.let(JSONObject::quote) ?: "null"
+                        val script = if (multiple) {
+                            """
+                            (() => {
+                              const nodes = document.querySelectorAll($selector);
+                              if (!nodes.length) return null;
+                              if (nodes.length > 128) return {error: "limit"};
+                              const attribute = $quotedAttribute;
+                              const values = [];
+                              for (const node of nodes) {
+                                const value = attribute === null ? node.textContent : node.getAttribute(attribute);
+                                if (value !== null && value.length > 49152) return {error: "limit"};
+                                values.push(value);
+                              }
+                              const result = JSON.stringify(values);
+                              return result.length <= 49152 ? result : {error: "limit"};
+                            })()
+                            """.trimIndent()
+                        } else {
+                            """
+                            (() => {
+                              const node = document.querySelector($selector);
+                              return node ? node.textContent : null;
+                            })()
+                            """.trimIndent()
+                        }
                         fun probe() {
                             if (finished.get() || generation != navigationGeneration.get()) return
                             val currentUrl = view.url ?: return
@@ -188,21 +223,20 @@ class AndroidProviderBrowserHostService(
                                 complete(Result.failure(error))
                                 return
                             }
-                            view.evaluateJavascript(
-                                """
-                                (() => {
-                                  const node = document.querySelector($selector);
-                                  return node ? node.textContent : null;
-                                })()
-                                """.trimIndent(),
-                            ) { raw ->
+                            view.evaluateJavascript(script) { raw ->
                                 if (!finished.get() && generation == navigationGeneration.get()) {
                                     if (raw == "null") {
                                         // A rendered SPA may populate the requested node after load.
                                         // The original operation deadline and origin policy still apply.
                                         mainHandler.postDelayed({ probe() }, 150L)
                                     } else {
-                                        runCatching { decodeJavascriptText(raw) }
+                                        runCatching {
+                                            val text = decodeJavascriptText(raw)
+                                            if (multiple && text.encodeToByteArray().size > 48 * 1024) {
+                                                throw ProviderHostServiceException("Provider browser query exceeds result limit")
+                                            }
+                                            text
+                                        }
                                             .onSuccess { complete(Result.success(it)) }
                                             .onFailure { complete(Result.failure(it)) }
                                     }
@@ -305,6 +339,9 @@ class AndroidProviderBrowserHostService(
         )
 
     private fun decodeJavascriptText(rawValue: String): String {
+        if (rawValue.length > maxTextChars.toLong() * 6 + 2) {
+            throw ProviderHostServiceException("Provider browser result exceeds the text limit")
+        }
         val value = try {
             JSONTokener(rawValue).nextValue()
         } catch (error: Exception) {
