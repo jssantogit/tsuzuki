@@ -336,14 +336,18 @@ data class ProviderWorkSourceAssessment(
     val workVerification: ProviderWorkVerification,
     val editionQualification: ProviderSourceEditionQualification,
     val sourceChapterPageAttested: Boolean = false,
+    /** In-memory proof, set only after an exact, independently verified native research preview. */
+    val researchCatalogIdentity: String? = null,
 ) {
     /**
      * A first page with source IDs and numerically valid chapter labels permits
      * *provisional, per-HID* observation only. No editorial equivalence is asserted.
      */
     val canCollectProvisionalChapters: Boolean
-        get() = workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED &&
-            editionQualification == ProviderSourceEditionQualification.UNRESOLVED &&
+        get() = (
+            workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED ||
+                (workVerification == ProviderWorkVerification.CATALOG_CORROBORATED && researchCatalogIdentity != null)
+            ) && editionQualification == ProviderSourceEditionQualification.UNRESOLVED &&
             sourceChapterPageAttested
 
     /**

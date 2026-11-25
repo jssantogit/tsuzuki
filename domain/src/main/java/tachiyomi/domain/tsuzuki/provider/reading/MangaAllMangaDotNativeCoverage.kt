@@ -25,14 +25,18 @@ object MangaAllMangaDotNativeCoverage {
         binding: ProviderBindingRef,
         candidate: ProviderWorkCandidate,
         page: ProviderPage<ProviderChapterObservation>,
+        independentlyVerifiedMangaUpdatesId: String? = null,
     ): ProviderWorkCandidate? {
+        val catalogMatch = independentlyVerifiedMangaUpdatesId != null &&
+            independentlyVerifiedMangaUpdatesId.matches(Regex("[1-9][0-9]{0,17}")) &&
+            candidate.mangaUpdatesReferenceIds == listOf(independentlyVerifiedMangaUpdatesId)
         if (artifactVersionCode != 11L ||
             binding.providerId.value != "app.tsuzuki.mangaall" ||
             binding.facetId !in setOf("en", "pt-br") ||
             candidate.externalWorkId != binding.externalWorkId ||
             !WORK_ID.matches(binding.externalWorkId) ||
             candidate.detailOutcome !in VERIFIED_DETAILS ||
-            candidate.authors.isEmpty()
+            (candidate.authors.isEmpty() && !catalogMatch)
         ) {
             return null
         }

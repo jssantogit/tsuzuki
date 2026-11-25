@@ -441,18 +441,30 @@ class CollectProviderReadingEvidence private constructor(
         for (advance in progress) {
             val registration = providerRegistry.registration(advance.ref.providerId) ?: continue
             if (registration.lifecycleStatus != ProviderLifecycleStatus.ENABLED ||
-                registration.descriptor.version.code != advance.providerVersionCode ||
-                registration.configurationFingerprint != advance.configurationFingerprint
+                registration.descriptor.version.code != advance.providerVersionCode
             ) {
                 continue
             }
             val source = workSourceAssociationRepository?.get(advance.ref) ?: continue
             if (source.canonicalTitleId != advance.canonicalTitleId ||
-                source.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED ||
                 source.editionQualification != ProviderSourceEditionQualification.UNRESOLVED
             ) {
                 continue
             }
+            val fingerprint = when (source.workVerification) {
+                ProviderWorkVerification.AUTHOR_CORROBORATED -> registration.configurationFingerprint
+                ProviderWorkVerification.CATALOG_CORROBORATED -> {
+                    if (registration.descriptor.version.code != 11L ||
+                        MangaAllReadingIdentity.sourceId(advance.ref) != "mangadot"
+                    ) {
+                        continue
+                    }
+                    val identity = verifiedMangaUpdatesResearchIdentity(advance.canonicalTitleId) ?: continue
+                    catalogCursorFingerprint(registration.configurationFingerprint, identity)
+                }
+                else -> continue
+            }
+            if (fingerprint != advance.configurationFingerprint) continue
             repository.commit(advance)
         }
     }
@@ -770,7 +782,10 @@ class CollectProviderReadingEvidence private constructor(
                                     // deadline can cancel its native chapter preview. Preserve
                                     // every rival HID in the group and the existing bound.
                                     val eligible = assessments.any {
-                                        it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED &&
+                                        (
+                                            it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED ||
+                                                it.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED
+                                            ) &&
                                             it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED
                                     }
                                     if (eligible && exact.size <= MAX_COVERAGE_CONTENDERS) {
@@ -842,6 +857,7 @@ class CollectProviderReadingEvidence private constructor(
                     canonicalCreators,
                     candidates,
                     nativePreviews,
+                    independentlyVerifiedMangaUpdatesId = independentCatalogId,
                 )
                     .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
                     .forEach { discovered[it.ref] = it }
@@ -877,6 +893,16 @@ class CollectProviderReadingEvidence private constructor(
         } catch (_: Exception) {
             null
         }
+    }
+
+    // Scope continuation to the exact independently verified work, without
+    // storing raw catalog IDs in the cursor or changing the database schema.
+    private fun catalogCursorFingerprint(configuration: String, identity: String): String {
+        val material = listOf("mangaall-code11-catalog-v1", configuration, identity).joinToString("\u0000")
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(material.encodeToByteArray())
+            .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+        return "catalog-v1:$digest"
     }
 
     private suspend fun recordResearchCatalogAssessment(
@@ -1261,6 +1287,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalCreators: Set<String>?,
         candidates: List<ProviderWorkCandidate>,
         nativePreviews: MutableMap<ProviderBindingRef, NativeChapterPreview>?,
+        independentlyVerifiedMangaUpdatesId: String?,
     ): List<ProviderWorkCandidate> {
         val descriptor = target.registration.descriptor
         if (!nativeMangaDotPortfolioResearch || descriptor.id.value != "app.tsuzuki.mangaall" ||
@@ -1276,14 +1303,25 @@ class CollectProviderReadingEvidence private constructor(
             queryTitle,
             canonicalCreators,
             contenders,
+            independentlyVerifiedMangaUpdatesId,
         ).associateBy { it.ref.externalWorkId }
         val previews = mutableListOf<ProviderWorkCandidate>()
         for (candidate in contenders) {
             val assessment = assessments[candidate.externalWorkId] ?: continue
-            if (assessment.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED ||
-                assessment.editionQualification != ProviderSourceEditionQualification.UNRESOLVED
-            ) {
+            val catalogIdentity = if (assessment.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED) {
+                independentlyVerifiedMangaUpdatesId ?: continue
+            } else {
+                if (assessment.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED) continue
+                null
+            }
+            if (assessment.editionQualification != ProviderSourceEditionQualification.UNRESOLVED) continue
+            if (catalogIdentity != null && verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity) {
                 continue
+            }
+            val fingerprint = if (catalogIdentity != null) {
+                catalogCursorFingerprint(target.registration.configurationFingerprint, catalogIdentity)
+            } else {
+                target.registration.configurationFingerprint
             }
             // A native snapshot has exactly one generation per provider.
             // Starting a new preview destroys a valid saved continuation,
@@ -1293,7 +1331,7 @@ class CollectProviderReadingEvidence private constructor(
                 canonicalTitleId,
                 assessment.ref,
                 descriptor.version.code,
-                target.registration.configurationFingerprint,
+                fingerprint,
             )
             val previewObservedAt = clock()
             val initial = gateway.chapters(
@@ -1303,8 +1341,11 @@ class CollectProviderReadingEvidence private constructor(
             val restart = saved != null && initial is ProviderCallResult.Failure &&
                 initial.error.code == ProviderErrorCode.SOURCE_READ_ERROR &&
                 initial.error.httpStatus == null && initial.error.sourceFailureCode == null
+            if (catalogIdentity != null && verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity) {
+                continue
+            }
             val result = if (restart) {
-                // Exact same author-corroborated work; the old snapshot may
+                // Exact same independently corroborated work; the old snapshot may
                 // have expired or been replaced. Only one fresh start, not
                 // an arbitrary retry or an authoritative inventory.
                 gateway.chapters(descriptor.id, ProviderReadingChaptersRequest(assessment.ref))
@@ -1317,7 +1358,11 @@ class CollectProviderReadingEvidence private constructor(
                 assessment.ref,
                 candidate,
                 page,
+                independentlyVerifiedMangaUpdatesId = catalogIdentity,
             ) ?: continue
+            if (catalogIdentity != null && verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity) {
+                continue
+            }
             if (restart && saved != null) {
                 // Clearing an unusable operational hint never advances past
                 // unwritten evidence. CAS protects a concurrently newer cursor.
@@ -1339,6 +1384,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalCreators: Set<String>?,
         matches: List<ProviderWorkCandidate>,
         nativePreviews: MutableMap<ProviderBindingRef, NativeChapterPreview>? = null,
+        independentlyVerifiedMangaUpdatesId: String? = null,
     ): List<ProviderWorkSourceAssessment> {
         val repository = workSourceAssociationRepository ?: return emptyList()
         // Keep source-specific trust. MangaDex requires explicit details and
@@ -1356,6 +1402,7 @@ class CollectProviderReadingEvidence private constructor(
             canonicalCreators,
             matches,
             nativePreviews,
+            independentlyVerifiedMangaUpdatesId,
         )
         if (trusted.isEmpty()) return emptyList()
         val assessed = ProviderWorkSourcePortfolio.assess(
@@ -1364,9 +1411,18 @@ class CollectProviderReadingEvidence private constructor(
             queryTitle = queryTitle,
             independentlyVerifiedAuthors = canonicalCreators,
             candidates = trusted,
+            independentlyVerifiedMangaUpdatesId = independentlyVerifiedMangaUpdatesId,
         )
         val retained = mutableListOf<ProviderWorkSourceAssessment>()
         for (assessment in assessed) {
+            val catalogIdentity = if (assessment.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED) {
+                independentlyVerifiedMangaUpdatesId ?: continue
+            } else {
+                null
+            }
+            if (catalogIdentity != null && verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity) {
+                continue
+            }
             try {
                 val recorded = repository.observe(
                     ProviderWorkSourceAssociation(
@@ -1377,7 +1433,17 @@ class CollectProviderReadingEvidence private constructor(
                         observedAt = clock(),
                     ),
                 )
-                if (recorded) retained += assessment
+                if (recorded) {
+                    if (catalogIdentity == null) {
+                        retained += assessment
+                    } else if (repository.get(assessment.ref)?.workVerification ==
+                        ProviderWorkVerification.CATALOG_CORROBORATED
+                    ) {
+                        // Only the native preview path above can furnish this
+                        // in-memory proof. The stored association is not enough.
+                        retained += assessment.copy(researchCatalogIdentity = catalogIdentity)
+                    }
+                }
                 traceWorkSourceAssociation(
                     canonicalTitleId,
                     target,
@@ -1558,7 +1624,15 @@ class CollectProviderReadingEvidence private constructor(
         for (source in sources.take(MAX_COVERAGE_CONTENDERS)) {
             if (!source.canCollectProvisionalChapters) continue
             val versionCode = target.registration.descriptor.version.code
-            val fingerprint = target.registration.configurationFingerprint
+            val catalogIdentity = source.researchCatalogIdentity
+            suspend fun catalogStillCurrent(): Boolean = catalogIdentity == null ||
+                verifiedMangaUpdatesResearchIdentity(canonicalTitleId) == catalogIdentity
+            if (!catalogStillCurrent()) continue
+            val fingerprint = if (catalogIdentity != null) {
+                catalogCursorFingerprint(target.registration.configurationFingerprint, catalogIdentity)
+            } else {
+                target.registration.configurationFingerprint
+            }
             val saved = provisionalCursorRepository?.get(
                 canonicalTitleId,
                 source.ref,
@@ -1603,7 +1677,7 @@ class CollectProviderReadingEvidence private constructor(
             // If a concurrent checkpoint changed, fetch its current page instead.
             // Reuse the original observation timestamp, not the later collection time.
             val preview = nativePreviews[source.ref]?.takeIf { it.cursor == saved?.nextCursor }
-            val chapterGateway = if (preview == null) {
+            val chapterGateway = if (preview == null && catalogIdentity == null) {
                 gateway
             } else {
                 object : ProviderReadingGateway by gateway {
@@ -1613,14 +1687,16 @@ class CollectProviderReadingEvidence private constructor(
                         providerId: ProviderId,
                         request: ProviderReadingChaptersRequest,
                     ): ProviderCallResult<ProviderPage<ProviderChapterObservation>> {
-                        val reuse = firstRequest && providerId == source.ref.providerId &&
+                        if (!catalogStillCurrent()) return malformed()
+                        val reuse = preview != null && firstRequest && providerId == source.ref.providerId &&
                             request.binding == source.ref && request.cursor == preview.cursor
                         firstRequest = false
-                        return if (reuse) {
+                        val result = if (reuse && preview != null) {
                             ProviderCallResult.Success(preview.page)
                         } else {
                             gateway.chapters(providerId, request)
                         }
+                        return if (catalogStillCurrent()) result else malformed()
                     }
                 }
             }
@@ -1720,6 +1796,7 @@ class CollectProviderReadingEvidence private constructor(
                     observed = result.value,
                 )
             }
+            if (!catalogStillCurrent()) continue
             trustedPages.forEach { (page, pageObservedAt) ->
                 // Reuse the provisional evidence already built for timeout salvage.
                 // Rehashing the same chapter IDs would allocate a second copy.

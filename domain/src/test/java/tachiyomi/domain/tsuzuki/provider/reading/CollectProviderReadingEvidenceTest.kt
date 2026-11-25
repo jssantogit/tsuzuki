@@ -3411,7 +3411,16 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `research records independently verified creditless work without chapter or Reader authority`() = runTest {
+    fun `research collects only native provisional evidence for creditless catalog work`() = runTest {
+        verifyCatalogResearchCollection(revoke = false)
+    }
+
+    @Test
+    fun `research discards native preview after catalog permission is revoked`() = runTest {
+        verifyCatalogResearchCollection(revoke = true)
+    }
+
+    private suspend fun verifyCatalogResearchCollection(revoke: Boolean) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val owner = IntegrationId("mangaupdates")
         val independentId = "123456789012345678"
@@ -3426,9 +3435,10 @@ class CollectProviderReadingEvidenceTest {
             refreshedAt = 42L,
         )
         val integrations = mockk<IntegrationRegistry>(relaxed = true)
+        var consent = true
         every {
             integrations.isGlobalCapabilityActive(owner, IntegrationCapability.METADATA_BASIC)
-        } returns true
+        } answers { consent }
         val observations = MemoryWorkSourceAssociationRepository()
         val bindings = MemoryBindingRepository()
         val ref = ProviderBindingRef(mangaAll, "en", "mangadot:317")
@@ -3463,7 +3473,23 @@ class CollectProviderReadingEvidenceTest {
                         )
                     }
                 },
-                chaptersHandler = { error("Catalog proof alone must not request chapters") },
+                chaptersHandler = { request ->
+                    request.binding shouldBe ref
+                    if (revoke) consent = false
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "mangadot:chapters:111",
+                                    rawLabel = "Chapter 1",
+                                    rawNumber = 1.0,
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
                 expectedProviderId = mangaAll,
             ),
             bindingRepository = bindings,
@@ -3477,8 +3503,16 @@ class CollectProviderReadingEvidenceTest {
         val result = collector.execute(canonicalTitle.id)
         catalogVersions shouldBe listOf(1)
         observations.get(ref)?.workVerification shouldBe ProviderWorkVerification.CATALOG_CORROBORATED
-        result.partialEvidence shouldBe emptyList()
+        result.partialEvidence.map { it.externalChapterKey } shouldBe
+            if (revoke) emptyList() else listOf("mangadot:chapters:111")
         result.snapshots shouldBe emptyList()
+        if (revoke) {
+            result.cursorProgress shouldBe emptyList()
+        } else {
+            val progress = result.cursorProgress.single()
+            progress.configurationFingerprint.startsWith("catalog-v1:") shouldBe true
+            progress.configurationFingerprint.contains(independentId) shouldBe false
+        }
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
     }
 

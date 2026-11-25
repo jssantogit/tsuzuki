@@ -70,6 +70,31 @@ class MangaAllMangaDotNativeCoverageTest {
     }
 
     @Test
+    fun `creditless native preview requires the independently verified exact catalog reference`() {
+        val creditless = candidate.copy(
+            authors = emptyList(),
+            mangaUpdatesReferenceIds = listOf("123456789012345678"),
+        )
+        val page = ProviderPage(listOf(row), null)
+        MangaAllMangaDotNativeCoverage.fromObservedPage(11L, binding, creditless, page) shouldBe null
+        MangaAllMangaDotNativeCoverage.fromObservedPage(11L, binding, creditless, page, "123") shouldBe null
+        MangaAllMangaDotNativeCoverage.fromObservedPage(
+            11L,
+            binding,
+            creditless,
+            page,
+            "123456789012345678",
+        )?.coverageOutcome shouldBe ProviderCoverageOutcome.OBSERVED
+        MangaAllMangaDotNativeCoverage.fromObservedPage(
+            10L,
+            binding,
+            creditless,
+            page,
+            "123456789012345678",
+        ) shouldBe null
+    }
+
+    @Test
     fun `native preview rejects duplicate foreign and structurally invalid chapter rows`() {
         val invalidPages = listOf(
             ProviderPage(emptyList(), null),
