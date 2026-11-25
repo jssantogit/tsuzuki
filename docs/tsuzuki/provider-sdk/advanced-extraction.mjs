@@ -68,3 +68,34 @@ export async function packManagedCbz(handles) {
   const archive = await method("image", "packPages")(JSON.stringify(handles));
   return method("binary", "promote")(archive, "CBZ");
 }
+
+/** Reassemble a bounded top-level API object from one invocation-owned resource. */
+export async function readResourceObject(handle, maxItems = 16000) {
+  const shape = await jsonShape(handle);
+  if (shape.kind !== "object" || !shape.keys) throw new Error("Expected response object");
+  const result = Object.create(null);
+  let remaining = maxItems;
+  for (const [key, kind] of Object.entries(shape.keys)) {
+    const pointer = "/" + key.replace(/~/g, "~0").replace(/\//g, "~1");
+    if (kind !== "array") {
+      result[key] = await jsonPointer(handle, pointer);
+      continue;
+    }
+    const rows = [];
+    let offset = 0, total = null;
+    for (let round = 0; round < 256; round++) {
+      const page = await jsonArrayPage(handle, pointer, offset, 256);
+      if (page.total > remaining || (total !== null && total !== page.total)) {
+        throw new Error("Resource array limit or inconsistent total");
+      }
+      total = page.total;
+      for (const item of page.items) rows.push(item);
+      if (page.nextOffset === null) break;
+      offset = page.nextOffset;
+    }
+    if (total === null || rows.length !== total) throw new Error("Incomplete resource array");
+    remaining -= rows.length;
+    result[key] = rows;
+  }
+  return result;
+}

@@ -26,4 +26,24 @@ Pure extraction works inside the isolated runtime with already acquired inline i
 
 Add reviewed browser/HTTP session controls if required by a permitted source, reusable SDK integration in the provider repository and end-to-end source adapters. General WebAssembly, arbitrary browser execution, and DRM bypass are out of scope. Do not bridge arbitrary JavaScript evaluation or copy challenge credentials. Keep V1 compatibility and signed packages untouched.
 
-Use MangaBall and MangaFire as independent acceptance lanes in one opt-in Android workflow after implementation. For each: validate manifest, QuickJS/Binder, allowed origins, exact bibliographic identity, chapter-one and terminal pagination, source-scoped IDs, reading page materialization, actual Reader decoding/render and SQLite restart. Require independent source success; a blocked upstream is INCONCLUSIVE/RED, not a synthetic pass. In the same gate, controlled fixtures must exercise each new primitive, malformed responses, limits, cancellation, cross-provider isolation and unchanged V1 behavior. No payload/cookie/URL logging. No automatic CAPTCHA bypass, and access only where authorized. No tests or workflows added in this increment; implementation is not yet complete.
+Use MangaBall and MangaFire as independent acceptance lanes in one opt-in Android workflow after implementation. For each: validate manifest, QuickJS/Binder, allowed origins, exact bibliographic identity, chapter-one and terminal pagination, source-scoped IDs, reading page materialization, actual Reader decoding/render and SQLite restart. Require independent source success; a blocked upstream is INCONCLUSIVE/RED, not a synthetic pass. In the same gate, controlled fixtures must exercise each new primitive, malformed responses, limits, cancellation, cross-provider isolation and unchanged V1 behavior. No payload/cookie/URL logging. No automatic CAPTCHA bypass, and access only where authorized. The first controlled gate is prepared below; full implementation and live acceptance remain incomplete.
+
+## Controlled Android gate (prepared, not run)
+
+One instrumentation method, two independent adapter lanes. Pinned provider source
+89b5979fff297c2a099359258c9f9249e0089db4 is checked out and packaged into transient
+unsigned test-only ZIPs. MangaBall's existing prototype pages export and resource
+POST SDK are wired only in its fixture; MangaFire uses its existing API module.
+Both are wrapped only for test image composition and managed CBZ verification.
+All HTTP is intercepted; no source traffic or automatic challenge bypass.
+Checks cover exact source lookup, large POST (>192 KiB), terminal chapter pagination,
+page metadata, transformed pixels, managed archive and provider ownership.
+The controlled workflow is gated on the exact branch and an explicit
+.github/provider-advanced-extraction-gate.request containing OFFLINE_CONTROLLED_ONLY.
+No marker is committed with the implementation.
+
+This is not the full live acceptance gate. Browser, protobuf, XML, compression,
+negative limits, cancellation, Reader UI, canonical resolution and SQLite restart
+still need integrated coverage. Production SDK adoption and permitted live source
+access must be completed before declaring the feature ready. MangaBall API
+authorization remains pending; a controlled pass cannot change that status.
