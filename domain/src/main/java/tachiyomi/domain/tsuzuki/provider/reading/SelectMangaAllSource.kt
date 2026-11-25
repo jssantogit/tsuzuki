@@ -73,6 +73,8 @@ class SelectMangaAllSource(
         }
         if (
             association.workVerification == ProviderWorkVerification.AUTHOR_CONFLICT ||
+            association.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT ||
+            association.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED ||
             association.workVerification == ProviderWorkVerification.TITLE_UNVERIFIED
         ) {
             return MangaAllSourceSelectionResult.BLOCKED

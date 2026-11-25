@@ -659,6 +659,11 @@ class CollectProviderReadingEvidence private constructor(
         val source = requireNotNull(target.researchSource)
         if (canonicalCreators.isNullOrEmpty()) return ProviderReadingEvidenceCollection(complete = false)
         val descriptor = target.registration.descriptor
+        val independentCatalogId = if (source == "mangadot" && descriptor.version.code == 11L) {
+            verifiedMangaUpdatesResearchIdentity(canonicalTitleId)
+        } else {
+            null
+        }
         val discovered = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssessment>()
         val nativePreviews = mutableMapOf<ProviderBindingRef, NativeChapterPreview>()
         val initialCursor = ProviderCursor("""{"v":1,"remaining":{"$source":{"c":null,"o":0}}}""")
@@ -693,6 +698,7 @@ class CollectProviderReadingEvidence private constructor(
                             maxPages = 1,
                             startingCursor = query.cursor,
                             expectedSourcePrefix = "$source:",
+                            catalogEvidenceVersion = if (independentCatalogId != null) 1 else null,
                         )
                     }
                     when (result) {
@@ -733,6 +739,7 @@ class CollectProviderReadingEvidence private constructor(
                                     title,
                                     canonicalCreators,
                                     exact,
+                                    independentlyVerifiedMangaUpdatesId = independentCatalogId,
                                 )
                                 assessments.forEach {
                                     traceWorkSourceAssociation(
@@ -743,6 +750,21 @@ class CollectProviderReadingEvidence private constructor(
                                     )
                                 }
                                 if (source == "mangadot") {
+                                    // Durable work observation only: never a creator credit,
+                                    // chapter map or Reader permission.
+                                    if (independentCatalogId != null) {
+                                        assessments.filter {
+                                            it.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED ||
+                                                it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+                                        }.forEach {
+                                            recordResearchCatalogAssessment(
+                                                canonicalTitleId,
+                                                target,
+                                                it,
+                                                independentCatalogId,
+                                            )
+                                        }
+                                    }
                                     // Save the exact author-qualified group before the lookup
                                     // deadline can cancel its native chapter preview. Preserve
                                     // every rival HID in the group and the existing bound.
@@ -751,7 +773,10 @@ class CollectProviderReadingEvidence private constructor(
                                             it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED
                                     }
                                     if (eligible && exact.size <= MAX_COVERAGE_CONTENDERS) {
-                                        nativeLookup = title to exact
+                                        val conflicting = assessments.filter {
+                                            it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+                                        }.map { it.ref.externalWorkId }.toSet()
+                                        nativeLookup = title to exact.filterNot { it.externalWorkId in conflicting }
                                     }
                                 } else {
                                     observeSourcePortfolio(
@@ -831,6 +856,59 @@ class CollectProviderReadingEvidence private constructor(
             onProvisionalCursorReady = onProvisionalCursorReady,
             nativePreviews = nativePreviews,
         )
+    }
+
+    private suspend fun verifiedMangaUpdatesResearchIdentity(canonicalTitleId: String): String? {
+        if (!nativeMangaDotPortfolioResearch) return null
+        val integrations = integrationRegistry ?: return null
+        val owner = IntegrationId("mangaupdates")
+        return try {
+            if (!integrations.isGlobalCapabilityActive(owner, IntegrationCapability.METADATA_BASIC)) return null
+            val records = canonicalTitleRepository.getExternalIdentities(canonicalTitleId)
+                .filter { it.provider == owner.value }
+            val record = records.singleOrNull() ?: return null
+            record.externalId.takeIf {
+                record.verified && record.canonicalTitleId == canonicalTitleId &&
+                    it.matches(Regex("[1-9][0-9]{0,17}"))
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private suspend fun recordResearchCatalogAssessment(
+        canonicalTitleId: String,
+        target: ReadingTarget,
+        assessment: ProviderWorkSourceAssessment,
+        expectedCatalogId: String,
+    ) {
+        val repository = workSourceAssociationRepository ?: return
+        // Recheck the same independently verified ID immediately before
+        // persisting, including the current metadata permission.
+        if (verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != expectedCatalogId) return
+        try {
+            val recorded = repository.observe(
+                ProviderWorkSourceAssociation(
+                    canonicalTitleId = canonicalTitleId,
+                    ref = assessment.ref,
+                    workVerification = assessment.workVerification,
+                    editionQualification = assessment.editionQualification,
+                    observedAt = clock(),
+                ),
+            )
+            traceWorkSourceAssociation(
+                canonicalTitleId,
+                target,
+                assessment,
+                if (recorded) DiagnosticOutcome.ACCEPTED else DiagnosticOutcome.REJECTED,
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.FAILED)
+        }
     }
 
     private suspend fun discoverBinding(
@@ -1682,6 +1760,7 @@ class CollectProviderReadingEvidence private constructor(
         stopWhen: (suspend (List<ProviderWorkCandidate>) -> Boolean)? = null,
         startingCursor: ProviderCursor? = null,
         expectedSourcePrefix: String? = null,
+        catalogEvidenceVersion: Int? = null,
     ): ProviderCallResult<LookupSnapshot> {
         val items = mutableListOf<ProviderWorkCandidate>()
         val seenCursors = mutableSetOf<String>()
@@ -1705,6 +1784,7 @@ class CollectProviderReadingEvidence private constructor(
                         titles = listOf(title),
                         cursor = cursor,
                         requestedLanguage = requestedLanguage,
+                        catalogEvidenceVersion = catalogEvidenceVersion,
                         coverageEvidenceVersion = if (
                             providerId.value == "app.tsuzuki.mangafire" ||
                             providerId.value == "app.tsuzuki.mangaall"

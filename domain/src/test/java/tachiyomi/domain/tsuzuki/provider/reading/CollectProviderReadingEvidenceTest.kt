@@ -3411,6 +3411,76 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `research records independently verified creditless work without chapter or Reader authority`() = runTest {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val owner = IntegrationId("mangaupdates")
+        val independentId = "123456789012345678"
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Independent Creator"), owner, externalId = independentId),
+                externalIds = mapOf(owner to independentId),
+            ),
+            refreshedAt = 42L,
+        )
+        val integrations = mockk<IntegrationRegistry>(relaxed = true)
+        every {
+            integrations.isGlobalCapabilityActive(owner, IntegrationCapability.METADATA_BASIC)
+        } returns true
+        val observations = MemoryWorkSourceAssociationRepository()
+        val bindings = MemoryBindingRepository()
+        val ref = ProviderBindingRef(mangaAll, "en", "mangadot:317")
+        val catalogVersions = mutableListOf<Int?>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(
+                canonicalTitle,
+                listOf(ExternalIdentity(canonicalTitle.id, owner.value, independentId, verified = true, createdAt = 1L)),
+            ),
+            providerRegistry = registry(provider = mangaAll, versionCode = 11),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    if (requireNotNull(request.cursor).value.contains("mangadex")) {
+                        ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
+                    } else {
+                        catalogVersions += request.catalogEvidenceVersion
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(
+                                    ProviderWorkCandidate(
+                                        externalWorkId = ref.externalWorkId,
+                                        title = canonicalTitle.displayTitle,
+                                        url = "https://mangadot.net/manga/317",
+                                        detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                        mangaUpdatesReferenceIds = listOf(independentId),
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    }
+                },
+                chaptersHandler = { error("Catalog proof alone must not request chapters") },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            integrationRegistry = integrations,
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = observations,
+            nativeMangaDotPortfolioResearch = true,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        catalogVersions shouldBe listOf(1)
+        observations.get(ref)?.workVerification shouldBe ProviderWorkVerification.CATALOG_CORROBORATED
+        result.partialEvidence shouldBe emptyList()
+        result.snapshots shouldBe emptyList()
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
+    @Test
     fun `unsigned research lanes retain native MangaDot evidence despite a slow MangaDex lookup`() = runTest {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
@@ -4165,7 +4235,13 @@ class CollectProviderReadingEvidenceTest {
         ): ProviderCallResult<ProviderReadingDelivery> = error("not used")
     }
 
-    private fun titleRepository(title: CanonicalTitle) = object : CanonicalTitleRepository {
+    private fun titleRepository(
+        title: CanonicalTitle,
+        identities: List<ExternalIdentity> = emptyList(),
+    ) = object : CanonicalTitleRepository {
+        override suspend fun getExternalIdentities(canonicalTitleId: String): List<ExternalIdentity> =
+            identities.filter { it.canonicalTitleId == canonicalTitleId }
+
         override suspend fun getById(id: String): CanonicalTitle? = title.takeIf { it.id == id }
         override fun getByIdAsFlow(id: String): Flow<CanonicalTitle?> = flowOf(title.takeIf { it.id == id })
         override suspend fun getByExternalIdentity(provider: String, externalId: String): CanonicalTitle? = null
