@@ -114,6 +114,48 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
+    fun `incomplete duplicate cannot hide a corroborated row or lend it chapter coverage`() {
+        val provider = ProviderId("app.tsuzuki.mangaall")
+        val verified = original.copy(externalWorkId = "mangadot:42")
+        val missingCredit = verified.copy(authors = emptyList())
+        val missingCoverage = verified.copy(
+            coverageOutcome = null,
+            coverageObservedCount = null,
+            coverageMinMilli = null,
+            coverageMaxMilli = null,
+            coverageHasMore = null,
+        )
+        for (items in listOf(
+            listOf(missingCredit, verified),
+            listOf(verified, missingCredit),
+            listOf(missingCoverage, verified),
+            listOf(verified, missingCoverage),
+        )) {
+            val result = ProviderWorkSourcePortfolio.assess(
+                provider,
+                "en",
+                verified.title,
+                verified.authors.toSet(),
+                items,
+            ).single()
+            result.workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
+            result.canCollectProvisionalChapters shouldBe true
+            result.canOpenReader shouldBe false
+        }
+        for (items in listOf(listOf(missingCredit, missingCoverage), listOf(missingCoverage, missingCredit))) {
+            val result = ProviderWorkSourcePortfolio.assess(
+                provider,
+                "en",
+                verified.title,
+                verified.authors.toSet(),
+                items,
+            ).single()
+            result.workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
+            result.canCollectProvisionalChapters shouldBe false
+        }
+    }
+
+    @Test
     fun `Dungeon Meshi known Ryoko romanizations allow source evidence but not editorial authority`() {
         // Galaxy A54 code8 captured the *real* MangaFire HID 52020 with
         // VERIFIED_WITH_ALIASES, 200 observed numeric chapters, and

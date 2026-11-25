@@ -1371,6 +1371,21 @@ class CollectProviderReadingEvidence private constructor(
                     null
                 }
                 if (assessment.editionQualification != ProviderSourceEditionQualification.UNRESOLVED) continue
+                // A positive duplicate cannot lend its identity to an incomplete
+                // candidate row used for the actual native chapter attestation.
+                val individual = ProviderWorkSourcePortfolio.assess(
+                    descriptor.id,
+                    target.facetId,
+                    queryTitle,
+                    canonicalCreators,
+                    listOf(candidate),
+                    independentlyVerifiedMangaUpdatesId,
+                ).single()
+                if (individual.workVerification != assessment.workVerification ||
+                    individual.editionQualification != assessment.editionQualification
+                ) {
+                    continue
+                }
                 if (!catalogIsCurrent(catalogIdentity)) continue
                 val fingerprint = if (catalogIdentity != null) {
                     catalogCursorFingerprint(target.registration.configurationFingerprint, catalogIdentity)

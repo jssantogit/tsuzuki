@@ -3713,6 +3713,17 @@ class CollectProviderReadingEvidenceTest {
         )
     }
 
+    @Test
+    fun `native preview uses corroborated duplicate once despite missing credit in earlier row`() = runTest {
+        verifyResearchAliasBatch(
+            0,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+            incompleteDuplicate = true,
+        )
+    }
+
     private suspend fun verifyResearchAliasBatch(
         batch: Int,
         aliases: List<String>,
@@ -3721,6 +3732,7 @@ class CollectProviderReadingEvidenceTest {
         slowLookup: Boolean = false,
         slowRival: Boolean = false,
         conflictingFirst: Boolean = false,
+        incompleteDuplicate: Boolean = false,
     ) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
@@ -3743,6 +3755,18 @@ class CollectProviderReadingEvidenceTest {
             integrations.isGlobalCapabilityActive(metadataId, IntegrationCapability.METADATA_BASIC)
         } returns true
         val dotQueries = mutableListOf<String>()
+        var dotReads = 0
+        val incomplete = if (incompleteDuplicate) {
+            ProviderWorkCandidate(
+                externalWorkId = "mangadot:317",
+                title = desiredAlias,
+                url = "https://mangadot.net/manga/317",
+                authors = emptyList(),
+                detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+            )
+        } else {
+            null
+        }
         val bindings = MemoryBindingRepository()
         val associations = MemoryWorkSourceAssociationRepository()
         val collector = CollectProviderReadingEvidence(
@@ -3779,7 +3803,8 @@ class CollectProviderReadingEvidenceTest {
                         } else if (query == desiredAlias) {
                             ProviderCallResult.Success(
                                 ProviderPage(
-                                    listOf(
+                                    listOfNotNull(
+                                        incomplete,
                                         ProviderWorkCandidate(
                                             externalWorkId = "mangadot:317",
                                             title = desiredAlias,
@@ -3809,6 +3834,7 @@ class CollectProviderReadingEvidenceTest {
                     }
                 },
                 chaptersHandler = { request ->
+                    dotReads++
                     check(!conflictingFirst) { "Conflicting source must not reach preview" }
                     if (slowRival && request.binding.externalWorkId == "mangadot:318") {
                         delay(30_000)
@@ -3843,6 +3869,7 @@ class CollectProviderReadingEvidenceTest {
         )
         val result = collector.execute(canonicalTitle.id)
         dotQueries shouldBe expectedQueries
+        if (incompleteDuplicate) dotReads shouldBe 1
         if (conflictingFirst) {
             result.partialEvidence shouldBe emptyList()
             result.cursorProgress shouldBe emptyList()

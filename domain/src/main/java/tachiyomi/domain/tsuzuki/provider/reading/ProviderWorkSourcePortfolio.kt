@@ -119,12 +119,25 @@ object ProviderWorkSourcePortfolio {
         }
         // Explicit negative work evidence must survive duplicate source rows,
         // independently of arrival order. Keep catalog conflict strongest.
+        // An incomplete duplicate cannot mask an independently corroborated
+        // row. Prefer coverage only within the same verification class; do not
+        // combine credits and chapter attestation from different observations.
         // Edition qualification is independent of work verification.
         return observations.groupBy { it.ref }.values.map { group ->
             val selected = group.firstOrNull {
                 it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
             } ?: group.firstOrNull {
                 it.workVerification == ProviderWorkVerification.AUTHOR_CONFLICT
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.TITLE_UNVERIFIED
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED && it.sourceChapterPageAttested
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED && it.sourceChapterPageAttested
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED
             } ?: group.first()
             if (group.any { it.editionQualification == ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT }) {
                 selected.copy(editionQualification = ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT)
