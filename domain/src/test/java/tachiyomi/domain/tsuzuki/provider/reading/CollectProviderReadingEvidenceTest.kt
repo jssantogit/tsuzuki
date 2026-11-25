@@ -3430,10 +3430,16 @@ class CollectProviderReadingEvidenceTest {
         verifyCatalogResearchCollection(revoke = false, conflictDuringContinuation = true)
     }
 
+    @Test
+    fun `research discards provisional author evidence when creator conflict arrives during continuation`() = runTest {
+        verifyCatalogResearchCollection(revoke = false, conflictDuringContinuation = true, withAuthor = true)
+    }
+
     private suspend fun verifyCatalogResearchCollection(
         revoke: Boolean,
         conflicting: Boolean = false,
         conflictDuringContinuation: Boolean = false,
+        withAuthor: Boolean = false,
     ) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val owner = IntegrationId("mangaupdates")
@@ -3476,6 +3482,7 @@ class CollectProviderReadingEvidenceTest {
                             externalWorkId = ref.externalWorkId,
                             title = canonicalTitle.displayTitle,
                             url = "https://mangadot.net/manga/317",
+                            authors = if (withAuthor) listOf("Independent Creator") else emptyList(),
                             detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
                             mangaUpdatesReferenceIds = listOf(independentId),
                         )
@@ -3495,7 +3502,11 @@ class CollectProviderReadingEvidenceTest {
                     if (conflictDuringContinuation && request.cursor != null) {
                         observations.observe(
                             requireNotNull(observations.get(ref)).copy(
-                                workVerification = ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT,
+                                workVerification = if (withAuthor) {
+                                    ProviderWorkVerification.AUTHOR_CONFLICT
+                                } else {
+                                    ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+                                },
                                 observedAt = 43L,
                             ),
                         )
@@ -3531,10 +3542,11 @@ class CollectProviderReadingEvidenceTest {
         val result = collector.execute(canonicalTitle.id)
         catalogVersions shouldBe listOf(1)
         if (conflictDuringContinuation) chapterRequests shouldBe 2
-        observations.get(ref)?.workVerification shouldBe if (conflicting || conflictDuringContinuation) {
-            ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
-        } else {
-            ProviderWorkVerification.CATALOG_CORROBORATED
+        observations.get(ref)?.workVerification shouldBe when {
+            conflictDuringContinuation && withAuthor -> ProviderWorkVerification.AUTHOR_CONFLICT
+            conflicting || conflictDuringContinuation -> ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+            withAuthor -> ProviderWorkVerification.AUTHOR_CORROBORATED
+            else -> ProviderWorkVerification.CATALOG_CORROBORATED
         }
         val rejected = revoke || conflicting || conflictDuringContinuation
         result.partialEvidence.map { it.externalChapterKey } shouldBe

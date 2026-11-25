@@ -1644,15 +1644,18 @@ class CollectProviderReadingEvidence private constructor(
             if (!source.canCollectProvisionalChapters) continue
             val versionCode = target.registration.descriptor.version.code
             val catalogIdentity = source.researchCatalogIdentity
-            suspend fun catalogStillCurrent(): Boolean {
-                if (catalogIdentity == null) return true
-                if (verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity) return false
+            suspend fun sourceStillCurrent(): Boolean {
+                if (catalogIdentity != null &&
+                    verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity
+                ) {
+                    return false
+                }
                 val current = workSourceAssociationRepository?.get(source.ref) ?: return false
                 return current.canonicalTitleId == canonicalTitleId &&
-                    current.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED &&
+                    current.workVerification == source.workVerification &&
                     current.editionQualification == ProviderSourceEditionQualification.UNRESOLVED
             }
-            if (!catalogStillCurrent()) continue
+            if (!sourceStillCurrent()) continue
             val fingerprint = if (catalogIdentity != null) {
                 catalogCursorFingerprint(target.registration.configurationFingerprint, catalogIdentity)
             } else {
@@ -1702,27 +1705,23 @@ class CollectProviderReadingEvidence private constructor(
             // If a concurrent checkpoint changed, fetch its current page instead.
             // Reuse the original observation timestamp, not the later collection time.
             val preview = nativePreviews[source.ref]?.takeIf { it.cursor == saved?.nextCursor }
-            val chapterGateway = if (preview == null && catalogIdentity == null) {
-                gateway
-            } else {
-                object : ProviderReadingGateway by gateway {
-                    private var firstRequest = true
+            val chapterGateway = object : ProviderReadingGateway by gateway {
+                private var firstRequest = true
 
-                    override suspend fun chapters(
-                        providerId: ProviderId,
-                        request: ProviderReadingChaptersRequest,
-                    ): ProviderCallResult<ProviderPage<ProviderChapterObservation>> {
-                        if (!catalogStillCurrent()) return malformed()
-                        val reuse = preview != null && firstRequest && providerId == source.ref.providerId &&
-                            request.binding == source.ref && request.cursor == preview.cursor
-                        firstRequest = false
-                        val result = if (reuse && preview != null) {
-                            ProviderCallResult.Success(preview.page)
-                        } else {
-                            gateway.chapters(providerId, request)
-                        }
-                        return if (catalogStillCurrent()) result else malformed()
+                override suspend fun chapters(
+                    providerId: ProviderId,
+                    request: ProviderReadingChaptersRequest,
+                ): ProviderCallResult<ProviderPage<ProviderChapterObservation>> {
+                    if (!sourceStillCurrent()) return malformed()
+                    val reuse = preview != null && firstRequest && providerId == source.ref.providerId &&
+                        request.binding == source.ref && request.cursor == preview.cursor
+                    firstRequest = false
+                    val result = if (reuse && preview != null) {
+                        ProviderCallResult.Success(preview.page)
+                    } else {
+                        gateway.chapters(providerId, request)
                     }
+                    return if (sourceStillCurrent()) result else malformed()
                 }
             }
             val result = withTimeoutOrNull(MAX_WORK_SOURCE_COLLECTION_MILLIS) {
@@ -1821,7 +1820,7 @@ class CollectProviderReadingEvidence private constructor(
                     observed = result.value,
                 )
             }
-            if (!catalogStillCurrent()) continue
+            if (!sourceStillCurrent()) continue
             trustedPages.forEach { (page, pageObservedAt) ->
                 // Reuse the provisional evidence already built for timeout salvage.
                 // Rehashing the same chapter IDs would allocate a second copy.
