@@ -27,3 +27,7 @@ The offline Reader resolver excludes catalog-only and catalog-conflicting work a
 ## Persistence after incomplete metadata refresh
 
 A durable catalog-reference conflict must not disappear merely because a later lookup lacks catalog references or supplies only creator evidence. The local work-association UPSERT retains that conflict against weaker observations, including newer ones. A fresh catalog-corroborated assessment may replace the conflict but remains non-authoritative for reading; creator-only assessments cannot resolve a bibliographic disagreement. No schema migration, canonical identity transfer, binding deletion, or Reader permission is introduced. The in-memory test repository mirrors the SQLite policy, with a regression for the newer weaker observations and later catalog reassessment.
+
+## Android native controls and concurrent metadata conflict
+
+Android catalog-only CI #45658556848 attested the four exact locked works at indices 2, 27, 28 and 29. This independently confirms native-title retrieval through the app's catalog integration; no canonical/Reader claim follows. The catalog-only provisional metadata guard now re-reads the exact durable work association as well as independent identity and consent before/after continuation and before retaining observations. A synthetic regression introduces a newer conflict during continuation and requires no retained provisional metadata or cursor progress. Existing author-only behavior and Reader eligibility are unchanged.

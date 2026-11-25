@@ -3425,7 +3425,16 @@ class CollectProviderReadingEvidenceTest {
         verifyCatalogResearchCollection(revoke = false, conflicting = true)
     }
 
-    private suspend fun verifyCatalogResearchCollection(revoke: Boolean, conflicting: Boolean = false) {
+    @Test
+    fun `research discards provisional metadata when durable catalog conflict arrives during continuation`() = runTest {
+        verifyCatalogResearchCollection(revoke = false, conflictDuringContinuation = true)
+    }
+
+    private suspend fun verifyCatalogResearchCollection(
+        revoke: Boolean,
+        conflicting: Boolean = false,
+        conflictDuringContinuation: Boolean = false,
+    ) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val owner = IntegrationId("mangaupdates")
         val independentId = "123456789012345678"
@@ -3448,6 +3457,7 @@ class CollectProviderReadingEvidenceTest {
         val bindings = MemoryBindingRepository()
         val ref = ProviderBindingRef(mangaAll, "en", "mangadot:317")
         val catalogVersions = mutableListOf<Int?>()
+        var chapterRequests = 0
         val collector = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(
                 canonicalTitle,
@@ -3481,17 +3491,30 @@ class CollectProviderReadingEvidenceTest {
                     check(!conflicting) { "Conflicting catalog references must never request chapters" }
                     request.binding shouldBe ref
                     if (revoke) consent = false
+                    chapterRequests++
+                    if (conflictDuringContinuation && request.cursor != null) {
+                        observations.observe(
+                            requireNotNull(observations.get(ref)).copy(
+                                workVerification = ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT,
+                                observedAt = 43L,
+                            ),
+                        )
+                    }
                     ProviderCallResult.Success(
                         ProviderPage(
                             listOf(
                                 ProviderChapterObservation(
-                                    providerChapterId = "mangadot:chapters:111",
-                                    rawLabel = "Chapter 1",
-                                    rawNumber = 1.0,
+                                    providerChapterId = "mangadot:chapters:${110 + chapterRequests}",
+                                    rawLabel = "Chapter $chapterRequests",
+                                    rawNumber = chapterRequests.toDouble(),
                                     language = "en",
                                 ),
                             ),
-                            nextCursor = null,
+                            nextCursor = if (conflictDuringContinuation && request.cursor == null) {
+                                ProviderCursor("fixture-continuation")
+                            } else {
+                                null
+                            },
                         ),
                     )
                 },
@@ -3507,15 +3530,17 @@ class CollectProviderReadingEvidenceTest {
         )
         val result = collector.execute(canonicalTitle.id)
         catalogVersions shouldBe listOf(1)
-        observations.get(ref)?.workVerification shouldBe if (conflicting) {
+        if (conflictDuringContinuation) chapterRequests shouldBe 2
+        observations.get(ref)?.workVerification shouldBe if (conflicting || conflictDuringContinuation) {
             ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
         } else {
             ProviderWorkVerification.CATALOG_CORROBORATED
         }
+        val rejected = revoke || conflicting || conflictDuringContinuation
         result.partialEvidence.map { it.externalChapterKey } shouldBe
-            if (revoke || conflicting) emptyList() else listOf("mangadot:chapters:111")
+            if (rejected) emptyList() else listOf("mangadot:chapters:111")
         result.snapshots shouldBe emptyList()
-        if (revoke || conflicting) {
+        if (rejected) {
             result.cursorProgress shouldBe emptyList()
         } else {
             val progress = result.cursorProgress.single()

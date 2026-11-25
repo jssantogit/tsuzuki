@@ -1644,8 +1644,14 @@ class CollectProviderReadingEvidence private constructor(
             if (!source.canCollectProvisionalChapters) continue
             val versionCode = target.registration.descriptor.version.code
             val catalogIdentity = source.researchCatalogIdentity
-            suspend fun catalogStillCurrent(): Boolean = catalogIdentity == null ||
-                verifiedMangaUpdatesResearchIdentity(canonicalTitleId) == catalogIdentity
+            suspend fun catalogStillCurrent(): Boolean {
+                if (catalogIdentity == null) return true
+                if (verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity) return false
+                val current = workSourceAssociationRepository?.get(source.ref) ?: return false
+                return current.canonicalTitleId == canonicalTitleId &&
+                    current.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED &&
+                    current.editionQualification == ProviderSourceEditionQualification.UNRESOLVED
+            }
             if (!catalogStillCurrent()) continue
             val fingerprint = if (catalogIdentity != null) {
                 catalogCursorFingerprint(target.registration.configurationFingerprint, catalogIdentity)
