@@ -98,7 +98,29 @@ def names(obj):
     return [obj.get("name")] + (raw if isinstance(raw, list) else [raw])
 
 
-def detail_counts(body, work_url, query):
+# Publisher-attested original identities, fixed only for this diagnostic
+# cohort. Never populate provider authors or authorize a reading option.
+OFFICIAL_WEBTOON = {15: "1049", 21: "2677", 27: "2135"}
+OFFICIAL_VARIANT = {27: "11640"}
+
+
+def publisher_series_id(value):
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        if (parsed.scheme != "https" or parsed.username is not None
+                or parsed.hostname not in {"webtoons.com", "www.webtoons.com", "m.webtoons.com"}
+                or parsed.port not in (None, 443) or parsed.fragment
+                or not re.fullmatch(r"/[a-z]{2}/[a-z-]+/[a-z0-9-]+/list/?", parsed.path)):
+            return None
+        ids = urllib.parse.parse_qs(parsed.query, keep_blank_values=True).get("title_no", [])
+        if len(ids) == 1 and re.fullmatch(r"[1-9][0-9]{0,9}", ids[0]):
+            return ids[0]
+    except ValueError:
+        pass
+    return None
+
+
+def detail_counts(body, work_url, query, index=None):
     parser = Detail()
     parser.feed(body.decode("utf-8", "replace"))
     def exact_ref(value):
@@ -138,11 +160,18 @@ def detail_counts(body, work_url, query):
             continue
     spin_off = sum(bool(re.search(r"\b(?:spin[- ]?off|sequel|side story)\b", n, re.I))
                    for obj in matches for n in names(obj) if isinstance(n, str))
+    publisher_ids = {identity for ref in refs[:32] if (identity := publisher_series_id(ref))}
+    original = OFFICIAL_WEBTOON.get(index)
+    variant = OFFICIAL_VARIANT.get(index)
     return dict(jsonLd=len(parser.json_ld), exactSeries=len(matches), structuredRoles=roles,
                 semanticRoleNodes=parser.semantic_roles, visibleRoleLabels=parser.role_labels,
                 roleClassNodes=parser.role_class_nodes, editionMarkers=editions,
                 spinOffMarkers=spin_off, structuredSameAs=len(refs),
-                knownCatalogHosts=len(reference_hosts))
+                knownCatalogHosts=len(reference_hosts),
+                catalogHostNames=",".join(sorted(reference_hosts)) or "NONE",
+                exactOriginalPublisher=int(original is not None and original in publisher_ids),
+                exactVariantPublisher=int(variant is not None and variant in publisher_ids),
+                otherPublisherIds=len(publisher_ids - {original, variant}))
 
 
 def observe_dot(works):
@@ -153,6 +182,7 @@ def observe_dot(works):
     # or explicit independent links must still prove identity.
     for index, query, scope in ((15, works[14], "PRIMARY"),
                                 (21, "입학용병", "NATIVE"),
+                                (21, "Mercenary Enrollment", "ENGLISH_ALIAS"),
                                 (27, works[26], "PRIMARY")):
         found = {}
         state = "BOUNDED"
@@ -193,7 +223,7 @@ def observe_dot(works):
             url = "https://mangadot.net/manga/" + hid
             time.sleep(1)
             code, body = request(url, "text/html")
-            counts = detail_counts(body, url, query) if body is not None else {}
+            counts = detail_counts(body, url, query, index) if body is not None else {}
             print(f"DOT_DETAIL_WIRE|index={index}|ordinal={ordinal}|status={code}|searchCreditFields={fields}"
                   + "".join(f"|{key}={value}" for key, value in counts.items()), flush=True)
             if code in ("HTTP403", "HTTP429"):
@@ -237,6 +267,17 @@ def selftest():
     linked = ('<script type="application/ld+json">' + json.dumps(series) + '</script>').encode()
     observed = detail_counts(linked, url, "Fictional work")
     assert observed["knownCatalogHosts"] == observed["spinOffMarkers"] == 1
+    assert publisher_series_id("https://www.webtoons.com/en/fantasy/test/list?title_no=42") == "42"
+    assert publisher_series_id("https://www.webtoons.com/en/fantasy/test/list?title_no=42&title_no=43") is None
+    assert publisher_series_id("https://www.webtoons.com.evil.invalid/en/fantasy/test/list?title_no=42") is None
+    assert publisher_series_id("https://user@www.webtoons.com/en/fantasy/test/list?title_no=42") is None
+    series["sameAs"] = [
+        "https://www.webtoons.com/en/fantasy/example/list?title_no=2135",
+        "https://www.webtoons.com/en/romance/example-spin-off/list?title_no=11640",
+    ]
+    rival = ('<script type="application/ld+json">' + json.dumps(series) + '</script>').encode()
+    observed_rival = detail_counts(rival, url, "Fictional work", 27)
+    assert observed_rival["exactOriginalPublisher"] == observed_rival["exactVariantPublisher"] == 1
     assert detail_counts(linked, url + "0", "Fictional work")["knownCatalogHosts"] == 0
     assert detail_counts(html, url + "0", "Fictional work")["exactSeries"] == 0
     assert detail_counts(html, url, "Other work")["structuredRoles"] == 0

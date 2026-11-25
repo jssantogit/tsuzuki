@@ -26,3 +26,5 @@ jobs:
           python3 .github/scripts/observe_mangaall_remaining_metadata.py ${{ matrix.scope }}
 
 # Follow-up: native title and explicit structured reference/variant diagnostics only.
+
+# Compare exact public publisher series IDs, not host-only matches; never grant Reader authority.
