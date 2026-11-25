@@ -5,6 +5,9 @@ on:
     paths: ['.github/provider-advanced-extraction-live.request']
 permissions:
   contents: read
+concurrency:
+  group: advanced-extraction-live-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   live-android:
     runs-on: ubuntu-24.04

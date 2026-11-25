@@ -27,6 +27,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
@@ -46,7 +47,7 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
     fun threeKnownWorksBothSources(): Unit = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
-        assertEquals("true", args.getString("advancedLive"))
+        assumeTrue("Explicit live opt-in required", args.getString("advancedLive") == "true")
         val context = instrumentation.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)
         val root = File(context.cacheDir, "advanced-live-" + UUID.randomUUID()).apply { mkdirs() }
@@ -111,19 +112,38 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
                             val outcome = try {
                                 blocked[manifest.id]?.let { throw GateFailure("HTTP_$it") }
                                 withTimeout(75_000L) {
-                                    val lookup = invoke(
-                                        "reading.lookup",
-                                        JsonObject(mapOf("titles" to JsonArray(listOf(JsonPrimitive(work.query))), "requestedLanguage" to JsonPrimitive("en"))),
-                                    )
                                     val accepted = work.names.map(::normalize).toSet()
-                                    val matching = lookup["items"]!!.jsonArray.map { it.jsonObject }.filter { hit ->
-                                        val names = listOf(hit["title"]!!.jsonPrimitive.content) +
-                                            hit["aliases"]?.jsonArray.orEmpty().map { it.jsonPrimitive.content }
-                                        names.any { normalize(it) in accepted }
-                                    }.distinctBy { it["externalWorkId"]!!.jsonPrimitive.content }
+                                    val matching = mutableSetOf<String>()
+                                    val lookupCursors = mutableSetOf<String>()
+                                    var lookupCursor: String? = null
+                                    var lookupTerminal = false
+                                    repeat(3) {
+                                        if (lookupTerminal) return@repeat
+                                        val input = mutableMapOf<String, JsonElement>(
+                                            "titles" to JsonArray(listOf(JsonPrimitive(work.query))),
+                                            "requestedLanguage" to JsonPrimitive("en"),
+                                        )
+                                        lookupCursor?.let { input["cursor"] = JsonPrimitive(it) }
+                                        val lookup = invoke("reading.lookup", JsonObject(input))
+                                        for (entry in lookup["items"]!!.jsonArray) {
+                                            val hit = entry.jsonObject
+                                            val names = listOf(hit["title"]!!.jsonPrimitive.content) +
+                                                hit["aliases"]?.jsonArray.orEmpty().map { it.jsonPrimitive.content }
+                                            if (names.any { normalize(it) in accepted }) {
+                                                matching += hit["externalWorkId"]!!.jsonPrimitive.content
+                                            }
+                                        }
+                                        val next = lookup["nextCursor"] ?: throw GateFailure("MISSING_CURSOR")
+                                        lookupCursor = if (next == JsonNull) null else next.jsonPrimitive.content
+                                        if (lookupCursor == null) {
+                                            lookupTerminal = true
+                                        } else if (!lookupCursors.add(requireNotNull(lookupCursor))) {
+                                            throw GateFailure("REPEATED_CURSOR")
+                                        }
+                                    }
+                                    if (!lookupTerminal) throw GateFailure("LOOKUP_NOT_TERMINAL")
                                     if (matching.size != 1) throw GateFailure("IDENTITY_NOT_UNIQUE")
-                                    if (lookup["nextCursor"] != JsonNull) throw GateFailure("LOOKUP_NOT_TERMINAL")
-                                    val workId = matching.single()["externalWorkId"]!!.jsonPrimitive.content
+                                    val workId = matching.single()
                                     if (name == "mangaall-ball" && !workId.startsWith("mangaball:")) throw GateFailure("SOURCE_ID")
                                     val binding = JsonObject(
                                         mapOf("providerId" to JsonPrimitive(manifest.id), "externalWorkId" to JsonPrimitive(workId), "facetId" to JsonPrimitive("en")),
