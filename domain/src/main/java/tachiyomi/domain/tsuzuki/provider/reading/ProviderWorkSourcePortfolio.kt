@@ -117,12 +117,20 @@ object ProviderWorkSourcePortfolio {
                 },
             )
         }
-        // For the experimental catalog assessment, a verified conflicting
-        // reference for the same HID must never disappear behind the first
-        // observation. Preserve established ordering for other assessments.
+        // Explicit negative work evidence must survive duplicate source rows,
+        // independently of arrival order. Keep catalog conflict strongest.
+        // Edition qualification is independent of work verification.
         return observations.groupBy { it.ref }.values.map { group ->
-            group.firstOrNull { it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT }
-                ?: group.first()
+            val selected = group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.AUTHOR_CONFLICT
+            } ?: group.first()
+            if (group.any { it.editionQualification == ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT }) {
+                selected.copy(editionQualification = ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT)
+            } else {
+                selected
+            }
         }
     }
 
@@ -331,6 +339,17 @@ enum class ProviderWorkVerification {
     AUTHOR_CONFLICT,
     TITLE_UNVERIFIED,
 }
+
+/**
+ * Shared negative-work policy for new explicit source choices and previously
+ * saved Reader bindings. Missing or unavailable metadata alone is not a
+ * contradiction of an established binding.
+ */
+internal fun ProviderWorkVerification.blocksReadingSource(): Boolean =
+    this == ProviderWorkVerification.AUTHOR_CONFLICT ||
+        this == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT ||
+        this == ProviderWorkVerification.CATALOG_CORROBORATED ||
+        this == ProviderWorkVerification.TITLE_UNVERIFIED
 
 enum class ProviderSourceEditionQualification {
     /** No source-attested variant label; this is NOT confirmation of original edition. */

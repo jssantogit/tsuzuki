@@ -4333,8 +4333,16 @@ class CollectProviderReadingEvidenceTest {
             val freshCatalog = association.workVerification == conflict ||
                 association.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED
             if (current?.workVerification == conflict && !freshCatalog) return true
+            val authorConflict = ProviderWorkVerification.AUTHOR_CONFLICT
+            val freshAuthor = association.workVerification in setOf(
+                authorConflict,
+                ProviderWorkVerification.AUTHOR_CORROBORATED,
+                conflict,
+            )
+            if (current?.workVerification == authorConflict && !freshAuthor) return true
             if (current == null || association.observedAt > current.observedAt ||
-                (association.observedAt == current.observedAt && association.workVerification == conflict)
+                (association.observedAt == current.observedAt &&
+                    association.workVerification in setOf(conflict, authorConflict))
             ) {
                 values[association.ref] = association
             }

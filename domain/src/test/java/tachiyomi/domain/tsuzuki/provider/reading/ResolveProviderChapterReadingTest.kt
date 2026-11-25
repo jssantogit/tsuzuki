@@ -552,11 +552,13 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `catalog only or conflicting work cannot reuse stale Reader bindings`(): Unit = runBlocking {
+    fun `blocked work identity cannot reuse stale Reader bindings`(): Unit = runBlocking {
         val observed = evidence(binding, "source-1", mappedChapterId = chapter.id)
         for (verification in listOf(
             ProviderWorkVerification.CATALOG_CORROBORATED,
             ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT,
+            ProviderWorkVerification.AUTHOR_CONFLICT,
+            ProviderWorkVerification.TITLE_UNVERIFIED,
         )) {
             val association = ProviderWorkSourceAssociation(
                 canonicalTitleId = chapter.canonicalTitleId,
@@ -571,7 +573,7 @@ class ResolveProviderChapterReadingTest {
                     bindings = listOf(saved),
                     evidence = listOf(observed),
                     sourceAssociations = listOf(association),
-                    gateway = gateway { error("Catalog-only or conflicting work must not invoke pages") },
+                    gateway = gateway { error("Blocked work must not invoke pages") },
                 )
                 reader.options(chapter.id) shouldBe emptyList()
                 reader.auditNoMatch(chapter.id).eligibleSourceCount shouldBe 0

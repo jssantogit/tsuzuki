@@ -161,7 +161,7 @@ class ResolveProviderChapterReading(
         // A later verified source lookup may reveal that a previously auto-bound
         // HID is a colored/omnibus variant. Never silently keep serving it as
         // the base edition. An explicit user-confirmed edition remains intact.
-        val excludedCatalogProducers = catalogOnlyOrConflictingProducers(associations)
+        val excludedWorkProducers = blockedWorkProducers(associations)
         val attestedVariantProducers = associations.asSequence()
             // Source-attested negative edition evidence does not need author
             // corroboration: it cannot prove an alternate HID, only disqualify
@@ -172,7 +172,7 @@ class ResolveProviderChapterReading(
         val bindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
             .asSequence()
             .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
-            .filter { it.ref.evidenceProducerId() !in excludedCatalogProducers }
+            .filter { it.ref.evidenceProducerId() !in excludedWorkProducers }
             .filter { binding ->
                 binding.verification == ProviderBindingVerification.USER_CONFIRMED ||
                     binding.ref.evidenceProducerId() !in attestedVariantProducers
@@ -187,7 +187,7 @@ class ResolveProviderChapterReading(
             // corroborated author, the exact source HID, and a persisted
             // source chapter whose number/volume matches below.
             .filter { it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED }
-            .filter { it.ref.evidenceProducerId() !in excludedCatalogProducers }
+            .filter { it.ref.evidenceProducerId() !in excludedWorkProducers }
             .filter { it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED }
             .filter { source ->
                 registrations[source.ref.providerId]?.isEligibleForReading(source.ref.facetId) == true
@@ -399,7 +399,7 @@ class ResolveProviderChapterReading(
         val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
         val associations = workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
         val allBindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
-        val excludedCatalogProducers = catalogOnlyOrConflictingProducers(associations)
+        val excludedWorkProducers = blockedWorkProducers(associations)
         val attestedVariantProducers = associations.asSequence()
             // Source-attested negative edition evidence does not need author
             // corroboration: it cannot prove an alternate HID, only disqualify
@@ -410,7 +410,7 @@ class ResolveProviderChapterReading(
         val eligibleProducers = buildSet {
             allBindings
                 .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
-                .filter { it.ref.evidenceProducerId() !in excludedCatalogProducers }
+                .filter { it.ref.evidenceProducerId() !in excludedWorkProducers }
                 .filter { binding ->
                     binding.verification == ProviderBindingVerification.USER_CONFIRMED ||
                         binding.ref.evidenceProducerId() !in attestedVariantProducers
@@ -420,7 +420,7 @@ class ResolveProviderChapterReading(
 
             associations
                 .filter { it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED }
-                .filter { it.ref.evidenceProducerId() !in excludedCatalogProducers }
+                .filter { it.ref.evidenceProducerId() !in excludedWorkProducers }
                 .filter { it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED }
                 .filter { registrations[it.ref.providerId]?.isEligibleForReading(it.ref.facetId) == true }
                 .forEach { add(it.ref.evidenceProducerId()) }
@@ -706,13 +706,10 @@ class ResolveProviderChapterReading(
      * confirming an edition does not establish that a different work is safe.
      * Keep all saved preferences and evidence intact for independent review.
      */
-    private fun catalogOnlyOrConflictingProducers(
+    private fun blockedWorkProducers(
         associations: List<ProviderWorkSourceAssociation>,
     ): Set<String> = associations.asSequence()
-        .filter {
-            it.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED ||
-                it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
-        }
+        .filter { it.workVerification.blocksReadingSource() }
         .map { it.ref.evidenceProducerId() }
         .toSet()
 

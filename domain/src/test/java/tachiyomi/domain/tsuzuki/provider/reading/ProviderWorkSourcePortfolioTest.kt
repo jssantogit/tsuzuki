@@ -84,6 +84,28 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
+    fun `conflicting author and edition observations for one HID never depend on arrival order`() {
+        val provider = ProviderId("app.tsuzuki.mangaall")
+        val exact = original.copy(externalWorkId = "mangafire:fixture")
+        val conflicting = exact.copy(authors = listOf("Unrelated Creator"))
+        val variant = exact.copy(aliases = listOf("Chainsaw Man (Colored)"))
+        for (items in listOf(listOf(exact, conflicting), listOf(conflicting, exact))) {
+            val result = ProviderWorkSourcePortfolio.assess(
+                provider, "en", exact.title, exact.authors.toSet(), items,
+            ).single()
+            result.workVerification shouldBe ProviderWorkVerification.AUTHOR_CONFLICT
+            result.canCollectProvisionalChapters shouldBe false
+        }
+        for (items in listOf(listOf(exact, variant), listOf(variant, exact))) {
+            val result = ProviderWorkSourcePortfolio.assess(
+                provider, "en", exact.title, exact.authors.toSet(), items,
+            ).single()
+            result.editionQualification shouldBe ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT
+            result.canCollectProvisionalChapters shouldBe false
+        }
+    }
+
+    @Test
     fun `Dungeon Meshi known Ryoko romanizations allow source evidence but not editorial authority`() {
         // Galaxy A54 code8 captured the *real* MangaFire HID 52020 with
         // VERIFIED_WITH_ALIASES, 200 observed numeric chapters, and

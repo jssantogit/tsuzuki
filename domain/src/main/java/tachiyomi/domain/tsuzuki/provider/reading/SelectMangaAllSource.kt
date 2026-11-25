@@ -71,12 +71,7 @@ class SelectMangaAllSource(
         if (association?.canonicalTitleId != canonicalTitleId) {
             return MangaAllSourceSelectionResult.NOT_ASSOCIATED
         }
-        if (
-            association.workVerification == ProviderWorkVerification.AUTHOR_CONFLICT ||
-            association.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT ||
-            association.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED ||
-            association.workVerification == ProviderWorkVerification.TITLE_UNVERIFIED
-        ) {
+        if (association.workVerification.blocksReadingSource()) {
             return MangaAllSourceSelectionResult.BLOCKED
         }
         val language = ref.facetId!!.lowercase()

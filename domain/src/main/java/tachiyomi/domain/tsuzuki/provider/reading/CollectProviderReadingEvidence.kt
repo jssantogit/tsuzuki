@@ -739,7 +739,7 @@ class CollectProviderReadingEvidence private constructor(
                                 title,
                                 target.facetId,
                                 page.items,
-                                retainCatalogObservations = independentCatalogId != null,
+                                retainConflictingObservations = true,
                             ).filter(query.seenCandidates::add)
                             if (exact.isNotEmpty()) {
                                 traceLookupCandidates(
@@ -1604,7 +1604,7 @@ class CollectProviderReadingEvidence private constructor(
         title: String,
         facetId: String?,
         candidates: List<ProviderWorkCandidate>,
-        retainCatalogObservations: Boolean = false,
+        retainConflictingObservations: Boolean = false,
     ): List<ProviderWorkCandidate> {
         val normalizedTitle = normalize(title)
         val matching = candidates.asSequence()
@@ -1617,7 +1617,7 @@ class CollectProviderReadingEvidence private constructor(
                     .plus(candidate.aliases.asSequence())
                     .any { normalize(it) == normalizedTitle }
             }
-        return if (retainCatalogObservations) {
+        return if (retainConflictingObservations) {
             matching.distinct().toList()
         } else {
             matching.distinctBy(ProviderWorkCandidate::externalWorkId).toList()

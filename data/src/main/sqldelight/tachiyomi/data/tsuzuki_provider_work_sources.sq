@@ -65,10 +65,16 @@ AND (
     tsuzuki_provider_work_sources.work_verification <> 'CATALOG_REFERENCE_CONFLICT'
     OR excluded.work_verification IN ('CATALOG_REFERENCE_CONFLICT', 'CATALOG_CORROBORATED')
 )
+-- An explicit creator conflict also survives missing/weak metadata. Only
+-- fresh creator verification or a stronger catalog conflict may supersede it.
+AND (
+    tsuzuki_provider_work_sources.work_verification <> 'AUTHOR_CONFLICT'
+    OR excluded.work_verification IN ('AUTHOR_CONFLICT', 'AUTHOR_CORROBORATED', 'CATALOG_REFERENCE_CONFLICT')
+)
 AND (
     excluded.observed_at > tsuzuki_provider_work_sources.observed_at
     OR (
         excluded.observed_at = tsuzuki_provider_work_sources.observed_at
-        AND excluded.work_verification = 'CATALOG_REFERENCE_CONFLICT'
+        AND excluded.work_verification IN ('CATALOG_REFERENCE_CONFLICT', 'AUTHOR_CONFLICT')
     )
 );
