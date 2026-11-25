@@ -15,6 +15,7 @@ from run_mangaall_frozen30_canonical_persistence import (
 from run_mangaall_frozen30_independent_catalog import DIGEST, locked_works
 
 OUT = Path(".github/results/mangaall-pending13-credit-audit")
+REMAINING6 = frozenset({8, 15, 21, 27, 28, 29})
 SOURCES = {"mangadex", "mangadot"}
 DETAILS = {"NONE", "NOT_NEEDED", "SKIPPED_IRRELEVANT", "BUDGET_EXHAUSTED",
            "VERIFIED_WITH_ALIASES", "VERIFIED_NO_ALIASES", "IDENTITY_MISMATCH",
@@ -34,8 +35,13 @@ def valid_names(values):
                     for v in values))
 
 
-def parse(log, shard, owners):
+def audit_indices(shard, focused=False):
     expected = expected_indices(shard, True) - {16}
+    return expected & REMAINING6 if focused else expected
+
+
+def parse(log, shard, owners, focused=False):
+    expected = audit_indices(shard, focused)
     rows = {}
     invalid = 0
     outcomes = {}
@@ -53,9 +59,14 @@ def parse(log, shard, owners):
             if index not in expected or index in rows or len(match[2]) > 96 * 1024:
                 raise ValueError("scope")
             row = json.loads(bytes.fromhex(match[2]).decode("utf-8"))
-            if (set(row) != {"index", "catalog", "authors", "artists", "aliases", "sources", "candidates"}
+            if (set(row) != {"index", "catalog", "authors", "artists", "aliases", "queryCount",
+                                 "availableQueryCount", "sources", "candidates"}
                     or row["index"] != index or row["catalog"] != owners[index]
                     or not all(valid_names(row[k]) for k in ("authors", "artists", "aliases"))
+                    or type(row["queryCount"]) is not int or type(row["availableQueryCount"]) is not int
+                    or not 1 <= row["queryCount"] <= 6
+                    or not row["queryCount"] <= row["availableQueryCount"] <= 4096
+                    or (row["queryCount"] < row["availableQueryCount"] and "COMPLETE" in row["sources"].values())
                     or set(row["sources"]) != SOURCES or not set(row["sources"].values()) <= STATES
                     or not isinstance(row["candidates"], list) or len(row["candidates"]) > 24):
                 raise ValueError("report")
@@ -68,13 +79,14 @@ def parse(log, shard, owners):
             rows[index] = row
         except (ValueError, TypeError, KeyError, AttributeError, UnicodeError):
             invalid += 1
-    return {"scope": "PUBLIC_CREDITS_ONLY_NO_READER", "corpusSha256": DIGEST,
+    return {"scope": ("REMAINING6_PUBLIC_CREDITS_ONLY_NO_READER" if focused
+                      else "PUBLIC_CREDITS_ONLY_NO_READER"), "corpusSha256": DIGEST,
             "shard": shard, "expected": sorted(expected), "invalid": invalid,
             "outcomes": [{"index": i, "status": outcomes.get(i, "NOT_OBSERVED")} for i in sorted(expected)],
             "works": [rows[i] for i in sorted(rows)]}
 
 
-def run(shard):
+def run(shard, focused=False):
     if adb("shell", "getprop", "ro.kernel.qemu").stdout.strip() != "1":
         raise SystemExit("EMULATOR_REQUIRED")
     targets = [p for p in Path("app/build/outputs/apk/debug").rglob("*.apk")
@@ -83,7 +95,7 @@ def run(shard):
     if len(targets) != 1 or len(tests) != 1:
         raise SystemExit("APK_INPUT_COUNT")
     owners, plan_digest = scope("explicit_plan")
-    out = OUT / f"shard-{shard}"
+    out = OUT / ("remaining6" if focused else "pending13") / f"shard-{shard}"
     out.mkdir(parents=True, exist_ok=True)
     try:
         adb("install", "-r", str(targets[0]))
@@ -97,10 +109,11 @@ def run(shard):
                      "-e", "mangaAllCanonicalCatalog", "explicit_plan",
                      "-e", "mangaAllCanonicalPending14", "1",
                      "-e", "mangaAllCreditAuditOptIn", "PUBLIC_CREDITS_ONLY",
+                     "-e", "mangaAllCreditAuditScope", "REMAINING6" if focused else "PENDING13",
                      "-e", "mangaAllCanonicalPlanSha256", plan_digest,
                      "-e", "mangaAllFrozen30Shard", str(shard),
                      "-e", "class", TEST, RUNNER, check=False, timeout=1850)
-        report = parse(result.stdout, shard, owners)
+        report = parse(result.stdout, shard, owners, focused)
         report["processOk"] = (result.returncode == 0 and "INSTRUMENTATION_CODE: -1" in result.stdout
                                and "OK (1 test)" in result.stdout)
         (out / "public-credit-audit.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
@@ -119,9 +132,11 @@ def run(shard):
 
 def selftest():
     assert len(PENDING14 - {16}) == 13
+    assert set().union(*(audit_indices(i, True) for i in range(3))) == REMAINING6
     owners = {5: "shikimori"}
     row = {"index": 5, "catalog": "shikimori", "authors": ["Public Writer"],
-           "artists": [], "aliases": ["공개 작가"], "sources": {"mangadex": "COMPLETE", "mangadot": "BOUNDED"},
+           "artists": [], "aliases": ["공개 작가"], "queryCount": 3, "availableQueryCount": 3,
+           "sources": {"mangadex": "COMPLETE", "mangadot": "BOUNDED"},
            "candidates": [{"source": "mangadex", "authors": ["Writer Public"],
                            "detail": "VERIFIED_WITH_ALIASES", "coverage": "EMPTY",
                            "verification": "AUTHOR_CORROBORATED", "edition": "UNRESOLVED"}]}
@@ -133,6 +148,10 @@ def selftest():
     assert parse("", 0, owners)["outcomes"][0]["status"] == "NOT_OBSERVED"
     assert parse(line + "\n" + line, 0, owners)["invalid"] == 1
     assert parse(line, 1, owners)["invalid"] == 1
+    assert parse(line, 0, owners, focused=True)["invalid"] == 1
+    row["availableQueryCount"] = 7
+    assert parse("MANGAALL_PUBLIC_CREDIT_AUDIT|index=5|payload=" + json.dumps(row).encode().hex(), 0, owners)["invalid"] == 1
+    row["availableQueryCount"] = 3
     row["authors"] = ["https://example.com"]
     assert not parse("MANGAALL_PUBLIC_CREDIT_AUDIT|index=5|payload=" + json.dumps(row).encode().hex(), 0, owners)["works"]
     print("MANGAALL_CREDIT_AUDIT|selftest=PASS")
@@ -143,9 +162,10 @@ if __name__ == "__main__":
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--shard", type=int, choices=range(3))
     mode.add_argument("--selftest", action="store_true")
+    parser.add_argument("--remaining6", action="store_true")
     args = parser.parse_args()
     locked_works()
     if args.selftest:
         selftest()
     else:
-        raise SystemExit(0 if run(args.shard) else 1)
+        raise SystemExit(0 if run(args.shard, args.remaining6) else 1)

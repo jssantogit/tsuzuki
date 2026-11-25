@@ -129,8 +129,14 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         require(pendingMode == "0" || catalogScope == "explicit_plan")
         val pending14 = setOf(5, 6, 8, 11, 15, 16, 19, 20, 21, 23, 25, 27, 28, 29)
         require(!creditAudit || (pendingMode == "1" && readerMode == "0"))
+        val remainingSix = setOf(8, 15, 21, 27, 28, 29)
+        val auditScope = args.getString("mangaAllCreditAuditScope") ?: "PENDING13"
+        require(auditScope in setOf("PENDING13", "REMAINING6"))
+        require(auditScope == "PENDING13" || creditAudit)
         val indices = (shard * 10 + 1..shard * 10 + 10).filter {
-            (pendingMode == "0" || it in pending14) && (!creditAudit || it != 16)
+            (pendingMode == "0" || it in pending14) &&
+                (!creditAudit || it != 16) &&
+                (auditScope != "REMAINING6" || it in remainingSix)
         }
         val context = instrument.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)
@@ -456,9 +462,13 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                         { if (it.key.lowercase() in setOf("romaji", "romanized")) 0 else 1 },
                     ),
                 ).map { it.value }
-                val queries = (listOf(works[index - 1]) + names).map(String::trim)
+                val availableQueries = (listOf(works[index - 1]) + names).map(String::trim)
                     .filter { it.isNotBlank() && it.length <= 1024 }
-                    .distinctBy { it.lowercase().replace(Regex("""\s+"""), " ") }.take(3)
+                    .distinctBy { it.lowercase().replace(Regex("""\s+"""), " ") }
+                // Align with the live collector's six-variant research limit.
+                // An omitted independently published alias means bounded,
+                // not exhaustive discovery.
+                val queries = availableQueries.take(6)
                 val observations = mutableListOf<JsonObject>()
                 val sourceStates = mutableMapOf<String, String>()
                 for (source in listOf("mangadex", "mangadot")) {
@@ -543,7 +553,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     }
                     sourceStates[source] = when {
                         failed -> "LOOKUP_FAILURE"
-                        completed == true && !truncated -> "COMPLETE"
+                        completed == true && !truncated && queries.size == availableQueries.size -> "COMPLETE"
                         else -> "BOUNDED"
                     }
                 }
@@ -554,6 +564,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                         "authors" to publicCredits(provenance.authors?.value.orEmpty()),
                         "artists" to publicCredits(provenance.artists?.value.orEmpty()),
                         "aliases" to publicCredits(aliases),
+                        "queryCount" to JsonPrimitive(queries.size),
+                        "availableQueryCount" to JsonPrimitive(availableQueries.size),
                         "sources" to JsonObject(sourceStates.mapValues { JsonPrimitive(it.value) }),
                         "candidates" to JsonArray(observations),
                     ),
