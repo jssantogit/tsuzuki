@@ -12,6 +12,13 @@ const sameDocumentId = (value, url) => {
   return parts.length === 2 && exactUrl(parts[0], url) && /^[A-Za-z0-9_-]{1,64}$/.test(parts[1]);
 };
 
+function localPersonId(value, url) {
+  if (typeof value !== "string") return null;
+  const parts = value.split("#");
+  if (parts.length !== 2 || !/^[A-Za-z0-9_-]{1,64}$/.test(parts[1])) return null;
+  return parts[0] === "" || exactUrl(parts[0], url) ? parts[1] : null;
+}
+
 const namedType = (value, type) => value === type ||
   (Array.isArray(value) && value.length <= 8 && value.includes(type));
 function declaredNames(value, maxCount, maxLength) {
@@ -27,12 +34,23 @@ function extractMangaDotWork(raw, id, title) {
   let doc;
   try { doc = JSON.parse(raw); } catch { return null; }
   const url = "https://mangadot.net/manga/" + id;
-  const stack = [[doc, 0]], matches = [];
+  const stack = [[doc, 0]], matches = [], definitions = new Map();
   let visited = 0;
   while (stack.length) {
     const [node, depth] = stack.pop();
     if (node === null || typeof node !== "object") continue;
     if (++visited > 2048 || depth > 12) return null;
+    // Only definitions in this exact document are eligible for reference
+    // resolution. No external person URL is ever fetched or inferred.
+    if (!Array.isArray(node) && typeof node["@id"] === "string" &&
+        Object.keys(node).some(key => key !== "@id")) {
+      const key = localPersonId(node["@id"], url);
+      if (key) {
+        const definitionsForId = definitions.get(key) || [];
+        definitionsForId.push(node);
+        definitions.set(key, definitionsForId);
+      }
+    }
     if (!Array.isArray(node) && namedType(node["@type"], "ComicSeries")) {
       // A competing ComicSeries object about the same title/HID is ambiguous.
       const names = declaredNames(node.alternateName, 32, 1024) || [];
@@ -57,10 +75,24 @@ function extractMangaDotWork(raw, id, title) {
   // JSON-LD entity identifiers may have a fragment on the exact work page.
   // Never accept a different origin/path, query, or unrelated object.
   if (work["@id"] != null && !sameDocumentId(work["@id"], url)) return null;
-  const authors = work.author == null ? [] : Array.isArray(work.author) ? work.author : [work.author];
-  if (authors.length > 8) return null;
+  // Author remains primary. If omitted, explicitly credited creator or
+  // illustrator Persons of THIS ComicSeries may supply corroboration (the
+  // independent catalog already includes authors and artists). Do not use
+  // publisher, uploader, contributor, unrelated graph Persons or free text.
+  const list = value => value == null ? [] : Array.isArray(value) ? value : [value];
+  const authors = list(work.author);
+  const staff = authors.length ? authors : [...list(work.creator), ...list(work.illustrator)];
+  if (staff.length > 8) return null;
   const names = [];
-  for (const person of authors) {
+  for (const entry of staff) {
+    let person = entry;
+    if (entry && typeof entry === "object" && !Array.isArray(entry) &&
+        Object.keys(entry).length === 1 && typeof entry["@id"] === "string") {
+      const key = localPersonId(entry["@id"], url);
+      const resolved = key && definitions.get(key);
+      if (!resolved || resolved.length !== 1) return null;
+      person = resolved[0];
+    }
     if (!namedType(person?.["@type"], "Person") || namedType(person?.["@type"], "Organization")) return null;
     const primaryNames = declaredNames(person.name, 1, 128);
     const alternateNames = declaredNames(person.alternateName, 8, 128);
