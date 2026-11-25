@@ -484,6 +484,49 @@ class MangaAllFutureHostChapterSnapshotTest {
     }
 
     @Test
+    fun page_budget_matches_reference_serialization_at_utf8_and_row_boundaries(): Unit = runBlocking {
+        for (title in listOf("Plain", "界".repeat(90), "Quote \\" + '"' + " newline\n")) {
+            val (service, calls) = fixture { source(601, padding = 0, title = title) }
+            var page = service.start("mangadot:131", "en")
+            val pages = mutableListOf<MangaAllFutureChapterPage>()
+            while (true) {
+                pages += page
+                val cursor = page.nextCursor ?: break
+                page = service.next("mangadot:131", "en", cursor)
+            }
+            pages.sumOf { it.items.size } shouldBe 601
+            for ((index, current) in pages.withIndex()) {
+                val serialized = JsonObject(
+                    mapOf(
+                        "items" to JsonArray(current.items),
+                        "nextCursor" to (current.nextCursor?.let(::JsonPrimitive) ?: JsonNull),
+                    ),
+                ).toString()
+                (serialized.length <= 48 * 1024) shouldBe true
+                (serialized.encodeToByteArray().size <= 48 * 1024) shouldBe true
+                (current.items.size <= 256) shouldBe true
+                if (index < pages.lastIndex && current.items.size < 256) {
+                    val following = pages[index + 1]
+                    val nextPosition = current.nextCursor!!.substringAfterLast(':').toInt() + 1
+                    val cursor = if (nextPosition < 601) {
+                        current.nextCursor.substringBeforeLast(':') + ":" + nextPosition
+                    } else {
+                        null
+                    }
+                    val proposed = JsonObject(
+                        mapOf(
+                            "items" to JsonArray(current.items + following.items.first()),
+                            "nextCursor" to (cursor?.let(::JsonPrimitive) ?: JsonNull),
+                        ),
+                    ).toString()
+                    (proposed.length > 48 * 1024 || proposed.encodeToByteArray().size > 48 * 1024) shouldBe true
+                }
+            }
+            calls() shouldBe 1
+        }
+    }
+
+    @Test
     fun optimized_snapshot_chunking_is_byte_identical_to_reference_json_arrays_with_cjk(): Unit = runBlocking {
         // Deliberately use a *quadratic reference* on just 400 synthetic rows
         // to lock output compatibility. Production now performs each row's

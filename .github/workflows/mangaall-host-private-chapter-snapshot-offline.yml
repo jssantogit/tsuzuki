@@ -93,10 +93,32 @@ jobs:
           else
             echo 'MANGAALL_HOST_PRIVATE_SNAPSHOT|signed_code10=UNCHANGED|quickjs_bindings=UNCHANGED|network=NONE'
           fi
-      - name: Kotlin formatting
-        run: ./gradlew :core:common:spotlessKotlinCheck --stacktrace
-      - name: Full private snapshot capacity regression on JVM
-        run: ./gradlew :core:common:testDebugUnitTest --tests 'tachiyomi.core.provider.runtime.MangaAllFutureHostChapterSnapshotTest' --stacktrace
+      - name: Kotlin formatting and private snapshot capacity regression on JVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          tasks=( :core:common:spotlessKotlinCheck :core:common:testDebugUnitTest --tests '*MangaAllFutureHostChapterSnapshotTest' )
+          if ./gradlew "${tasks[@]}" --stacktrace --offline >"$log" 2>&1; then
+            cat "$log"
+            exit 0
+          fi
+          if ! grep -Eiq 'no cached version|offline mode|not available for offline' "$log"; then
+            cat "$log"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if ./gradlew "${tasks[@]}" --stacktrace >"$log" 2>&1; then
+              cat "$log"
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log" || [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
       - name: Report only closed snapshot assertion diagnostics on failure
         if: failure()
         shell: bash

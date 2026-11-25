@@ -163,6 +163,13 @@ internal class MangaAllFutureHostChapterSnapshot(
         val cached = mutableMapOf<Int, JsonArray>()
         var position = start
         var nextCursor: String? = null
+        // Count the exact serialized JSON envelope and each row once. Rebuilding
+        // the entire growing page for every row was quadratic in payload size.
+        val emptyEnvelope = pageJson(emptyList(), null)
+        val envelopeChars = emptyEnvelope.length - "null".length
+        val envelopeBytes = byteSize(emptyEnvelope) - "null".length
+        var rowsChars = 0
+        var rowsBytes = 0
         while (position < index.count && items.size < MAX_PAGE_ROWS) {
             val packed = readTuple(index, position, cached)
             val normalized = expand(packed, language)
@@ -173,11 +180,19 @@ internal class MangaAllFutureHostChapterSnapshot(
             } else {
                 null
             }
-            val payload = pageJson(items + normalized, candidateCursor)
-            if (payload.length > MAX_OUTPUT || byteSize(payload) > MAX_OUTPUT) {
+            val rowJson = normalized.toString()
+            val cursorJson = candidateCursor?.let { JsonPrimitive(it).toString() } ?: "null"
+            val separator = if (items.isEmpty()) 0 else 1
+            val candidateChars = rowsChars + separator + rowJson.length
+            val candidateBytes = rowsBytes + separator + byteSize(rowJson)
+            if (envelopeChars + candidateChars + cursorJson.length > MAX_OUTPUT ||
+                envelopeBytes + candidateBytes + byteSize(cursorJson) > MAX_OUTPUT
+            ) {
                 if (items.isEmpty()) fail("CHAPTER_ROW_EXCEEDS_HOST_RESULT")
                 break
             }
+            rowsChars = candidateChars
+            rowsBytes = candidateBytes
             items += normalized
             position = following
             nextCursor = candidateCursor
