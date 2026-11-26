@@ -64,3 +64,40 @@ Após validar os 30 títulos, adicionamos digest SHA-256 da lista canônica `199
 A rodada somente poderá ser classificada como 30/30 aprovada quando **cada** uma das 30 obras congeladas dispuser de evidência coerente de descoberta e identidade de fonte (inclusive quando há homônimos), auditoria correta de inventário e cursores de capítulos, ausência de erros relevantes do contrato/Host, e nenhum falso vazio, truncamento ou associação canônica indevida. Manter separada a validação do Reader Android, cujos pixels e persistência real exigem gates próprios. Qualquer fonte sem capítulo 1 ou sem a edição correspondente deve ficar claramente classificada como lacuna de cobertura, não aprovada por um fallback inventado.
 
 **PR:** [#275 — Draft](https://github.com/jssantogit/tsuzuki/pull/275). Sem merge, assinatura ou publicação.
+
+
+## Checkpoint de homologação — 26 nov 2026
+
+**Estado vigente: gate canônico integral GREEN, aprovação de troca do corpus ainda pendente.** Os resultados históricos acima não devem ser interpretados como o estado atual.
+
+| Evidência | Resultado |
+|---|---|
+| [Auditoria offline #45906633715](https://github.com/jssantogit/tsuzuki/actions/runs/45906633715) | 2/2 jobs; 126 testes core-common, incluindo recuperação de snapshots terminais sob pressão e CAS de geração |
+| [Live integral #45909425855](https://github.com/jssantogit/tsuzuki/actions/runs/45909425855) | 6/6 jobs; exatamente 30/30 coletados, restaurados após force-stop e primeira página decodificada |
+| [Reader Android controlado #45911409832](https://github.com/jssantogit/tsuzuki/actions/runs/45911409832) | 5/5 cenários: seleção MangaDot, retry e pixels, troca de fonte, recriação de Activity, histórico/preferência idempotentes |
+| [MangaDex independente #45396938397](https://github.com/jssantogit/tsuzuki/actions/runs/45396938397) | 30/30 auditados; 4 obras legíveis, 15 EMPTY_EN, 9 NO_CHAPTER_ONE_EN, 1 EXTERNAL_ONLY, 1 NO_EXACT_HID |
+
+Versão funcional: `e1fb22b3d182b9029b55f3902310fc5205cb08fa`; disparos de workflow `96d1140d` e `ef3b30c6` não modificaram a implementação. Pacote experimental code11 não assinado, upstream fixado em `89b5979fff297c2a099359258c9f9249e0089db4`.
+
+### Cobertura canônica observada no live integral
+
+Os 30 registros `MANGAALL_CANONICAL_DIAGNOSTIC` mostram exatamente um capítulo canônico número 1 por obra. As opções selecionáveis são contabilizadas por obra (não pelo número de releases):
+
+| Cobertura do capítulo 1 | Obras |
+|---|---:|
+| Apenas MangaDot | 26 |
+| Apenas MangaDex | 1 |
+| Ambas | 3 |
+| Nenhuma | 0 |
+
+MangaDex possui opção no capítulo 1 de Eleceed, The World After the Fall, The Breaker e Cheese in the Trap. The World After the Fall é a única obra sem opção MangaDot naquele capítulo no resultado canônico. A cobertura do MangaDex coincide em quantidade com o audit independente anterior; não representa falha do adaptador por si só. Nenhum registro de tentativa de capítulos com `outcome=FAILED` apareceu nos três shards da rodada integral.
+
+Os índices 7, 8 e 9 (Nano Machine, SSS-Class Revival Hunter e Return of the Blossoming Blade), que falharam com HOST_ERROR em #45895596624, agora registram respectivamente 370, 169 e 200 capítulos canônicos, um capítulo 1, restauração e primeiro bitmap PASS. A recuperação de snapshots terminais sob pressão corrobora a hipótese de saturação; não isola causalidade exclusiva.
+
+### Limites preservados
+
+- O live comprova seleção e decodificação pelo loader após restauração; não comprova pixels do CDN na Activity do Reader. O teste de interface separado usa respostas HTTP controladas.
+- Um capítulo canônico único não significa uma única release: rivais exigem escolha explícita quando aplicável. A equivalência editorial não foi demonstrada.
+- Ausência de cobertura de uma fonte não deve ser convertida em erro de identidade nem preenchida com capítulos inventados.
+- MangaFire suspenso; assinatura, publicação e merge permanecem fora do escopo. Não repetir a regressão integral sem mudança funcional, novo risco mensurável ou pedido explícito de estabilidade.
+- O lock original continua intacto até autorização explícita de rotação. O próximo corpus deve ter novos títulos, catálogo independente e controles equivalentes; conservar este baseline como regressão.
