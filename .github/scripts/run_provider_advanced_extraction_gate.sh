@@ -32,7 +32,7 @@ if [[ "$(adb shell settings get global airplane_mode_on | tr -d '\r')" != '1' ]]
 fi
 raw="$out/instrumentation.txt"
 status=0
-timeout --foreground 660s adb shell am instrument -w -r -e class "$class" "$runner" >"$raw" 2>&1 || status=$?
+timeout --foreground 120s adb shell am instrument -w -r -e class "$class" "$runner" >"$raw" 2>&1 || status=$?
 if [[ "$status" -ne 0 ]] ||
    ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw" ||
    ! grep -Fq 'OK (1 test)' "$raw"; then
@@ -40,4 +40,4 @@ if [[ "$status" -ne 0 ]] ||
   tail -n 65 "$raw" >&2
   exit 5
 fi
-echo 'PROVIDER_ADVANCED_EXTRACTION|offline=TRUE|controlled_adapters=PASS|live=NOT_RUN|reader_ui=NOT_RUN|canonical=NOT_GRANTED'
+echo 'PROVIDER_ADVANCED_EXTRACTION|offline=TRUE|controlled_adapters=PASS|local_protocol_session=PASS|live=NOT_RUN|reader_ui=NOT_RUN|canonical=NOT_GRANTED'

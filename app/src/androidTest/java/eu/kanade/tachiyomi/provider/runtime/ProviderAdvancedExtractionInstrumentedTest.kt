@@ -42,7 +42,16 @@ import java.util.zip.ZipInputStream
 class ProviderAdvancedExtractionInstrumentedTest {
     @Test
     fun bothAdaptersThroughAdvancedExtraction(): Unit = runBlocking {
-        runControlled()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "advanced-offline-" + UUID.randomUUID()).apply { mkdirs() }
+        try {
+            kotlinx.coroutines.withTimeout(90_000L) {
+                runControlled()
+                AdvancedExtractionLocalContract.run(context, root)
+            }
+        } finally {
+            root.deleteRecursively()
+        }
     }
 
     internal suspend fun runControlled() {
