@@ -31,13 +31,18 @@ class ProviderWorkSourcePortfolioTest {
             MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "123", 11, "other"),
             MangaAllCatalogWorkIdentityProof.fingerprint("title", ref.copy(facetId = "pt-br"), "123", 11, "config"),
             MangaAllCatalogWorkIdentityProof.fingerprint(
-                "title", ref.copy(externalWorkId = "mangadot:43"), "123", 11, "config",
+                "title",
+                ref.copy(externalWorkId = "mangadot:43"),
+                "123",
+                11,
+                "config",
             ),
         )
         changed.all { it != null && it != original } shouldBe true
         MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "123", 10, "config") shouldBe null
         MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "0", 11, "config") shouldBe null
-        MangaAllCatalogWorkIdentityProof.fingerprint("title", ref.copy(facetId = "ja"), "123", 11, "config") shouldBe null
+        MangaAllCatalogWorkIdentityProof.fingerprint("title", ref.copy(facetId = "ja"), "123", 11, "config") shouldBe
+            null
     }
 
     @Test
