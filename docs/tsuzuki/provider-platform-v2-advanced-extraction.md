@@ -81,3 +81,18 @@ A separate controlled-only check validates the newly changed denial guard withou
 CI #45730822315 RED before instrumentation: Kotlin disallows ambiguous ConcurrentHashMap.contains syntax (two sites). Use explicit containsKey in both guards. Completion criterion confirmed by user: both original providers must complete the six real live observations; controlled results alone are insufficient. Resolve access through supported methods; no simulated live pass or replacing a denied source. Offline verification only while external denials remain unresolved.
 
 CI #45731552411 GREEN only offline (5m41s build), controlled adapters and local protocol/session passed. User requested resumption of live with grouped corrections and strict RED on any 403. This revision uses bounded resource transport for all MangaBall GET/POST responses, preserves typed HTTP status and challenge marker from Reader transport, records source denials through one scoped mechanism, and adds an independent strict verdict validator with self-test (missing, duplicate, skipped, controlled-only, contradictory denial and six PASS). No header changes, access bypass or automatic grant expansion; real upstream access is still unproven. A single bounded live recheck is requested; stop a source on denial and require all six PASS.
+
+## Live recheck and access status
+
+[CI #45732844967](https://github.com/jssantogit/tsuzuki/actions/runs/45732844967) at `969259c8` ran both controlled Android contracts successfully (`ADAPTERS_SQLITE` and `PROTOCOL_SESSION`). Live acceptance was **RED (0/6)**. Each lane stopped on its first lookup:
+
+| Provider | Death Note | Oyasumi Punpun | Akame ga Kill! |
+| --- | --- | --- | --- |
+| MangaBall | HTTP 403 (387 ms); `cf-mitigated: challenge` observed | Not attempted after 403 | Not attempted after 403 |
+| MangaFire | HTTP 403 (360 ms); no explicit challenge marker observed | Not attempted after 403 | Not attempted after 403 |
+
+Both denials occurred before the adapters received catalog data for the lookup. The MangaBall marker identifies a Cloudflare challenge without identifying the rule that triggered it. For MangaFire, the absence of the marker does not establish the reason for the denial. The earlier Punpun pass in [CI #45727344374](https://github.com/jssantogit/tsuzuki/actions/runs/45727344374) is historical evidence only.
+
+A one-time, user-authorized REA observation outside CI found HTTP 200 on both public homepages in Chromium. The capture covered the main document responses; its subresource coverage was limited. It did not test adapter endpoints, chapter delivery, Android decoding, or access from GitHub Actions. No supported automation interface was confirmed for either provider. Confirm a supported access path for each adapter and CI environment before spending another live run on the same denied requests.
+
+Static gate review also found two gaps to close before live acceptance: validate the native work and chapter IDs in both lanes and require a distinct work ID for each of the three works within each lane; reject an adapter-declared lookup failure before considering any candidates in the same response. These gaps did not cause either observed 403. Merge and release remain pending on the six live results and both controlled contracts.
