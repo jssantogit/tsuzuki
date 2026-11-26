@@ -213,3 +213,6 @@ jobs:
 # Explicit remaining-six regression after consolidated offline GREEN #45709695806 and bounded chapter metadata observation #45710635126; retain all strict receipt checks.
 
 # Explicit remaining-six regression after all nine workflows GREEN at 51f3f3ac; report typed acquisition errors and exercise optimized Host pages.
+
+# 2026-11-26: rerun locked remaining six after offline gate 45863394156 passed.
+# Includes chapter-level catalog attestation and explicit research Reader choice.
