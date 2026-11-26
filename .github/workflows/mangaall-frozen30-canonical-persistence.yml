@@ -33,6 +33,8 @@ jobs:
           python3 -m py_compile .github/scripts/run_mangaall_frozen30_canonical_persistence.py
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
           python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
+          node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
+          node .github/scripts/test_mangaall_mangadot_search_policy.mjs
           bash -n .github/scripts/run_mangaall_frozen30_mangadex_audit.sh
           python3 -m py_compile .github/scripts/verify_mangaall_frozen30_mangadex_audit.py
           python3 .github/scripts/verify_mangaall_frozen30_mangadex_audit.py --selftest
@@ -104,7 +106,7 @@ jobs:
           set -euo pipefail
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
-          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:testDebugUnitTest --tests '*ShikimoriApiTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:testDebugUnitTest --tests '*ShikimoriApiTest' --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
             cat "$log"
             exit 0
           fi
@@ -113,7 +115,7 @@ jobs:
             exit 1
           fi
           for attempt in 1 2 3; do
-            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:testDebugUnitTest --tests '*ShikimoriApiTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:testDebugUnitTest --tests '*ShikimoriApiTest' --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               exit 0
             fi
@@ -210,3 +212,5 @@ jobs:
 # Export only the bounded acquisition codes through the strict runner.
 
 # Verify independently published creator names, no fallback to title-only matching.
+
+# Full locked cohort regression after remaining-six GREEN #45878667734; same functional code and strict Reader/catalog flags.
