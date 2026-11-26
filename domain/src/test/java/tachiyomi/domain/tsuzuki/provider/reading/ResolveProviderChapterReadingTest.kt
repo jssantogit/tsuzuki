@@ -642,13 +642,31 @@ class ResolveProviderChapterReadingTest {
         val old = evidence(sourceBinding, "mangadot:chapters:2", chapter.id).let {
             it.copy(evidence = it.evidence.copy(providerMetadata = ProviderEvidenceMetadata(language = "en")))
         }
+        var pageRequests = 0
+        var revokeDuringDelivery = false
+        val delivered = ProviderCallResult.Success(
+            ProviderReadingDelivery.PageList(
+                listOf(
+                    ProviderPageRequest(
+                        url = "https://reader.example/page.jpg",
+                        allowedOrigins = setOf("https://reader.example"),
+                    ),
+                ),
+            ),
+        )
         val reader = ResolveProviderChapterReading(
             canonicalChapterRepository = canonicalChapterRepository(chapter),
             evidenceRepository = evidenceRepository(listOf(observed, old)),
             bindingRepository = bindingRepository(listOf(sourceBinding)),
             workSourceAssociationRepository = associations,
             providerRegistry = registry,
-            gateway = gateway { error("pages must not be invoked without explicit release choice") },
+            gateway = gateway(expectedProviderId = mangaAll) { request ->
+                pageRequests++
+                request.binding shouldBe ref
+                request.providerChapterId shouldBe "mangadot:chapters:1"
+                if (revokeDuringDelivery) consent = false
+                delivered
+            },
             catalogResearch = research,
         )
         resolver(
@@ -661,13 +679,21 @@ class ResolveProviderChapterReadingTest {
         option.providerChapterId shouldBe "mangadot:chapters:1"
         option.catalogWorkFingerprint shouldBe proof
         (reader.delivery(option) is ProviderCallResult.Failure) shouldBe true
+        pageRequests shouldBe 0
         val picker = SelectMangaAllSource(associations, selections, research)
         picker.select(titleId, ref, 20) shouldBe MangaAllSourceSelectionResult.SELECTED
         choice?.catalogIdentityFingerprint shouldBe proof
         research.permitsDelivery(titleId, option) shouldBe false
+        (reader.delivery(option) is ProviderCallResult.Failure) shouldBe true
+        pageRequests shouldBe 0
         release = option.providerChapterId
         research.permitsDelivery(titleId, option) shouldBe true
-        consent = false
+        reader.delivery(option) shouldBe delivered
+        pageRequests shouldBe 1
+        revokeDuringDelivery = true
+        (reader.delivery(option) is ProviderCallResult.Failure) shouldBe true
+        pageRequests shouldBe 2
+        consent shouldBe false
         reader.options(chapter.id) shouldBe emptyList()
         research.permitsDelivery(titleId, option) shouldBe false
         consent = true
@@ -1578,6 +1604,7 @@ class ResolveProviderChapterReadingTest {
     )
 
     private fun gateway(
+        expectedProviderId: ProviderId = providerId,
         pages: suspend (ProviderReadingPagesRequest) -> ProviderCallResult<ProviderReadingDelivery>,
     ) = object : ProviderReadingGateway {
         override suspend fun lookup(
@@ -1594,7 +1621,7 @@ class ResolveProviderChapterReadingTest {
             providerId: ProviderId,
             request: ProviderReadingPagesRequest,
         ): ProviderCallResult<ProviderReadingDelivery> {
-            providerId shouldBe this@ResolveProviderChapterReadingTest.providerId
+            providerId shouldBe expectedProviderId
             return pages(request)
         }
     }

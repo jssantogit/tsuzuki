@@ -16,6 +16,8 @@ import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadata
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelection
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
@@ -420,6 +422,50 @@ class ProviderReadingBindingRepositoryImplTest {
         val choice = MangaAllSourceSelection("title", ref, 20, proof)
         selections.select(choice) shouldBe true
         MangaAllSourceSelectionRepositoryImpl(database).get("title", "en") shouldBe choice
+        driver.execute(
+            null,
+            """
+            INSERT INTO tsuzuki_canonical_chapters
+            (id, canonical_title_id, display_number, type, base_number, confidence, created_at, updated_at)
+            VALUES ('chapter-1', 'title', '1', 'REGULAR', 1, 1.0, 1, 1)
+            """.trimIndent(),
+            0,
+        ).await()
+        suspend fun observeChapter(fingerprint: String?) {
+            database.tsuzuki_chapter_evidenceQueries.upsertTsuzukiChapterEvidence(
+                id = "evidence-1",
+                canonicalTitleId = "title",
+                producerKind = "PROVIDER",
+                producerId = ref.evidenceProducerId(),
+                externalChapterKey = "mangadot:chapters:1",
+                rawLabel = "Chapter 1",
+                rawNumber = 1.0,
+                volume = null,
+                title = null,
+                observedAt = 21,
+                confidence = 1.0,
+                authorityClass = "PROVIDER_PROVISIONAL",
+                mappedCanonicalChapterId = "chapter-1",
+                rawMetadata = ProviderEvidenceMetadataCodec.encode(
+                    ProviderEvidenceMetadata(language = "en", catalogWorkFingerprint = fingerprint),
+                ),
+            )
+        }
+        val release = ProviderChapterReadingOption(
+            canonicalChapterId = "chapter-1",
+            bindingId = "catalog-work",
+            providerId = ref.providerId,
+            facetId = ref.facetId,
+            externalWorkId = ref.externalWorkId,
+            providerChapterId = "mangadot:chapters:1",
+            catalogWorkFingerprint = proof,
+        )
+        observeChapter(null)
+        selections.selectRelease("title", release, 22) shouldBe false
+        observeChapter(proof)
+        selections.selectRelease("title", release, 23) shouldBe true
+        val restored = MangaAllSourceSelectionRepositoryImpl(database)
+        restored.getRelease("title", "chapter-1", ref) shouldBe release.providerChapterId
         val changed = "catalog-work-v1:" + "b".repeat(64)
         portfolio.observe(source.copy(observedAt = 30, catalogIdentityFingerprint = changed)) shouldBe true
         // The old preference remains history, but cannot be used as a fresh selection.
@@ -427,6 +473,13 @@ class ProviderReadingBindingRepositoryImplTest {
         selections.select(fresh) shouldBe true
         selections.select(choice.copy(selectedAt = 50)) shouldBe false
         selections.get("title", "en") shouldBe fresh
+        restored.getRelease("title", "chapter-1", ref) shouldBe null
+        restored.selectRelease("title", release, 51) shouldBe false
+        val freshRelease = release.copy(catalogWorkFingerprint = changed)
+        restored.selectRelease("title", freshRelease, 52) shouldBe false
+        observeChapter(changed)
+        restored.selectRelease("title", freshRelease, 53) shouldBe true
+        restored.getRelease("title", "chapter-1", ref) shouldBe freshRelease.providerChapterId
     }
 
     @Test
