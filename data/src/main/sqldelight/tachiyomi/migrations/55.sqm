@@ -1,0 +1,2 @@
+-- Local independent catalog identity attestation; legacy rows carry no proof.
+ALTER TABLE tsuzuki_provider_work_sources ADD COLUMN catalog_identity_fingerprint TEXT;

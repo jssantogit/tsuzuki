@@ -460,6 +460,14 @@ class CollectProviderReadingEvidence private constructor(
                         continue
                     }
                     val identity = verifiedMangaUpdatesResearchIdentity(advance.canonicalTitleId) ?: continue
+                    val proof = MangaAllCatalogWorkIdentityProof.fingerprint(
+                        advance.canonicalTitleId,
+                        advance.ref,
+                        identity,
+                        registration.descriptor.version.code,
+                        registration.configurationFingerprint,
+                    ) ?: continue
+                    if (source.catalogIdentityFingerprint != proof) continue
                     catalogCursorFingerprint(registration.configurationFingerprint, identity)
                 }
                 else -> continue
@@ -938,6 +946,17 @@ class CollectProviderReadingEvidence private constructor(
         } else if (verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != expectedCatalogId) {
             return
         }
+        val proof = if (assessment.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED) {
+            MangaAllCatalogWorkIdentityProof.fingerprint(
+                canonicalTitleId,
+                assessment.ref,
+                expectedCatalogId ?: return,
+                target.registration.descriptor.version.code,
+                target.registration.configurationFingerprint,
+            ) ?: return
+        } else {
+            null
+        }
         try {
             val recorded = repository.observe(
                 ProviderWorkSourceAssociation(
@@ -946,6 +965,7 @@ class CollectProviderReadingEvidence private constructor(
                     workVerification = assessment.workVerification,
                     editionQualification = assessment.editionQualification,
                     observedAt = clock(),
+                    catalogIdentityFingerprint = proof,
                 ),
             )
             traceWorkSourceAssociation(
@@ -1491,6 +1511,17 @@ class CollectProviderReadingEvidence private constructor(
             if (catalogIdentity != null && verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity) {
                 continue
             }
+            val proof = if (catalogIdentity != null) {
+                MangaAllCatalogWorkIdentityProof.fingerprint(
+                    canonicalTitleId,
+                    assessment.ref,
+                    catalogIdentity,
+                    target.registration.descriptor.version.code,
+                    target.registration.configurationFingerprint,
+                ) ?: continue
+            } else {
+                null
+            }
             try {
                 val recorded = repository.observe(
                     ProviderWorkSourceAssociation(
@@ -1499,13 +1530,15 @@ class CollectProviderReadingEvidence private constructor(
                         workVerification = assessment.workVerification,
                         editionQualification = assessment.editionQualification,
                         observedAt = clock(),
+                        catalogIdentityFingerprint = proof,
                     ),
                 )
                 if (recorded) {
                     val current = repository.get(assessment.ref)
                     val agrees = current?.canonicalTitleId == canonicalTitleId &&
                         current.workVerification == assessment.workVerification &&
-                        current.editionQualification == assessment.editionQualification
+                        current.editionQualification == assessment.editionQualification &&
+                        current.catalogIdentityFingerprint == proof
                     if (agrees && catalogIdentity == null) {
                         retained += assessment
                     } else if (agrees && catalogIdentity != null) {
@@ -1706,9 +1739,21 @@ class CollectProviderReadingEvidence private constructor(
                     return false
                 }
                 val current = workSourceAssociationRepository?.get(source.ref) ?: return false
+                val proof = if (catalogIdentity != null) {
+                    MangaAllCatalogWorkIdentityProof.fingerprint(
+                        canonicalTitleId,
+                        source.ref,
+                        catalogIdentity,
+                        target.registration.descriptor.version.code,
+                        target.registration.configurationFingerprint,
+                    ) ?: return false
+                } else {
+                    null
+                }
                 return current.canonicalTitleId == canonicalTitleId &&
                     current.workVerification == source.workVerification &&
-                    current.editionQualification == ProviderSourceEditionQualification.UNRESOLVED
+                    current.editionQualification == ProviderSourceEditionQualification.UNRESOLVED &&
+                    current.catalogIdentityFingerprint == proof
             }
             if (!sourceStillCurrent()) continue
             val fingerprint = if (catalogIdentity != null) {

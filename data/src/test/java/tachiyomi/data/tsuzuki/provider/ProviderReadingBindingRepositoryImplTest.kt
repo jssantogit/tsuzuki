@@ -233,6 +233,26 @@ class ProviderReadingBindingRepositoryImplTest {
     }
 
     @Test
+    fun `catalog proof persists with exact association and is removed by a conflict`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val source = workSource("catalog-proof").copy(
+            workVerification = ProviderWorkVerification.CATALOG_CORROBORATED,
+            catalogIdentityFingerprint = "catalog-work-v1:" + "a".repeat(64),
+        )
+        portfolio.observe(source) shouldBe true
+        ProviderWorkSourceAssociationRepositoryImpl(database).get(source.ref) shouldBe source
+        val conflict = source.copy(
+            workVerification = ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT,
+            observedAt = source.observedAt + 1,
+            catalogIdentityFingerprint = null,
+        )
+        portfolio.observe(conflict) shouldBe true
+        portfolio.get(source.ref) shouldBe conflict
+        portfolio.observe(source) shouldBe true
+        portfolio.get(source.ref) shouldBe conflict
+    }
+
+    @Test
     fun `creator conflict survives weak refresh until fresh creator evidence`() = runBlocking<Unit> {
         val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
         val source = workSource("creator-review")

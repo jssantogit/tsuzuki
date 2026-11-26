@@ -3435,11 +3435,17 @@ class CollectProviderReadingEvidenceTest {
         verifyCatalogResearchCollection(revoke = false, conflictDuringContinuation = true, withAuthor = true)
     }
 
+    @Test
+    fun `research rejects changed catalog proof even when work verification enum is unchanged`() = runTest {
+        verifyCatalogResearchCollection(revoke = false, changedProofDuringContinuation = true)
+    }
+
     private suspend fun verifyCatalogResearchCollection(
         revoke: Boolean,
         conflicting: Boolean = false,
         conflictDuringContinuation: Boolean = false,
         withAuthor: Boolean = false,
+        changedProofDuringContinuation: Boolean = false,
     ) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val owner = IntegrationId("mangaupdates")
@@ -3508,6 +3514,15 @@ class CollectProviderReadingEvidenceTest {
                                     ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
                                 },
                                 observedAt = 43L,
+                                catalogIdentityFingerprint = null,
+                            ),
+                        )
+                    }
+                    if (changedProofDuringContinuation && request.cursor != null) {
+                        observations.observe(
+                            requireNotNull(observations.get(ref)).copy(
+                                catalogIdentityFingerprint = "catalog-work-v1:" + "0".repeat(64),
+                                observedAt = 43L,
                             ),
                         )
                     }
@@ -3521,7 +3536,9 @@ class CollectProviderReadingEvidenceTest {
                                     language = "en",
                                 ),
                             ),
-                            nextCursor = if (conflictDuringContinuation && request.cursor == null) {
+                            nextCursor = if (
+                                (conflictDuringContinuation || changedProofDuringContinuation) && request.cursor == null
+                            ) {
                                 ProviderCursor("fixture-continuation")
                             } else {
                                 null
@@ -3541,14 +3558,16 @@ class CollectProviderReadingEvidenceTest {
         )
         val result = collector.execute(canonicalTitle.id)
         catalogVersions shouldBe listOf(1)
-        if (conflictDuringContinuation) chapterRequests shouldBe 2
+        if (conflictDuringContinuation || changedProofDuringContinuation) chapterRequests shouldBe 2
         observations.get(ref)?.workVerification shouldBe when {
             conflictDuringContinuation && withAuthor -> ProviderWorkVerification.AUTHOR_CONFLICT
             conflicting || conflictDuringContinuation -> ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
             withAuthor -> ProviderWorkVerification.AUTHOR_CORROBORATED
             else -> ProviderWorkVerification.CATALOG_CORROBORATED
         }
-        val rejected = revoke || conflicting || conflictDuringContinuation
+        val savedProof = observations.get(ref)?.catalogIdentityFingerprint
+        (savedProof != null) shouldBe (!conflicting && !conflictDuringContinuation && !withAuthor)
+        val rejected = revoke || conflicting || conflictDuringContinuation || changedProofDuringContinuation
         result.partialEvidence.map { it.externalChapterKey } shouldBe
             if (rejected) emptyList() else listOf("mangadot:chapters:111")
         result.snapshots shouldBe emptyList()

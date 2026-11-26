@@ -19,6 +19,28 @@ class ProviderWorkSourcePortfolioTest {
     )
 
     @Test
+    fun `catalog work attestation is scoped to title source facet version and configuration`() {
+        val ref = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadot:42")
+        val original = MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "123", 11, "config")
+        requireNotNull(original)
+        original.matches(Regex("catalog-work-v1:[0-9a-f]{64}")) shouldBe true
+        MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "123", 11, "config") shouldBe original
+        val changed = listOf(
+            MangaAllCatalogWorkIdentityProof.fingerprint("other", ref, "123", 11, "config"),
+            MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "124", 11, "config"),
+            MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "123", 11, "other"),
+            MangaAllCatalogWorkIdentityProof.fingerprint("title", ref.copy(facetId = "pt-br"), "123", 11, "config"),
+            MangaAllCatalogWorkIdentityProof.fingerprint(
+                "title", ref.copy(externalWorkId = "mangadot:43"), "123", 11, "config",
+            ),
+        )
+        changed.all { it != null && it != original } shouldBe true
+        MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "123", 10, "config") shouldBe null
+        MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "0", 11, "config") shouldBe null
+        MangaAllCatalogWorkIdentityProof.fingerprint("title", ref.copy(facetId = "ja"), "123", 11, "config") shouldBe null
+    }
+
+    @Test
     fun `bibliographic ID verifies a creditless exact work but never grants edition or reader authority`() {
         val candidate = original.copy(
             externalWorkId = "mangadot:42",

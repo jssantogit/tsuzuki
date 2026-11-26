@@ -30,6 +30,7 @@ class ProviderWorkSourceAssociationRepositoryImpl(
             workVerification = association.workVerification.name,
             editionQualification = association.editionQualification.name,
             observedAt = association.observedAt,
+            catalogIdentityFingerprint = association.catalogIdentityFingerprint,
         )
         // SQLite's source identity key guarantees that a rival title can never
         // silently steal this HID, even if two collectors race concurrently.
@@ -58,6 +59,7 @@ class ProviderWorkSourceAssociationRepositoryImpl(
         workVerification: String,
         editionQualification: String,
         observedAt: Long,
+        catalogIdentityFingerprint: String?,
     ): ProviderWorkSourceAssociation = ProviderWorkSourceAssociation(
         canonicalTitleId = canonicalTitleId,
         ref = ProviderBindingRef(
@@ -68,5 +70,6 @@ class ProviderWorkSourceAssociationRepositoryImpl(
         workVerification = ProviderWorkVerification.valueOf(workVerification),
         editionQualification = ProviderSourceEditionQualification.valueOf(editionQualification),
         observedAt = observedAt,
+        catalogIdentityFingerprint = catalogIdentityFingerprint,
     )
 }
