@@ -90,6 +90,7 @@ internal class MangaAllFutureHostChapterSnapshot(
                 "generation" to JsonPrimitive(nonce),
                 "expiresAt" to JsonPrimitive(now + TTL_MS),
                 "count" to JsonPrimitive(tuples.size),
+                "completed" to JsonPrimitive(false),
                 "ranges" to JsonArray(ranges.map(::JsonPrimitive)),
             ),
         ).toString()
@@ -202,6 +203,9 @@ internal class MangaAllFutureHostChapterSnapshot(
                 index.generation + ":" + position
         }
         if (index.count > 0 && items.isEmpty()) fail("NO_CHAPTER_CURSOR_PROGRESS")
+        if (nextCursor == null) {
+            storage.markFutureMangaAllChapterSnapshotCompleted(workId, language, index.generation)
+        }
         return MangaAllFutureChapterPage(items, nextCursor)
     }
 

@@ -122,16 +122,71 @@ class FileProviderStorageHostService(
                 replacement[key] = value
             }
 
-            if (replacement.size > maxEntries ||
-                replacement.values.sumOf(String::length) > maxTotalChars ||
-                replacement.values.sumOf { it.encodeToByteArray().size.toLong() } > maxTotalChars
-            ) {
+            fun exceedsQuota(): Boolean =
+                replacement.size > maxEntries ||
+                    replacement.values.sumOf(String::length) > maxTotalChars ||
+                    replacement.values.sumOf { it.encodeToByteArray().size.toLong() } > maxTotalChars
+
+            // Terminal pages are replayable while capacity permits. Under
+            // pressure reclaim only completed generations, oldest first.
+            // Incomplete generations and ordinary Provider keys stay pinned.
+            if (exceedsQuota()) {
+                val completed = replacement.entries.mapNotNull { (key, value) ->
+                    if (!FUTURE_MANGAALL_SCOPED_INDEX.matches(key) || key == prefix + "index") {
+                        return@mapNotNull null
+                    }
+                    val header = runCatching { json.parseToJsonElement(value) as? JsonObject }.getOrNull()
+                    if (header?.get("completed") != JsonPrimitive(true)) return@mapNotNull null
+                    val expires = (header["expiresAt"] as? JsonPrimitive)?.longOrNull
+                        ?: return@mapNotNull null
+                    key.removeSuffix("index") to expires
+                }.sortedWith(compareBy({ it.second }, { it.first }))
+                for ((retired, _) in completed) {
+                    replacement.remove(retired + "index")
+                    repeat(16) { replacement.remove(retired + "part_" + it) }
+                    if (!exceedsQuota()) break
+                }
+            }
+            if (exceedsQuota()) {
                 throw ProviderHostServiceException("Future MangaALL snapshot exceeds shared provider quota")
             }
 
             // Same-filesystem atomic move; no clear-then-write intermediate
             // state and no loss of other Provider keys on quota rejection.
             writeState(replacement)
+        }
+    }
+
+    /**
+     * Record terminal delivery eligibility using generation CAS. Never mark a
+     * replacement from another process as completed by an older page.
+     */
+    internal suspend fun markFutureMangaAllChapterSnapshotCompleted(
+        workId: String,
+        language: String,
+        generation: String,
+    ) {
+        if (providerId != FUTURE_MANGAALL_PROVIDER_ID) {
+            throw ProviderHostServiceException("Future MangaALL snapshot scope is invalid")
+        }
+        val key = futureMangaAllChapterSnapshotPrefix(workId, language) + "index"
+        withStateLock {
+            val state = readState().toMutableMap()
+            val raw = state[key] ?: return@withStateLock
+            val header = json.parseToJsonElement(raw) as? JsonObject ?: return@withStateLock
+            if (header["generation"] != JsonPrimitive(generation)) return@withStateLock
+            if (header["completed"] == JsonPrimitive(true)) return@withStateLock
+            val completed = JsonObject(header + ("completed" to JsonPrimitive(true))).toString()
+            // Old on-disk headers may not contain the reserved flag. Do not
+            // exceed quota merely to mark them as reclaimable.
+            state[key] = completed
+            if (completed.length <= maxValueChars &&
+                completed.encodeToByteArray().size <= 64 * 1024 &&
+                state.values.sumOf(String::length) <= maxTotalChars &&
+                state.values.sumOf { it.encodeToByteArray().size.toLong() } <= maxTotalChars
+            ) {
+                writeState(state)
+            }
         }
     }
 

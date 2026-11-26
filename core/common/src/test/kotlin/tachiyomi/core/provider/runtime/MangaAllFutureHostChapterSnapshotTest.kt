@@ -223,6 +223,45 @@ class MangaAllFutureHostChapterSnapshotTest {
     }
 
     @Test
+    fun completed_generation_is_replayed_until_pressure_then_reclaimed_without_waiting_for_ttl(): Unit = runBlocking {
+        val shared = FileProviderStorageHostService(
+            root = tempDir.resolve("terminal-quota").toFile(),
+            providerId = providerId,
+        )
+        repeat(6) { shared.set("other" + it, "a".repeat(60 * 1024)) }
+        val (first, _) = fixture(existingStorage = shared) { source(1900, 0, "First") }
+        val (second, _) = fixture(
+            existingStorage = shared,
+            expectedUrl = "https://mangadot.net/api/manga/132/chapters/list?lang=en",
+        ) { source(1900, 0, "Second") }
+        var page = first.start("mangadot:131", "en")
+        var terminalRequest = page.nextCursor!!
+        while (page.nextCursor != null) {
+            terminalRequest = page.nextCursor!!
+            page = first.next("mangadot:131", "en", terminalRequest)
+        }
+        first.next("mangadot:131", "en", terminalRequest) shouldBe page
+        val secondPage = second.start("mangadot:132", "en")
+        secondPage.nextCursor.isNullOrBlank() shouldBe false
+        shared.get("mangaall_private_chapters_131_en_index") shouldBe null
+        shared.get("mangaall_private_chapters_131_en_part_0") shouldBe null
+        second.next("mangadot:132", "en", secondPage.nextCursor!!).items.isNotEmpty() shouldBe true
+        repeat(6) { shared.get("other" + it) shouldBe "a".repeat(60 * 1024) }
+    }
+
+    @Test
+    fun completion_of_old_generation_does_not_mark_replacement(): Unit = runBlocking {
+        val shared = FileProviderStorageHostService(tempDir.resolve("terminal-cas").toFile(), providerId)
+        val (service, _) = fixture(existingStorage = shared) { source(400, 0) }
+        val original = service.start("mangadot:131", "en").nextCursor!!
+        val replacement = service.start("mangadot:131", "en").nextCursor!!
+        shared.markFutureMangaAllChapterSnapshotCompleted("mangadot:131", "en", original.split(':')[3])
+        val header = Json.parseToJsonElement(shared.get("mangaall_private_chapters_131_en_index")!!).jsonObject
+        header["completed"] shouldBe JsonPrimitive(false)
+        service.next("mangadot:131", "en", replacement).items.isNotEmpty() shouldBe true
+    }
+
+    @Test
     fun chapter_identity_keeps_upload_and_independent_source_chapter_with_same_numeric_id(): Unit = runBlocking {
         val raw = """[
             {"id":171,"chapter_number":2,"language":"en","source":"user"},
