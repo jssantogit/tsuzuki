@@ -354,28 +354,32 @@ internal class AdvancedExtractionLiveLane(private val source: AdvancedExtraction
     fun sourceId(value: JsonElement?): String {
         val id = (value as? JsonPrimitive)?.takeIf { it.isString }?.content
             ?: throw GateFailure("SOURCE_ID")
-        // MangaBall's cleanId/sourceId use this exact grammar. MangaFire's
-        // reading adapter treats HIDs and chapter IDs as opaque strings; keep
-        // the same non-blank and size checks as the Host binding/observation.
+        // MangaBall's cleanId/sourceId use this exact grammar. MangaFire
+        // consumes opaque IDs through JavaScript trim(), which also strips BOM.
         val valid = when (source) {
             AdvancedExtractionSource.MANGA_BALL -> MANGA_BALL_ID.matches(id)
-            AdvancedExtractionSource.MANGA_FIRE -> id.isNotBlank() && id.length <= 1024
+            AdvancedExtractionSource.MANGA_FIRE ->
+                id.isNotBlank() && id.length <= 1024 && id.trim { it.isWhitespace() || it == '\uFEFF' } == id
         }
         if (!valid) throw GateFailure("SOURCE_ID")
         return id
     }
 
     fun claimWork(id: String) {
-        // MangaFire trims its work HID before both emitting and consuming it.
-        if (id != id.trim()) throw GateFailure("SOURCE_ID")
         if (!claimedWorkIds.add(id)) throw GateFailure("REUSED_WORK_ID")
     }
 
     fun lookupItems(result: JsonObject, onHttpDenial: (Int) -> Unit): JsonArray {
+        fun deniedStatus(value: JsonElement?): Int? =
+            (value as? JsonPrimitive)?.intOrNull?.takeIf { it in ADVANCED_DENIAL_STATUSES }
+
         val reportedStatus = result["lookupHttpStatus"]?.takeUnless { it == JsonNull }
         val failureCode = result["lookupFailureCode"]?.takeUnless { it == JsonNull }
-        val status = (reportedStatus as? JsonPrimitive)?.intOrNull
-        if (status != null && status in ADVANCED_DENIAL_STATUSES) {
+        val items = result["items"] as? JsonArray
+        val status = deniedStatus(reportedStatus) ?: items?.firstNotNullOfOrNull { item ->
+            deniedStatus((item as? JsonObject)?.get("detailHttpStatus"))
+        }
+        if (status != null) {
             onHttpDenial(status)
             throw GateFailure("HTTP_$status")
         }
@@ -384,7 +388,7 @@ internal class AdvancedExtractionLiveLane(private val source: AdvancedExtraction
         if (failureCode != null || reportedStatus != null) {
             throw GateFailure("LOOKUP_FAILURE")
         }
-        return result["items"] as? JsonArray ?: throw GateFailure("INVALID_LOOKUP_ITEMS")
+        return items ?: throw GateFailure("INVALID_LOOKUP_ITEMS")
     }
 
     private companion object {

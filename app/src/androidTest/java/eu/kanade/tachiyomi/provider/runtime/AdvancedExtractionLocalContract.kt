@@ -225,6 +225,10 @@ internal object AdvancedExtractionLocalContract {
         for (id in invalidFireIds) {
             rejects("SOURCE_ID") { fire.sourceId(id) }
         }
+        for (chapterId in listOf(" 101", "101\t", "\uFEFF101")) {
+            val chapter = JsonObject(mapOf("providerChapterId" to JsonPrimitive(chapterId)))
+            rejects("SOURCE_ID") { fire.sourceId(chapter["providerChapterId"]) }
+        }
 
         for (id in listOf("mangaball:work-1", "mangaball:work-2", "mangaball:work-3")) {
             ball.claimWork(id)
@@ -232,7 +236,7 @@ internal object AdvancedExtractionLocalContract {
         rejects("REUSED_WORK_ID") { ball.claimWork("mangaball:work-2") }
         for (id in listOf("work-1", "work-2", "work-3")) fire.claimWork(id)
         rejects("REUSED_WORK_ID") { fire.claimWork("work-2") }
-        rejects("SOURCE_ID") { fire.claimWork(" work-2 ") }
+        rejects("SOURCE_ID") { fire.sourceId(JsonPrimitive(" work-2 ")) }
 
         val items = """[{"externalWorkId":"fireFixture","title":"Fixture Work"}]"""
         val clean = Json.parseToJsonElement("""{"items":$items,"nextCursor":null}""").jsonObject
@@ -264,6 +268,25 @@ internal object AdvancedExtractionLocalContract {
             )
         }
         assertEquals(listOf(401, 403, 429, 403), denials)
+
+        // The exact match comes first. A failure in an unrelated candidate's
+        // detail still denies the entire lookup before any candidate is used.
+        fun lookupWithDetailStatus(status: Int): JsonObject =
+            Json.parseToJsonElement(
+                """
+                {"items":[
+                  {"externalWorkId":"fireFixture","title":"Fixture Work"},
+                  {"externalWorkId":"otherFixture","title":"Other Work","detailOutcome":"DETAIL_FAILED","detailHttpStatus":$status}
+                ],"nextCursor":null}
+                """.trimIndent(),
+            ).jsonObject
+        denials.clear()
+        assertEquals(2, fire.lookupItems(lookupWithDetailStatus(500), recordDenial).size)
+        assertTrue(denials.isEmpty())
+        for (status in listOf(401, 403, 429)) {
+            rejects("HTTP_$status") { fire.lookupItems(lookupWithDetailStatus(status), recordDenial) }
+        }
+        assertEquals(listOf(401, 403, 429), denials)
     }
 
     private fun verifyLiveLookupEditionEvidence() {
