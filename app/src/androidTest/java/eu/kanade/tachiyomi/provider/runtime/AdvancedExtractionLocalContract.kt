@@ -1,6 +1,12 @@
 package eu.kanade.tachiyomi.provider.runtime
 
 import android.content.Context
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.Headers.Companion.headersOf
@@ -12,6 +18,8 @@ import org.junit.Assert.assertTrue
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
+import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
@@ -20,6 +28,8 @@ import java.util.zip.GZIPOutputStream
 /** Local-only protocol, resource and isolation checks in the same acceptance method. */
 internal object AdvancedExtractionLocalContract {
     suspend fun run(context: Context, root: File) {
+        verifyLiveLaneIntegrity()
+        verifyLiveLookupEditionEvidence()
         val server = MockWebServer()
         server.start()
         val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
@@ -182,5 +192,99 @@ internal object AdvancedExtractionLocalContract {
         } finally {
             server.close()
         }
+    }
+
+    private fun verifyLiveLaneIntegrity() {
+        fun rejects(code: String, block: () -> Unit) {
+            val failure = runCatching(block).exceptionOrNull()
+            assertEquals(code, (failure as? GateFailure)?.code)
+        }
+
+        val ball = AdvancedExtractionLiveLane(
+            AdvancedExtractionSource.MANGA_BALL,
+            "app.tsuzuki.mangaall.mangaball",
+        )
+        val fire = AdvancedExtractionLiveLane(AdvancedExtractionSource.MANGA_FIRE, "app.tsuzuki.mangafire")
+        rejects("MANIFEST_ID") {
+            AdvancedExtractionLiveLane(AdvancedExtractionSource.MANGA_BALL, "app.tsuzuki.mangafire")
+        }
+        rejects("MANIFEST_ID") {
+            AdvancedExtractionLiveLane(AdvancedExtractionSource.MANGA_FIRE, "app.tsuzuki.mangaall.mangaball")
+        }
+
+        assertEquals("mangaball:A-1_b", ball.sourceId(JsonPrimitive("mangaball:A-1_b")))
+        for (id in listOf("mangaball:", "mangaball:x/y", "mangaball:" + "x".repeat(129), "A-1_b")) {
+            rejects("SOURCE_ID") { ball.sourceId(JsonPrimitive(id)) }
+        }
+        assertEquals("fireFixture", fire.sourceId(JsonPrimitive("fireFixture")))
+        assertEquals("101", fire.sourceId(JsonPrimitive("101")))
+        assertEquals("release-A", fire.sourceId(JsonPrimitive("release-A")))
+        val invalidFireIds = listOf(
+            null, JsonNull, JsonPrimitive(""), JsonPrimitive(" "), JsonPrimitive(101), JsonPrimitive("x".repeat(1025)),
+        )
+        for (id in invalidFireIds) {
+            rejects("SOURCE_ID") { fire.sourceId(id) }
+        }
+
+        for (id in listOf("mangaball:work-1", "mangaball:work-2", "mangaball:work-3")) {
+            ball.claimWork(id)
+        }
+        rejects("REUSED_WORK_ID") { ball.claimWork("mangaball:work-2") }
+        for (id in listOf("work-1", "work-2", "work-3")) fire.claimWork(id)
+        rejects("REUSED_WORK_ID") { fire.claimWork("work-2") }
+        rejects("SOURCE_ID") { fire.claimWork(" work-2 ") }
+
+        val items = """[{"externalWorkId":"fireFixture","title":"Fixture Work"}]"""
+        val clean = Json.parseToJsonElement("""{"items":$items,"nextCursor":null}""").jsonObject
+        fun lookupWith(vararg metadata: Pair<String, JsonElement>) = JsonObject(clean + metadata)
+        val denials = mutableListOf<Int>()
+        val recordDenial: (Int) -> Unit = { denials.add(it) }
+        assertEquals(1, fire.lookupItems(clean, recordDenial).size)
+        val explicitNulls = lookupWith("lookupHttpStatus" to JsonNull, "lookupFailureCode" to JsonNull)
+        assertEquals(1, fire.lookupItems(explicitNulls, recordDenial).size)
+        rejects("LOOKUP_FAILURE") {
+            fire.lookupItems(lookupWith("lookupFailureCode" to JsonPrimitive("INVALID_RESPONSE")), recordDenial)
+        }
+        rejects("LOOKUP_FAILURE") {
+            fire.lookupItems(lookupWith("lookupHttpStatus" to JsonPrimitive(500)), recordDenial)
+        }
+        assertTrue(denials.isEmpty())
+        for (status in listOf(401, 403, 429)) {
+            rejects("HTTP_$status") {
+                fire.lookupItems(lookupWith("lookupHttpStatus" to JsonPrimitive(status)), recordDenial)
+            }
+        }
+        rejects("HTTP_403") {
+            fire.lookupItems(
+                lookupWith(
+                    "lookupFailureCode" to JsonPrimitive("HTTP_ERROR"),
+                    "lookupHttpStatus" to JsonPrimitive(403),
+                ),
+                recordDenial,
+            )
+        }
+        assertEquals(listOf(401, 403, 429, 403), denials)
+    }
+
+    private fun verifyLiveLookupEditionEvidence() {
+        val providerId = ProviderId("app.tsuzuki.mangafire")
+        val titles = setOf("Death Note")
+        val exact = ProviderWorkCandidate("fixtureHid", "Death Note")
+        val qualified = exact.copy(title = "Death Note (Colored)")
+        for (alternate in listOf(qualified, qualified.copy(aliases = listOf("Death Note")))) {
+            val observations = listOf(alternate, exact)
+            for (pages in listOf(observations, observations.reversed())) {
+                val identity = AdvancedExtractionLookupIdentity(providerId, titles)
+                pages.forEach(identity::observe)
+                assertEquals(1, identity.matchCount)
+                assertTrue(identity.eligibleIds().isEmpty())
+            }
+        }
+
+        val repeatedExact = AdvancedExtractionLookupIdentity(providerId, titles)
+        repeatedExact.observe(exact)
+        repeatedExact.observe(exact)
+        assertEquals(1, repeatedExact.matchCount)
+        assertEquals(setOf("fixtureHid"), repeatedExact.eligibleIds())
     }
 }
