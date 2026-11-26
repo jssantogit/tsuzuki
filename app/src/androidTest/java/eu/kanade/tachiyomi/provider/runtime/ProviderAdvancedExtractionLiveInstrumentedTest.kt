@@ -72,9 +72,15 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
             context = context,
             storageRoot = File(root, "storage"),
             baseHttpClient = network,
+            httpRequestAllowed = { providerId -> providerId !in blocked },
             httpDiagnosticSink = { providerId, detail ->
                 val status = detail.statusCode
-                if (status == 401 || status == 403 || status == 429) blocked.putIfAbsent(providerId, status)
+                if (status == 401 || status == 403 || status == 429) {
+                    if (blocked.putIfAbsent(providerId, status) == null) {
+                        val source = if (providerId == "app.tsuzuki.mangafire") "mangafire" else "mangaall-ball"
+                        Log.i("AdvancedLiveGate", "ADVANCED_DENIAL|$source|HTTP_$status|challenge_marker=${detail.challengeAdvertised}")
+                    }
+                }
             },
         )
         val client = ProviderRuntimeClient(context, factory)
@@ -147,6 +153,9 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
                             return Json.parseToJsonElement(requireNotNull(response.value)).jsonObject
                         }
                         works.map { work ->
+                            blocked[manifest.id]?.let { status ->
+                                return@map verdict(name, work.key, "NOT_ATTEMPTED_HTTP_$status", 0L)
+                            }
                             val started = SystemClock.elapsedRealtime()
                             var stage = "LOOKUP"
                             val outcome = try {

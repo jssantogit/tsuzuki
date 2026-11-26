@@ -60,6 +60,7 @@ class DefaultProviderHttpHostService(
     private val maxTextChars: Int = ProviderHttpProtocol.MAX_RESPONSE_BODY_CHARS,
     private val maxResponseBytes: Int = 16 * 1024 * 1024,
     private val invocationTimeoutMs: Long = ProviderRuntimeLimits().wallClockTimeoutMs,
+    private val requestAllowed: () -> Boolean = { true },
     private val diagnosticSink: (ProviderHttpDiagnostic) -> Unit = {},
 ) : ProviderHttpHostService, AutoCloseable {
 
@@ -167,6 +168,7 @@ class DefaultProviderHttpHostService(
         var redirects = 0
 
         while (true) {
+            if (!requestAllowed()) throw ProviderHostServiceException("Provider HTTP request paused by Host")
             val call = client.newCall(
                 buildRequest(
                     url = currentUrl,
@@ -197,6 +199,7 @@ class DefaultProviderHttpHostService(
                     throw ProviderHostServiceException("Provider HTTP broker is closed")
                 }
 
+                if (!requestAllowed()) throw ProviderHostServiceException("Provider HTTP request paused by Host")
                 val received = call.execute()
                 response = received
                 statusCode = received.code
@@ -252,6 +255,7 @@ class DefaultProviderHttpHostService(
                     startedNanos = startedNanos,
                     statusCode = received.code,
                     operationId = operationId,
+                    challengeAdvertised = received.header("cf-mitigated")?.equals("challenge", ignoreCase = true) == true,
                 )
                 return result
             } catch (error: Exception) {
@@ -262,6 +266,7 @@ class DefaultProviderHttpHostService(
                     statusCode = statusCode,
                     operationId = operationId,
                     failureFamily = classifyFailure(error, call),
+                    challengeAdvertised = response?.header("cf-mitigated")?.equals("challenge", ignoreCase = true) == true,
                 )
                 when (error) {
                     is ProviderNetworkPolicyException,
@@ -283,6 +288,7 @@ class DefaultProviderHttpHostService(
         statusCode: Int?,
         operationId: String,
         failureFamily: ProviderHttpFailureFamily? = null,
+        challengeAdvertised: Boolean = false,
     ) {
         emitDiagnostic(
             ProviderHttpDiagnostic(
@@ -295,6 +301,7 @@ class DefaultProviderHttpHostService(
                 statusCode = statusCode,
                 failureFamily = failureFamily,
                 operationId = operationId,
+                challengeAdvertised = challengeAdvertised,
             ),
         )
     }

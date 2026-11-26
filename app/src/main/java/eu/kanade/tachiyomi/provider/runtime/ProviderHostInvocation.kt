@@ -137,6 +137,7 @@ class ProviderHostInvocationFactory(
     private val p2pServiceFactory: (String) -> ProviderP2pHostService? = { null },
     private val approvedP2pServiceFactory: ((String, ProviderP2pAcquireRequest?) -> ProviderP2pHostService?)? = null,
     val managedFiles: ProviderManagedFileStore = ProviderManagedFileStore(context.applicationContext),
+    private val httpRequestAllowed: (String) -> Boolean = { true },
 ) {
 
     private val context = context.applicationContext
@@ -164,6 +165,7 @@ class ProviderHostInvocationFactory(
                     cookieJar = httpSessions.cookieJar(policy.providerId, origins, policy.allowLocalNetwork),
                     baseClient = baseHttpClient,
                     invocationTimeoutMs = invocationTimeoutMs,
+                    requestAllowed = { httpRequestAllowed(policy.providerId) },
                     diagnosticSink = { diagnostic ->
                         logSink(policy.providerId, diagnostic.toRuntimeLogMessage())
                         // Structured recorder receives the typed, sanitized counterpart only

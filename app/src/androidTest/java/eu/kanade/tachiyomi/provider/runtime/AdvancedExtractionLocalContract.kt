@@ -23,7 +23,16 @@ internal object AdvancedExtractionLocalContract {
         val server = MockWebServer()
         server.start()
         val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
-        val factory = ProviderHostInvocationFactory(context, storageRoot = File(root, "local"))
+        val denied = java.util.concurrent.ConcurrentHashMap<String, Int>()
+        val diagnostics = java.util.concurrent.CopyOnWriteArrayList<tachiyomi.core.provider.runtime.ProviderHttpDiagnostic>()
+        val factory = ProviderHostInvocationFactory(
+            context, storageRoot = File(root, "local"),
+            httpRequestAllowed = { it !in denied },
+            httpDiagnosticSink = { id, detail ->
+                diagnostics.add(detail)
+                detail.statusCode?.takeIf { it in setOf(401, 403, 429) }?.let { denied.putIfAbsent(id, it) }
+            },
+        )
         val bindingEvents = java.util.concurrent.CopyOnWriteArrayList<ProviderRuntimeBindingPhase>()
         val client = ProviderRuntimeClient(
             context, factory,
@@ -127,6 +136,24 @@ internal object AdvancedExtractionLocalContract {
             assertTrue(!portfolio.hasSourceAttestedAlternateEdition(provider, standard, "Fixture Work"))
             assertTrue(portfolio.hasSourceAttestedAlternateEdition(provider, variant, "Fixture Work"))
             assertTrue(!portfolio.hasSourceAttestedAlternateEdition(provider, variant.copy(aliases = emptyList()), "Fixture Work"))
+            // Every denial is real on the local server; a caught JS exception
+            // cannot trigger another request after the scoped Host pause.
+            for (status in listOf(401, 403, 429)) {
+                val deniedId = "app.tsuzuki.test.denied$status"
+                val count = server.requestCount
+                server.enqueue(MockResponse.Builder().code(status).addHeader("cf-mitigated", if (status == 403) "challenge" else "other").body("denied").build())
+                val refusal = invoke("""JSON.parse(await tsuzuki.http.requestResource("GET", "$origin/denied", "{}")).statusCode.toString()""", deniedId)
+                assertNull(refusal.failure)
+                assertEquals(status.toString(), refusal.value)
+                assertEquals(status, denied[deniedId])
+                assertEquals(status == 403, diagnostics.last { it.statusCode == status }.challengeAdvertised)
+                assertNotNull(invoke("""await tsuzuki.http.get("$origin/denied-again")""", deniedId).failure)
+                assertEquals(count + 1, server.requestCount)
+            }
+            server.enqueue(MockResponse(body = "independent"))
+            val independent = invoke("""await tsuzuki.http.get("$origin/independent")""", "app.tsuzuki.test.independent")
+            assertNull(independent.failure)
+            assertEquals("independent", independent.value)
         } finally {
             server.close()
         }

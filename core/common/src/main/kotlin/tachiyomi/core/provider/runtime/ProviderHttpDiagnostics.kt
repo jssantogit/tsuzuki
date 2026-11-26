@@ -28,4 +28,6 @@ data class ProviderHttpDiagnostic(
     val failureFamily: ProviderHttpFailureFamily? = null,
     /** Per-network-hop correlation ID, generated exclusively by the Host. No URL or source metadata. */
     val operationId: String? = null,
+    /** Only a fixed challenge marker, never the response headers or body. */
+    val challengeAdvertised: Boolean = false,
 )
