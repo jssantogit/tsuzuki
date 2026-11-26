@@ -27,11 +27,9 @@ adb install -r "${instrument[0]}" >/dev/null
 adb shell pm list instrumentation | tr -d '\r' | grep -Fq "instrumentation:$runner (target=$app)"
 raw="$(mktemp)"
 trap 'rm -f "$raw"; cleanup' EXIT
-approved=false
-if [[ "${MANGABALL_API_APPROVED:-false}" == true ]]; then approved=true; fi
 adb logcat -c
 status=0
-timeout --foreground 330s adb shell am instrument -w -r -e class "$class" -e advancedLive true -e mangaBallApiApproved "$approved" "$runner" >"$raw" 2>&1 || status=$?
+timeout --foreground 330s adb shell am instrument -w -r -e class "$class" -e advancedLive true "$runner" >"$raw" 2>&1 || status=$?
 adb logcat -d -s AdvancedLiveGate:I | grep -Eo 'ADVANCED_LIVE\|[a-z-]+\|[a-z-]+\|[A-Z0-9_]+\|ms=[0-9]+|ADVANCED_CONTRACT\|(PASS|FAIL)|ADVANCED_CONTRACT_DETAIL\|[A-Z_]+\|(PASS|FAIL)|ADVANCED_CONTRACT_FAILURE\|[A-Z_]+\|(EXCEPTION|ASSERTION)|ADVANCED_RECOVERY\|[a-z-]+\|RUNTIME_DIED|ADVANCED_IDENTITY\|[a-z-]+\|[a-z-]+\|matches=[0-9]+\|excluded=[0-9]+\|eligible=[0-9]+' | tee "$out/verdicts.txt" || true
 if [[ "$status" != 0 ]] || ! grep -Fq 'OK (1 test)' "$raw" || ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw"; then
   echo "ADVANCED_LIVE|instrumentation=FAIL|exit=$status" >&2

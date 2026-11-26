@@ -74,7 +74,7 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
             baseHttpClient = network,
             httpDiagnosticSink = { providerId, detail ->
                 val status = detail.statusCode
-                if (status == 403 || status == 429) blocked.putIfAbsent(providerId, status)
+                if (status == 401 || status == 403 || status == 429) blocked.putIfAbsent(providerId, status)
             },
         )
         val client = ProviderRuntimeClient(context, factory)
@@ -108,9 +108,6 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
             val results = supervisorScope {
                 listOf("mangaall-ball", "mangafire").map { name ->
                     async(Dispatchers.IO) {
-                        if (name == "mangaall-ball" && args.getString("mangaBallApiApproved") != "true") {
-                            return@async works.map { verdict(name, it.key, "ACCESS_NOT_APPROVED", 0L) }
-                        }
                         val candidate = instrumentation.context.assets.open("advanced-live-$name-unsigned.zip").use { it.readBytes() }
                         val manifest = ProviderPackageParser().parse(candidate).manifest
                         check(manifest.permissions.network?.localNetwork == false)

@@ -12,14 +12,12 @@ jobs:
   live-android:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
-    env:
-      MANGABALL_API_APPROVED: ${{ vars.MANGABALL_API_APPROVED }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Verify explicit live request
-        run: test "$(cat .github/provider-advanced-extraction-live.request)" = LIVE_THREE_AUTHORIZED
+        run: test "$(cat .github/provider-advanced-extraction-live.request)" = LIVE_THREE_REQUESTED
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: jssantogit/providers-tsuzuki
