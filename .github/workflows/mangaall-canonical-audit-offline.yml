@@ -114,7 +114,7 @@ jobs:
             :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' \
             :app:testDebugUnitTest --tests '*ShikimoriApiTest' \
             --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' \
-            --tests '*ReaderSourceCardRecoveryTest' \
+            --tests '*ReaderSourceCardRecoveryTest' --tests '*MangaAllFutureGatewaySnapshotGateTest' \
             :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
       - name: Explicit scope
         run: echo 'MANGAALL_CANONICAL_AUDIT|offline=PASS|live=NOT_STARTED|readerUI=NOT_TESTED|corpus=UNCHANGED|signed=UNCHANGED'

@@ -10,6 +10,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
+import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
@@ -352,6 +353,9 @@ class ScriptProviderReadingGateway internal constructor(
                     cursor = request.cursor?.value,
                 ),
             ),
+            nativeChapterStart = request.cursor == null &&
+                request.binding.facetId in setOf("en", "pt-br") &&
+                request.binding.externalWorkId.matches(Regex("mangadot:[1-9][0-9]{0,15}")),
         ) { value, _ ->
             val decoded = json.decodeFromString<ChaptersPageDto>(value)
             ProviderPage(
@@ -464,6 +468,7 @@ class ScriptProviderReadingGateway internal constructor(
         inputJson: String,
         packageGate: (ActiveProviderScriptPackage) -> Boolean = { true },
         recheckPackageAfterInvocation: Boolean = false,
+        nativeChapterStart: Boolean = false,
         decode: (String, ActiveProviderScriptPackage) -> T,
     ): ProviderCallResult<T> {
         registry.awaitReady()
@@ -500,6 +505,20 @@ class ScriptProviderReadingGateway internal constructor(
             return malformed()
         }
 
+        // The native initial snapshot fetch includes bounded Host parsing and
+        // storage. Give only the explicitly granted code11 start a small grace
+        // within the collector's 7 s preview budget. Preserve custom limits,
+        // continuation, signed older versions and every other capability.
+        val invocationLimits = if (
+            nativeChapterStart && providerId.value == "app.tsuzuki.mangaall" &&
+            active.versionCode == 11L &&
+            ProviderHostModule.MANGAALL_CHAPTER_SNAPSHOT in hostPolicy.allowedHostModules() &&
+            limits == ProviderRuntimeLimitsDto()
+        ) {
+            limits.copy(wallClockTimeoutMs = 6_500L, jsExecutionTimeoutMs = 6_000L)
+        } else {
+            limits
+        }
         val runtimeRequest = try {
             ProviderRuntimeInvocationRequest(
                 protocolVersion = ProviderRuntimeProtocol.VERSION,
@@ -511,7 +530,7 @@ class ScriptProviderReadingGateway internal constructor(
                 configurationFingerprint = registration.configurationFingerprint,
                 fileName = active.parsed.manifest.entrypoint,
                 hostModules = hostPolicy.allowedHostModules(),
-                limits = limits,
+                limits = invocationLimits,
             )
         } catch (_: Throwable) {
             return malformed()
