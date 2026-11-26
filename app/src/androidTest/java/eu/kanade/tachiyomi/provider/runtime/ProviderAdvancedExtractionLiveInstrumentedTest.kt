@@ -72,7 +72,7 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
             context = context,
             storageRoot = File(root, "storage"),
             baseHttpClient = network,
-            httpRequestAllowed = { providerId -> providerId !in blocked },
+            httpRequestAllowed = { providerId -> !blocked.containsKey(providerId) },
             httpDiagnosticSink = { providerId, detail ->
                 val status = detail.statusCode
                 if (status == 401 || status == 403 || status == 429) {

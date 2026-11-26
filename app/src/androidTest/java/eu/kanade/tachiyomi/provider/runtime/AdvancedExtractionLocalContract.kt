@@ -27,7 +27,7 @@ internal object AdvancedExtractionLocalContract {
         val diagnostics = java.util.concurrent.CopyOnWriteArrayList<tachiyomi.core.provider.runtime.ProviderHttpDiagnostic>()
         val factory = ProviderHostInvocationFactory(
             context, storageRoot = File(root, "local"),
-            httpRequestAllowed = { it !in denied },
+            httpRequestAllowed = { !denied.containsKey(it) },
             httpDiagnosticSink = { id, detail ->
                 diagnostics.add(detail)
                 detail.statusCode?.takeIf { it in setOf(401, 403, 429) }?.let { denied.putIfAbsent(id, it) }
