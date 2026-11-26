@@ -86,9 +86,11 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.CollectProviderReadingEvidence
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllCatalogReaderResearch
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterEvidenceAdapter
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCursor
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
@@ -343,6 +345,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 providerReadingEvidence = collector,
             )
         }
+        val catalogReaderResearch = if (catalogScope == "explicit_plan") {
+            MangaAllCatalogReaderResearch(titles, metadataRegistry, registry, associations, selections)
+        } else {
+            null
+        }
         val resolver = ResolveProviderChapterReading(
             canonicalChapterRepository = chapters,
             evidenceRepository = evidence,
@@ -350,13 +357,31 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             workSourceAssociationRepository = associations,
             providerRegistry = registry,
             gateway = gateway,
+            catalogResearch = catalogReaderResearch,
         )
         val selected = ResolveMangaAllSelectedChapter(
             chapters,
             resolver,
             ResolveMangaAllSelectedReadingOption(selections),
         )
-        val select = SelectMangaAllSource(associations, selections)
+        val select = SelectMangaAllSource(associations, selections, catalogReaderResearch)
+
+        suspend fun verifiedOption(titleId: String, option: ProviderChapterReadingOption): Boolean {
+            val association = associations.get(option.bindingRef()) ?: return false
+            if (association.canonicalTitleId != titleId ||
+                association.editionQualification != ProviderSourceEditionQualification.UNRESOLVED
+            ) {
+                return false
+            }
+            return when (association.workVerification) {
+                ProviderWorkVerification.AUTHOR_CORROBORATED -> option.catalogWorkFingerprint == null
+                ProviderWorkVerification.CATALOG_CORROBORATED -> {
+                    val proof = catalogReaderResearch?.proof(association) ?: return false
+                    option.catalogWorkFingerprint == proof
+                }
+                else -> false
+            }
+        }
         val receipts = File(context.filesDir, "mangaall-frozen30-canonical-receipts-$catalogScope").apply { mkdirs() }
 
         suspend fun fingerprint(titleId: String, catalogName: String): String? {
@@ -383,10 +408,9 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     it.decimalFraction == null && it.confirmation != CanonicalChapterConfirmation.CONFLICTED
             }.singleOrNull() ?: return null
             val option = selected.execute(one.id, "en") ?: return null
-            val association = associations.get(option.bindingRef()) ?: return null
-            if (association.canonicalTitleId != titleId ||
-                association.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED ||
-                association.editionQualification != ProviderSourceEditionQualification.UNRESOLVED
+            if (!verifiedOption(titleId, option)) return null
+            if (option.catalogWorkFingerprint != null &&
+                catalogReaderResearch?.permitsDelivery(titleId, option) != true
             ) {
                 return null
             }
@@ -394,7 +418,9 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             if (rows.isEmpty() || rows.none {
                     it.mappedCanonicalChapterId == one.id &&
                         it.evidence.producerId == option.bindingRef().evidenceProducerId() &&
-                        it.evidence.externalChapterKey == option.providerChapterId
+                        it.evidence.externalChapterKey == option.providerChapterId &&
+                        (option.catalogWorkFingerprint == null ||
+                            it.evidence.providerMetadata?.catalogWorkFingerprint == option.catalogWorkFingerprint)
                 }
             ) {
                 return null
@@ -420,8 +446,12 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 )
                 addAll(
                     rows.map {
-                        listOf(it.evidence.producerId, it.evidence.externalChapterKey, it.mappedCanonicalChapterId)
-                            .joinToString("\u0000")
+                        listOf(
+                            it.evidence.producerId,
+                            it.evidence.externalChapterKey,
+                            it.mappedCanonicalChapterId,
+                            it.evidence.providerMetadata?.catalogWorkFingerprint,
+                        ).joinToString("\u0000")
                     }.sorted(),
                 )
             }
@@ -709,7 +739,18 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             for (source in listOf("mangadex", "mangadot")) {
                 val producers = verifiedSources.filter { it.ref.externalWorkId.startsWith("$source:") }
                     .map { it.ref.evidenceProducerId() }.toSet()
-                val mappedIds = mappedRows.filter { it.evidence.producerId in producers }
+                val proofs = buildMap {
+                    for (association in sourceRows.filter { it.ref.externalWorkId.startsWith("$source:") }) {
+                        val proof = catalogReaderResearch?.proof(association) ?: continue
+                        put(association.ref.evidenceProducerId(), proof)
+                    }
+                }
+                val mappedIds = mappedRows.filter {
+                    val producer = it.evidence.producerId
+                    producer in producers ||
+                        (proofs[producer] != null &&
+                            proofs[producer] == it.evidence.providerMetadata?.catalogWorkFingerprint)
+                }
                     .mapNotNull { it.mappedCanonicalChapterId }.toSet()
                 val regular = chapterRows.filter { it.id in mappedIds && it.type == CanonicalChapterType.REGULAR }
                 val numbers = regular.mapNotNull { it.baseNumber }.filter { it in 0..1_000_000 }
@@ -737,11 +778,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             }
             // Validate every choice before changing the saved preference.
             for (option in options) {
-                val association = associations.get(option.bindingRef()) ?: return "SOURCE_ASSOCIATION_MISSING"
-                if (association.canonicalTitleId != titleId ||
-                    association.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED ||
-                    association.editionQualification != ProviderSourceEditionQualification.UNRESOLVED
-                ) {
+                if (associations.get(option.bindingRef()) == null) return "SOURCE_ASSOCIATION_MISSING"
+                if (!verifiedOption(titleId, option)) {
                     return "SOURCE_AUTHOR_OR_EDITION_UNVERIFIED"
                 }
             }

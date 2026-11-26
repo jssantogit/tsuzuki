@@ -402,6 +402,34 @@ class ProviderReadingBindingRepositoryImplTest {
     }
 
     @Test
+    fun `catalog source preference cannot reuse an old work proof`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val selections = MangaAllSourceSelectionRepositoryImpl(database)
+        val ref = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadot:123")
+        val proof = "catalog-work-v1:" + "a".repeat(64)
+        val source = ProviderWorkSourceAssociation(
+            canonicalTitleId = "title",
+            ref = ref,
+            workVerification = ProviderWorkVerification.CATALOG_CORROBORATED,
+            editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+            observedAt = 10,
+            catalogIdentityFingerprint = proof,
+        )
+        portfolio.observe(source) shouldBe true
+        selections.select(MangaAllSourceSelection("title", ref, 20)) shouldBe false
+        val choice = MangaAllSourceSelection("title", ref, 20, proof)
+        selections.select(choice) shouldBe true
+        MangaAllSourceSelectionRepositoryImpl(database).get("title", "en") shouldBe choice
+        val changed = "catalog-work-v1:" + "b".repeat(64)
+        portfolio.observe(source.copy(observedAt = 30, catalogIdentityFingerprint = changed)) shouldBe true
+        // The old preference remains history, but cannot be used as a fresh selection.
+        val fresh = choice.copy(selectedAt = 40, catalogIdentityFingerprint = changed)
+        selections.select(fresh) shouldBe true
+        selections.select(choice.copy(selectedAt = 50)) shouldBe false
+        selections.get("title", "en") shouldBe fresh
+    }
+
+    @Test
     fun `provisional cursor CAS rejects stale writers and other HID or configuration`() = runBlocking {
         val cursors = ProviderProvisionalCursorRepositoryImpl(database)
         val ref = ProviderBindingRef(

@@ -24,7 +24,7 @@ class ResolveMangaAllSelectedReadingOption(
         val ref = eligible.firstOrNull()?.bindingRef() ?: return null
         val savedRelease = selections.getRelease(canonicalTitleId, canonicalChapterId, ref)
         return if (savedRelease == null) {
-            eligible.singleOrNull()
+            eligible.singleOrNull()?.takeIf { it.catalogWorkFingerprint == null }
         } else {
             // An unavailable saved release is not permission to choose a different one.
             eligible.singleOrNull { it.providerChapterId == savedRelease }
@@ -68,6 +68,7 @@ class ResolveMangaAllSelectedReadingOption(
             val source = option.contentSourceId
             option.canonicalChapterId == canonicalChapterId &&
                 option.bindingRef() == saved.ref &&
+                option.catalogWorkFingerprint == saved.catalogIdentityFingerprint &&
                 source != null &&
                 option.providerChapterId.startsWith("$source:") &&
                 option.providerChapterId.substringAfter(':').isNotBlank()

@@ -1,6 +1,9 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -19,6 +22,10 @@ import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
+import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
@@ -34,6 +41,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
+import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 
 class ResolveProviderChapterReadingTest {
 
@@ -580,6 +588,101 @@ class ResolveProviderChapterReadingTest {
                 reader.auditNoMatch(chapter.id).reason shouldBe ProviderReadingNoMatchReason.NO_ELIGIBLE_SOURCE
             }
         }
+    }
+
+    @Test
+    fun `catalog research requires live proof exact chapter and explicit scoped release choice`(): Unit = runBlocking {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val ref = ProviderBindingRef(mangaAll, "en", "mangadot:42")
+        val titleId = chapter.canonicalTitleId
+        val owner = IntegrationId("mangaupdates")
+        val proof = requireNotNull(MangaAllCatalogWorkIdentityProof.fingerprint(titleId, ref, "123", 11, "config"))
+        val source = ProviderWorkSourceAssociation(
+            canonicalTitleId = titleId,
+            ref = ref,
+            workVerification = ProviderWorkVerification.CATALOG_CORROBORATED,
+            editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+            observedAt = 10,
+            catalogIdentityFingerprint = proof,
+        )
+        val entries = mutableListOf(source)
+        val associations = sourceAssociationRepository(entries)
+        val titles = mockk<CanonicalTitleRepository>()
+        var identity = "123"
+        coEvery { titles.getExternalIdentities(titleId) } answers {
+            listOf(ExternalIdentity(titleId, owner.value, identity, verified = true, createdAt = 1L))
+        }
+        val integrations = mockk<IntegrationRegistry>()
+        var consent = true
+        every { integrations.isGlobalCapabilityActive(owner, IntegrationCapability.METADATA_BASIC) } answers { consent }
+        val initialRegistration = readingRegistration(provider = mangaAll)
+        val registration = initialRegistration.copy(
+            descriptor = initialRegistration.descriptor.copy(version = ProviderVersion("1.0.0", 11)),
+            configurationFingerprint = "config",
+        )
+        val registry = DefaultProviderRegistry(registrations = { listOf(registration) })
+        val selections = mockk<MangaAllSourceSelectionRepository>()
+        var choice: MangaAllSourceSelection? = null
+        var release: String? = null
+        coEvery { selections.get(titleId, "en") } answers { choice }
+        coEvery { selections.select(any()) } answers {
+            choice = firstArg()
+            true
+        }
+        coEvery { selections.getRelease(titleId, chapter.id, ref) } answers { release }
+        val research = MangaAllCatalogReaderResearch(titles, integrations, registry, associations, selections)
+        val sourceBinding = binding.copy(ref = ref)
+        val observed = evidence(sourceBinding, "mangadot:chapters:1", chapter.id).let {
+            it.copy(
+                evidence = it.evidence.copy(
+                    providerMetadata = ProviderEvidenceMetadata(language = "en", catalogWorkFingerprint = proof),
+                ),
+            )
+        }
+        val old = evidence(sourceBinding, "mangadot:chapters:2", chapter.id).let {
+            it.copy(evidence = it.evidence.copy(providerMetadata = ProviderEvidenceMetadata(language = "en")))
+        }
+        val reader = ResolveProviderChapterReading(
+            canonicalChapterRepository = canonicalChapterRepository(chapter),
+            evidenceRepository = evidenceRepository(listOf(observed, old)),
+            bindingRepository = bindingRepository(listOf(sourceBinding)),
+            workSourceAssociationRepository = associations,
+            providerRegistry = registry,
+            gateway = gateway { error("pages must not be invoked without explicit release choice") },
+            catalogResearch = research,
+        )
+        resolver(
+            bindings = listOf(sourceBinding),
+            evidence = listOf(observed),
+            providerRegistry = registry,
+            sourceAssociations = entries,
+        ).options(chapter.id) shouldBe emptyList()
+        val option = reader.options(chapter.id).single()
+        option.providerChapterId shouldBe "mangadot:chapters:1"
+        option.catalogWorkFingerprint shouldBe proof
+        (reader.delivery(option) is ProviderCallResult.Failure) shouldBe true
+        val picker = SelectMangaAllSource(associations, selections, research)
+        picker.select(titleId, ref, 20) shouldBe MangaAllSourceSelectionResult.SELECTED
+        choice?.catalogIdentityFingerprint shouldBe proof
+        research.permitsDelivery(titleId, option) shouldBe false
+        release = option.providerChapterId
+        research.permitsDelivery(titleId, option) shouldBe true
+        consent = false
+        reader.options(chapter.id) shouldBe emptyList()
+        research.permitsDelivery(titleId, option) shouldBe false
+        consent = true
+        identity = "124"
+        reader.options(chapter.id) shouldBe emptyList()
+        identity = "123"
+        entries += source.copy(ref = ref.copy(externalWorkId = "mangadot:43"))
+        reader.options(chapter.id) shouldBe emptyList()
+        entries.removeAt(1)
+        entries[0] = source.copy(
+            workVerification = ProviderWorkVerification.AUTHOR_CONFLICT,
+            catalogIdentityFingerprint = null,
+        )
+        reader.options(chapter.id) shouldBe emptyList()
+        picker.select(titleId, ref, 21) shouldBe MangaAllSourceSelectionResult.BLOCKED
     }
 
     @Test
