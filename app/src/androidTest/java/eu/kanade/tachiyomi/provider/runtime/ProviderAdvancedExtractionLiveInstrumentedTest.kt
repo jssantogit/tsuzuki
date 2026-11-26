@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageLoader
+import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -68,6 +69,17 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
             .retryOnConnectionFailure(false)
             .build()
         val blocked = ConcurrentHashMap<String, Int>()
+        fun recordDenial(providerId: String, status: Int, challenge: Boolean) {
+            if (status !in setOf(401, 403, 429)) return
+            if (blocked.putIfAbsent(providerId, status) == null) {
+                val source = when (providerId) {
+                    "app.tsuzuki.mangafire" -> "mangafire"
+                    "app.tsuzuki.mangaall.mangaball" -> "mangaall-ball"
+                    else -> "unknown"
+                }
+                Log.i("AdvancedLiveGate", "ADVANCED_DENIAL|$source|HTTP_$status|challenge_marker=$challenge")
+            }
+        }
         val factory = ProviderHostInvocationFactory(
             context = context,
             storageRoot = File(root, "storage"),
@@ -75,12 +87,7 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
             httpRequestAllowed = { providerId -> !blocked.containsKey(providerId) },
             httpDiagnosticSink = { providerId, detail ->
                 val status = detail.statusCode
-                if (status == 401 || status == 403 || status == 429) {
-                    if (blocked.putIfAbsent(providerId, status) == null) {
-                        val source = if (providerId == "app.tsuzuki.mangafire") "mangafire" else "mangaall-ball"
-                        Log.i("AdvancedLiveGate", "ADVANCED_DENIAL|$source|HTTP_$status|challenge_marker=${detail.challengeAdvertised}")
-                    }
-                }
+                if (status != null) recordDenial(providerId, status, detail.challengeAdvertised)
             },
         )
         val client = ProviderRuntimeClient(context, factory)
@@ -262,7 +269,14 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
                                     try {
                                         val readerPage = loader.getPages().single()
                                         withTimeout(15_000L) { loader.loadPage(readerPage) }
-                                        if (readerPage.status != Page.State.Ready) throw GateFailure("IMAGE_FETCH")
+                                        if (readerPage.status != Page.State.Ready) {
+                                            val failure = (readerPage.status as? Page.State.Error)?.error as? ProviderHttpPageException
+                                            failure?.statusCode?.let { status ->
+                                                recordDenial(manifest.id, status, failure.challengeAdvertised)
+                                                throw GateFailure("HTTP_$status")
+                                            }
+                                            throw GateFailure("IMAGE_FETCH")
+                                        }
                                         val stream = readerPage.stream ?: throw GateFailure("IMAGE_STREAM")
                                         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                                         stream().use { BitmapFactory.decodeStream(it, null, bounds) }
@@ -291,7 +305,10 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
                 }.awaitAll().flatten()
             }
             assertEquals(6, results.size)
-            assertTrue("Contract=$controlled; live=" + results.joinToString(";"), controlled && results.all { it.endsWith("|PASS") })
+            assertTrue(
+                "Contract=$controlled; denials=${blocked.size}; live=" + results.joinToString(";"),
+                controlled && blocked.isEmpty() && results.all { it.endsWith("|PASS") },
+            )
         } finally {
             root.deleteRecursively()
         }

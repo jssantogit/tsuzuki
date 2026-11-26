@@ -53,15 +53,13 @@ for name in ("mangaall-ball", "mangafire"):
         http = files[path].decode()
         anchor = "    const result = await globalThis.tsuzuki.http.request("
         assert http.count(anchor) == 1
-        http = 'import { requestResource, readResourceObject, release } from "./advanced-extraction.mjs";\n' + http.replace(
-            anchor,
-            '''    if (method === "POST") {
-      const handle = await requestResource(method, url, headers, body);
-      try { return await readResourceObject(handle); }
-      finally { await release(handle); }
-    }
-''' + anchor,
-        )
+        # Use the same bounded resource transport for GET and POST, not only
+        # chapter listings. Preserve endpoints, methods and declared headers.
+        start = http.index(anchor)
+        end = http.index("\n  };", start)
+        http = 'import { requestResource, readResourceObject, release } from "./advanced-extraction.mjs";\n' + http[:start] + '''    const handle = await requestResource(method, url, headers, method === "POST" ? body : undefined);
+    try { return await readResourceObject(handle); }
+    finally { await release(handle); }''' + http[end:]
         files[path] = http.encode()
     if name == "mangafire":
         path = "modules/api.js"

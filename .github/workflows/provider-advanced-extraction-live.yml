@@ -24,6 +24,8 @@ jobs:
           ref: 89b5979fff297c2a099359258c9f9249e0089db4
           path: advanced-source
           persist-credentials: false
+      - name: Verify strict live verdict contract
+        run: python3 .github/scripts/validate_advanced_live_verdicts.py --self-test
       - name: Prepare two transient unsigned live candidates
         run: |
           python3 .github/scripts/build_advanced_extraction_fixtures.py advanced-source

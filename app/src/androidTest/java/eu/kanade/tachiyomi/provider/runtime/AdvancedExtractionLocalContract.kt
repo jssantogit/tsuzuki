@@ -154,6 +154,31 @@ internal object AdvancedExtractionLocalContract {
             val independent = invoke("""await tsuzuki.http.get("$origin/independent")""", "app.tsuzuki.test.independent")
             assertNull(independent.failure)
             assertEquals("independent", independent.value)
+            // Reader HTTP status must reach the live gate without exposing a
+            // response body or silently treating a denied image as readable.
+            for (status in listOf(401, 403, 429)) {
+                server.enqueue(MockResponse.Builder().code(status).addHeader("cf-mitigated", if (status == 403) "challenge" else "other").body("denied").build())
+                val pageLoader = eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageLoader(
+                    requests = listOf(tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage(
+                        url = "$origin/reader-denied",
+                        allowedOrigins = setOf(origin),
+                        allowLocalNetwork = true,
+                    )),
+                    cacheRoot = root,
+                )
+                try {
+                    val page = pageLoader.getPages().single()
+                    pageLoader.loadPage(page)
+                    val failure = (page.status as? eu.kanade.tachiyomi.source.model.Page.State.Error)?.error
+                    assertTrue(failure is eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageException)
+                    val http = failure as eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpPageException
+                    assertEquals(status, http.statusCode)
+                    assertEquals(status == 403, http.challengeAdvertised)
+                    assertNull(page.stream)
+                } finally {
+                    pageLoader.recycle()
+                }
+            }
         } finally {
             server.close()
         }

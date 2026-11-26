@@ -30,6 +30,8 @@ import kotlin.coroutines.resumeWithException
 internal class ProviderHttpPageException(
     message: String,
     cause: Throwable? = null,
+    val statusCode: Int? = null,
+    val challengeAdvertised: Boolean = false,
 ) : IOException(message, cause)
 
 internal class ProviderHttpPageLoader(
@@ -190,6 +192,8 @@ internal class ProviderHttpPageLoader(
                                 if (!value.isSuccessful) {
                                     throw ProviderHttpPageException(
                                         "Provider Reader HTTP response was not successful",
+                                        statusCode = value.code,
+                                        challengeAdvertised = value.header("cf-mitigated")?.equals("challenge", ignoreCase = true) == true,
                                     )
                                 }
                                 val declaredLength = value.body.contentLength()

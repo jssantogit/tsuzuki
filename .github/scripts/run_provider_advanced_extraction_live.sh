@@ -35,12 +35,4 @@ if [[ "$status" != 0 ]] || ! grep -Fq 'OK (1 test)' "$raw" || ! grep -Fq 'INSTRU
   echo "ADVANCED_LIVE|instrumentation=FAIL|exit=$status" >&2
   exit 5
 fi
-python3 - "$out/verdicts.txt" <<'PY'
-import pathlib, sys
-lines = pathlib.Path(sys.argv[1]).read_text().splitlines()
-assert [line for line in lines if line.startswith("ADVANCED_CONTRACT|")] == ["ADVANCED_CONTRACT|PASS"]
-rows = [line.split("|") for line in lines if line.startswith("ADVANCED_LIVE|")]
-expected = {(source, work) for source in ("mangaall-ball", "mangafire") for work in ("death-note", "punpun", "akame")}
-assert len(rows) == 6 and {(r[1], r[2]) for r in rows} == expected, "Missing or duplicate verdict"
-assert all(len(r) == 5 and r[3] == "PASS" for r in rows), "Live gate not green"
-PY
+python3 .github/scripts/validate_advanced_live_verdicts.py "$out/verdicts.txt"
