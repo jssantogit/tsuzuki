@@ -419,8 +419,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     it.mappedCanonicalChapterId == one.id &&
                         it.evidence.producerId == option.bindingRef().evidenceProducerId() &&
                         it.evidence.externalChapterKey == option.providerChapterId &&
-                        (option.catalogWorkFingerprint == null ||
-                            it.evidence.providerMetadata?.catalogWorkFingerprint == option.catalogWorkFingerprint)
+                        (
+                            option.catalogWorkFingerprint == null ||
+                                it.evidence.providerMetadata?.catalogWorkFingerprint == option.catalogWorkFingerprint
+                            )
                 }
             ) {
                 return null
@@ -748,8 +750,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 val mappedIds = mappedRows.filter {
                     val producer = it.evidence.producerId
                     producer in producers ||
-                        (proofs[producer] != null &&
-                            proofs[producer] == it.evidence.providerMetadata?.catalogWorkFingerprint)
+                        (
+                            proofs[producer] != null &&
+                                proofs[producer] == it.evidence.providerMetadata?.catalogWorkFingerprint
+                            )
                 }
                     .mapNotNull { it.mappedCanonicalChapterId }.toSet()
                 val regular = chapterRows.filter { it.id in mappedIds && it.type == CanonicalChapterType.REGULAR }
