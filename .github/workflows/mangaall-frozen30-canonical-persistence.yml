@@ -214,3 +214,5 @@ jobs:
 # Verify independently published creator names, no fallback to title-only matching.
 
 # Full locked cohort regression after remaining-six GREEN #45878667734; same functional code and strict Reader/catalog flags.
+
+# Full locked cohort repeat after terminal snapshot reclamation and offline GREEN #45906633715.
