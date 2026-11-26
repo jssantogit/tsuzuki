@@ -63,7 +63,7 @@ for name in ("mangaall-ball", "mangafire"):
 ''' + anchor,
         )
         files[path] = http.encode()
-    if live and name == "mangafire":
+    if name == "mangafire":
         path = "modules/api.js"
         api = files[path].decode()
         start = api.index("async function browserJson(")
@@ -73,7 +73,11 @@ for name in ("mangaall-ball", "mangafire"):
   const handle = await requestResource("GET", url, {Accept:"application/json"});
   try {
     const value = await readResourceObject(handle);
-    if (value.error === "captcha_required") throw new Error("MangaFire challenge required");
+    if (value.error === "captcha_required") {
+      const error = new Error("MangaFire challenge required");
+      error.challengeRequired = true;
+      throw error;
+    }
     return value;
   } finally { await release(handle); }
 }

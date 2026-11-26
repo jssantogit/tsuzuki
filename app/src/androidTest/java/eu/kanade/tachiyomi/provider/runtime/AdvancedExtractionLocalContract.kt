@@ -71,7 +71,7 @@ internal object AdvancedExtractionLocalContract {
                 "ok";
                 """.trimIndent(),
             )
-            assertNull(binary.failure)
+            assertNull("binary protocol", binary.failure)
             assertEquals("ok", binary.value)
             assertNotNull(invoke("""await tsuzuki.protocol.protobufFields("gA==")""").failure)
             assertNotNull(invoke("""await tsuzuki.protocol.jsonPointer('{"a":1}', "/missing")""").failure)
@@ -100,7 +100,7 @@ internal object AdvancedExtractionLocalContract {
                 ),
             )
             val rendered = invoke("""await tsuzuki.browser.query("$origin/dynamic", "#late", "data-value")""", browser = true)
-            assertNull(rendered.failure)
+            assertNull("rendered DOM", rendered.failure)
             assertEquals("[\"ready\"]", rendered.value)
         } finally {
             server.close()

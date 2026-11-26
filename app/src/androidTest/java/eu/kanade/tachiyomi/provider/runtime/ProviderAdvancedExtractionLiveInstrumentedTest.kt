@@ -85,9 +85,11 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
                     false
                 } catch (error: CancellationException) {
                     throw error
-                } catch (_: Exception) {
+                } catch (failure: Exception) {
+                    Log.i("AdvancedLiveGate", "ADVANCED_CONTRACT_FAILURE|$name|EXCEPTION")
                     false
-                } catch (_: AssertionError) {
+                } catch (failure: AssertionError) {
+                    Log.i("AdvancedLiveGate", "ADVANCED_CONTRACT_FAILURE|$name|ASSERTION")
                     false
                 }
                 Log.i("AdvancedLiveGate", "ADVANCED_CONTRACT_DETAIL|$name|" + if (passed) "PASS" else "FAIL")

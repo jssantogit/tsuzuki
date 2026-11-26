@@ -64,7 +64,7 @@ class ProviderAdvancedExtractionInstrumentedTest {
         val ballList = buildString {
             append("""{"code":200,"data":[{"id":"ballch1","number":1,"language":"en","name":"Chapter 1"}""")
             for (index in 2..320) {
-                append(""",{"id":"foreign$index","number":$index,"language":"fr","ignored":"""")
+                append(",{\"id\":\"foreign$index\",\"number\":$index,\"language\":\"fr\",\"ignored\":\"")
                 append("x".repeat(900))
                 append("\"}")
             }
@@ -185,8 +185,12 @@ class ProviderAdvancedExtractionInstrumentedTest {
                         assertNull(zip.nextEntry)
                     }
                     observed += ProviderBindingRef(ProviderId(manifest.id), "en", work)
-                } catch (failure: Throwable) {
-                    failures += "$name: " + (failure.message ?: failure.javaClass.simpleName)
+                } catch (failure: kotlinx.coroutines.CancellationException) {
+                    throw failure
+                } catch (failure: AssertionError) {
+                    failures += "$name: ASSERTION"
+                } catch (failure: Exception) {
+                    failures += "$name: " + failure.javaClass.simpleName
                 }
             }
             assertTrue(failures.joinToString("\n"), failures.isEmpty())

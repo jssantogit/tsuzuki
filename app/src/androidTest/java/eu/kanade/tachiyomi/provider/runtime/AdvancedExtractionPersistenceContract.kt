@@ -34,9 +34,11 @@ internal object AdvancedExtractionPersistenceContract {
         assertEquals(2, refs.size)
         assertEquals(2, refs.map { it.providerId }.distinct().size)
         val name = "advanced-contract-" + UUID.randomUUID() + ".db"
+        val dbFile = context.getDatabasePath(name)
+        check(dbFile.parentFile?.let { it.isDirectory || it.mkdirs() } == true)
         fun open() = AndroidxSqliteDriver(
             driver = BundledSQLiteDriver(),
-            databaseType = AndroidxSqliteDatabaseType.FileProvider(context, name),
+            databaseType = AndroidxSqliteDatabaseType.FileProvider { dbFile.absolutePath },
             schema = Database.Schema,
             configuration = AndroidxSqliteConfiguration(isForeignKeyConstraintsEnabled = true),
         )

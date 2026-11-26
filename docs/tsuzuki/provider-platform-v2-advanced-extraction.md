@@ -65,3 +65,5 @@ Controlled adapter completion now includes a disposable SQLDelight database usin
 ## First integrated execution request
 
 The one-shot marker requests the bounded Android workflow: controlled contracts and live three-work lanes. It does not certify third-party access permission; MangaBall must remain fail-closed if approval is not configured. No signed package is published. The gate cannot pass without both controlled contracts and six unique live observations. This first run is also the compile gate for the implementation branch.
+
+First CI #45725322865 stopped at instrumentation compilation in 4m04s: the disposable SQLite test used the Android convenience overload, unavailable in the test source set. Fix uses the actual FileProvider path lambda, creating its parent directory. Controlled MangaFire now exercises the same resource SDK transport as the live candidate; challenge metadata remains explicit. No live observations existed in the first run.
