@@ -111,7 +111,9 @@ jobs:
             --tests '*RefreshProviderReadingChaptersTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' \
             --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' \
             --tests '*ResolveProviderChapterReadingTest' --tests '*SelectMangaAllSourceTest' \
+            --tests '*ProviderEvidenceMetadataCodecTest' \
             :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' \
+            --tests '*ChapterEvidenceRepositoryImplTest' \
             :app:testDebugUnitTest --tests '*ShikimoriApiTest' \
             --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' \
             --tests '*ReaderSourceCardRecoveryTest' --tests '*MangaAllFutureGatewaySnapshotGateTest' \

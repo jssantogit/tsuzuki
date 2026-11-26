@@ -40,6 +40,7 @@ class ProviderWorkSourcePortfolioTest {
         )
         changed.all { it != null && it != original } shouldBe true
         MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "123", 10, "config") shouldBe null
+        MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "123", 11, "") shouldBe null
         MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "0", 11, "config") shouldBe null
         MangaAllCatalogWorkIdentityProof.fingerprint("title", ref.copy(facetId = "ja"), "123", 11, "config") shouldBe
             null

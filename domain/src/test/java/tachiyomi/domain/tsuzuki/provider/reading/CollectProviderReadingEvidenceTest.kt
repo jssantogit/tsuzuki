@@ -3477,7 +3477,11 @@ class CollectProviderReadingEvidenceTest {
                     ExternalIdentity(canonicalTitle.id, owner.value, independentId, verified = true, createdAt = 1L),
                 ),
             ),
-            providerRegistry = registry(provider = mangaAll, versionCode = 11),
+            providerRegistry = registry(
+                provider = mangaAll,
+                versionCode = 11,
+                configurationFingerprint = "catalog-test",
+            ),
             gateway = gateway(
                 lookupHandler = { request ->
                     if (requireNotNull(request.cursor).value.contains("mangadex")) {
@@ -3575,7 +3579,8 @@ class CollectProviderReadingEvidenceTest {
             result.cursorProgress shouldBe emptyList()
         } else {
             val progress = result.cursorProgress.single()
-            progress.configurationFingerprint.startsWith("catalog-v1:") shouldBe true
+            progress.configurationFingerprint.startsWith("catalog-v2:") shouldBe true
+            result.partialEvidence.single().providerMetadata?.catalogWorkFingerprint shouldBe savedProof
             progress.configurationFingerprint.contains(independentId) shouldBe false
         }
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
@@ -4370,7 +4375,11 @@ class CollectProviderReadingEvidenceTest {
         }
     }
 
-    private fun registry(provider: ProviderId = providerId, versionCode: Long = 2) = DefaultProviderRegistry(
+    private fun registry(
+        provider: ProviderId = providerId,
+        versionCode: Long = 2,
+        configurationFingerprint: String = "",
+    ) = DefaultProviderRegistry(
         registrations = {
             listOf(
                 ProviderRegistration(
@@ -4391,6 +4400,7 @@ class CollectProviderReadingEvidenceTest {
                     ),
                     lifecycleStatus = ProviderLifecycleStatus.ENABLED,
                     facets = listOf(ProviderFacetRef(provider, "en")),
+                    configurationFingerprint = configurationFingerprint,
                 ),
             )
         },

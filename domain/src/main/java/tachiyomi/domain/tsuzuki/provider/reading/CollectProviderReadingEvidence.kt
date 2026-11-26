@@ -49,6 +49,9 @@ import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 import java.security.MessageDigest
 import kotlin.math.roundToLong
 
+private typealias CollectProviderPageEvidence =
+    suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long, String?) -> List<ChapterEvidence>
+
 /** One complete chapter inventory emitted by one exact Provider binding. */
 data class ProviderReadingEvidenceSnapshot(
     val producerId: String,
@@ -343,12 +346,13 @@ class CollectProviderReadingEvidence private constructor(
                                 onStageChanged = { activeStage = it },
                                 onPreferredBindingSelected = { preferredBindingSelected = true },
                                 onProvisionalCursorReady = { readyCursors += it },
-                                onPageCollected = { binding, page, observedAt ->
+                                onPageCollected = { binding, page, observedAt, catalogProof ->
                                     evidenceAdapter.toEvidence(
                                         canonicalTitleId = canonicalTitleId,
                                         binding = binding,
                                         observations = page,
                                         observedAt = observedAt,
+                                        catalogWorkFingerprint = catalogProof,
                                     ).also { partial += it }
                                 },
                             )
@@ -485,7 +489,7 @@ class CollectProviderReadingEvidence private constructor(
         onStageChanged: (DiagnosticStage) -> Unit,
         onPreferredBindingSelected: () -> Unit,
         onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
-        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
+        onPageCollected: CollectProviderPageEvidence,
     ): ProviderReadingEvidenceCollection {
         return try {
             if (target.researchSource != null) {
@@ -572,7 +576,7 @@ class CollectProviderReadingEvidence private constructor(
                     if (diagnostics.detailedCaptureActive) {
                         traceReadingPageDetail(canonicalTitleId, target, binding.ref, lastPageNumber, page)
                     }
-                    onPageCollected(binding.ref, page, observedAt)
+                    onPageCollected(binding.ref, page, observedAt, null)
                 },
                 onPageObserved = { pages, observations ->
                     lastPageNumber = pages
@@ -673,7 +677,7 @@ class CollectProviderReadingEvidence private constructor(
         target: ReadingTarget,
         canonicalCreators: Set<String>?,
         onStageChanged: (DiagnosticStage) -> Unit,
-        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
+        onPageCollected: CollectProviderPageEvidence,
         onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
     ): ProviderReadingEvidenceCollection {
         val source = requireNotNull(target.researchSource)
@@ -925,11 +929,13 @@ class CollectProviderReadingEvidence private constructor(
     // Scope continuation to the exact independently verified work, without
     // storing raw catalog IDs in the cursor or changing the database schema.
     private fun catalogCursorFingerprint(configuration: String, identity: String): String {
-        val material = listOf("mangaall-code11-catalog-v1", configuration, identity).joinToString("\u0000")
+        // V1 cursors may point past observations without chapter-level proof.
+        // Rebuild their inventory instead of silently skipping those chapters.
+        val material = listOf("mangaall-code11-catalog-v2", configuration, identity).joinToString("\u0000")
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(material.encodeToByteArray())
             .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-        return "catalog-v1:$digest"
+        return "catalog-v2:$digest"
     }
 
     private suspend fun recordResearchWorkAssessment(
@@ -1582,7 +1588,7 @@ class CollectProviderReadingEvidence private constructor(
         target: ReadingTarget,
         canonicalCreators: Set<String>,
         preferredRef: ProviderBindingRef,
-        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
+        onPageCollected: CollectProviderPageEvidence,
         onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
     ): ProviderReadingEvidenceCollection {
         var allLookupsComplete = titles.size <= MAX_EMPTY_BINDING_FALLBACK_QUERIES
@@ -1722,7 +1728,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         target: ReadingTarget,
         sources: List<ProviderWorkSourceAssessment>,
-        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
+        onPageCollected: CollectProviderPageEvidence,
         onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
         nativePreviews: Map<ProviderBindingRef, NativeChapterPreview> = emptyMap(),
     ): ProviderReadingEvidenceCollection {
@@ -1732,6 +1738,17 @@ class CollectProviderReadingEvidence private constructor(
             if (!source.canCollectProvisionalChapters) continue
             val versionCode = target.registration.descriptor.version.code
             val catalogIdentity = source.researchCatalogIdentity
+            val proof = if (catalogIdentity != null) {
+                MangaAllCatalogWorkIdentityProof.fingerprint(
+                    canonicalTitleId,
+                    source.ref,
+                    catalogIdentity,
+                    target.registration.descriptor.version.code,
+                    target.registration.configurationFingerprint,
+                ) ?: continue
+            } else {
+                null
+            }
             suspend fun sourceStillCurrent(): Boolean {
                 if (catalogIdentity != null &&
                     verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity
@@ -1739,17 +1756,6 @@ class CollectProviderReadingEvidence private constructor(
                     return false
                 }
                 val current = workSourceAssociationRepository?.get(source.ref) ?: return false
-                val proof = if (catalogIdentity != null) {
-                    MangaAllCatalogWorkIdentityProof.fingerprint(
-                        canonicalTitleId,
-                        source.ref,
-                        catalogIdentity,
-                        target.registration.descriptor.version.code,
-                        target.registration.configurationFingerprint,
-                    ) ?: return false
-                } else {
-                    null
-                }
                 return current.canonicalTitleId == canonicalTitleId &&
                     current.workVerification == source.workVerification &&
                     current.editionQualification == ProviderSourceEditionQualification.UNRESOLVED &&
@@ -1924,7 +1930,7 @@ class CollectProviderReadingEvidence private constructor(
             trustedPages.forEach { (page, pageObservedAt) ->
                 // Reuse the provisional evidence already built for timeout salvage.
                 // Rehashing the same chapter IDs would allocate a second copy.
-                evidence += onPageCollected(source.ref, page, pageObservedAt)
+                evidence += onPageCollected(source.ref, page, pageObservedAt, proof)
             }
             if (trustedPages.isNotEmpty() && acceptedPages > 0) {
                 val pageCount = (saved?.completedPages ?: 0) + acceptedPages

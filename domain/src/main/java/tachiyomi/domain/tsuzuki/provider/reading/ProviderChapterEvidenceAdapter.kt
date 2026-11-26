@@ -15,6 +15,7 @@ class ProviderChapterEvidenceAdapter(
         binding: ProviderBindingRef,
         observations: List<ProviderChapterObservation>,
         observedAt: Long = clock(),
+        catalogWorkFingerprint: String? = null,
     ): List<ChapterEvidence> {
         require(canonicalTitleId.isNotBlank()) { "Canonical title ID must not be blank" }
         require(observedAt >= 0L) { "Provider evidence timestamp must not be negative" }
@@ -41,6 +42,7 @@ class ProviderChapterEvidenceAdapter(
                     language = observation.language,
                     scanlationGroup = observation.scanlationGroup,
                     releaseDateMillis = observation.releaseDateMillis,
+                    catalogWorkFingerprint = catalogWorkFingerprint,
                 ).takeIf { it.hasValues },
             )
         }

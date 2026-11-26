@@ -221,6 +221,29 @@ class ChapterEvidenceRepositoryImplTest {
         }
 
     @Test
+    fun `chapter catalog proof persists locally and is cleared by an unattested refresh`() = runBlocking<Unit> {
+        val proof = "catalog-work-v1:" + "a".repeat(64)
+        val base = addonEvidence("catalog-evidence", "Chapter 1", "remote-chapter").copy(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:catalog",
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+            providerMetadata = ProviderEvidenceMetadata(language = "en", catalogWorkFingerprint = proof),
+        )
+        evidenceRepository.upsert(base, null)
+        val reopened = ChapterEvidenceRepositoryImpl(database)
+        reopened.getByCanonicalTitleId("title-1").single().evidence.providerMetadata shouldBe base.providerMetadata
+        val refreshed = base.copy(
+            observedAt = 2L,
+            providerMetadata = ProviderEvidenceMetadata(language = "en"),
+        )
+        reopened.upsert(refreshed, null)
+        val stored = reopened.getByCanonicalTitleId("title-1").single()
+        stored.evidence.id shouldBe base.id
+        stored.evidence.providerMetadata shouldBe refreshed.providerMetadata
+        ProviderEvidenceMetadataCodec.decode(stored.rawMetadata) shouldBe refreshed.providerMetadata
+    }
+
+    @Test
     fun `unknown provider raw metadata remains byte exact during refresh`() = runBlocking<Unit> {
         val base = addonEvidence("opaque-provider", "Chapter 1", "opaque").copy(
             producerKind = ProducerKind.PROVIDER,
