@@ -32,10 +32,14 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
+import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
+import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkSourcePortfolio
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -113,7 +117,7 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
                         check(manifest.permissions.browser?.origins.orEmpty().isEmpty())
                         val origins = manifest.permissions.network?.origins.orEmpty()
                         check(origins.isNotEmpty())
-                        suspend fun invoke(capability: String, input: JsonObject): JsonObject {
+                        suspend fun invokeOnce(capability: String, input: JsonObject): tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse {
                             val invocationId = "advanced-live:" + UUID.randomUUID()
                             val policy = ProviderHostInvocationPolicy.fromManifest(manifest, invocationId).forCapability(capability)
                             val request = ProviderRuntimeInvocationRequest(
@@ -128,8 +132,20 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
                                 hostModules = policy.allowedHostModules(),
                                 limits = ProviderRuntimeLimitsDto(wallClockTimeoutMs = 15_000L, jsExecutionTimeoutMs = 10_000L),
                             )
-                            val response = client.invokePackage(request, candidate, input.toString(), policy)
+                            return client.invokePackage(request, candidate, input.toString(), policy)
+                        }
+                        suspend fun invoke(capability: String, input: JsonObject): JsonObject {
                             blocked[manifest.id]?.let { throw GateFailure("HTTP_$it") }
+                            var response = invokeOnce(capability, input)
+                            blocked[manifest.id]?.let { throw GateFailure("HTTP_$it") }
+                            // Only the idempotent lookup may be retried, once,
+                            // on an isolated process death. Never retry an HTTP
+                            // denial or silently replay chapter/page operations.
+                            if (capability == "reading.lookup" && response.failure == ProviderRuntimeFailureCode.RUNTIME_DIED) {
+                                Log.i("AdvancedLiveGate", "ADVANCED_RECOVERY|$name|RUNTIME_DIED")
+                                response = invokeOnce(capability, input)
+                                blocked[manifest.id]?.let { throw GateFailure("HTTP_$it") }
+                            }
                             response.failure?.let { throw GateFailure("RUNTIME_" + it.name) }
                             return Json.parseToJsonElement(requireNotNull(response.value)).jsonObject
                         }
@@ -140,7 +156,7 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
                                 blocked[manifest.id]?.let { throw GateFailure("HTTP_$it") }
                                 withTimeout(75_000L) {
                                     val accepted = work.names.map(::normalize).toSet()
-                                    val matching = mutableSetOf<String>()
+                                    val matching = linkedMapOf<String, ProviderWorkCandidate>()
                                     val lookupCursors = mutableSetOf<String>()
                                     var lookupCursor: String? = null
                                     var lookupTerminal = false
@@ -157,7 +173,13 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
                                             val names = listOf(hit["title"]!!.jsonPrimitive.content) +
                                                 hit["aliases"]?.jsonArray.orEmpty().map { it.jsonPrimitive.content }
                                             if (names.any { normalize(it) in accepted }) {
-                                                matching += hit["externalWorkId"]!!.jsonPrimitive.content
+                                                val id = hit["externalWorkId"]!!.jsonPrimitive.content
+                                                matching[id] = ProviderWorkCandidate(
+                                                    externalWorkId = id,
+                                                    title = names.first(),
+                                                    aliases = names.drop(1),
+                                                    url = hit["url"]?.takeUnless { it == JsonNull }?.jsonPrimitive?.content,
+                                                )
                                             }
                                         }
                                         val next = lookup["nextCursor"] ?: throw GateFailure("MISSING_CURSOR")
@@ -169,8 +191,22 @@ class ProviderAdvancedExtractionLiveInstrumentedTest {
                                         }
                                     }
                                     if (!lookupTerminal) throw GateFailure("LOOKUP_NOT_TERMINAL")
-                                    if (matching.size != 1) throw GateFailure("IDENTITY_NOT_UNIQUE")
-                                    val workId = matching.single()
+                                    if (matching.isEmpty()) throw GateFailure("IDENTITY_NOT_FOUND")
+                                    // Reuse the existing production negative edition
+                                    // evidence rule. A qualified alternate cannot be
+                                    // selected as the unqualified extraction target.
+                                    // This does NOT certify a canonical editorial binding.
+                                    val eligible = matching.values.filterNot { candidate ->
+                                        work.names.any { title ->
+                                            ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+                                                ProviderId(manifest.id), candidate, title,
+                                            )
+                                        }
+                                    }
+                                    val excluded = matching.size - eligible.size
+                                    Log.i("AdvancedLiveGate", "ADVANCED_IDENTITY|$name|"+work.key+"|matches="+matching.size+"|excluded="+excluded+"|eligible="+eligible.size)
+                                    if (eligible.size != 1) throw GateFailure("IDENTITY_NOT_UNIQUE")
+                                    val workId = eligible.single().externalWorkId
                                     if (name == "mangaall-ball" && !workId.startsWith("mangaball:")) throw GateFailure("SOURCE_ID")
                                     val binding = JsonObject(
                                         mapOf("providerId" to JsonPrimitive(manifest.id), "externalWorkId" to JsonPrimitive(workId), "facetId" to JsonPrimitive("en")),

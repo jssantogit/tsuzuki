@@ -12,6 +12,7 @@ import kotlinx.coroutines.sync.Mutex
 import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.packageformat.ProviderPackageContractValidator
 import tachiyomi.core.provider.runtime.ProviderPackageValidationRequest
+import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
@@ -100,6 +101,21 @@ class ProviderRuntimeClient(
             }
         } finally {
             bindingMutex.unlock()
+        }
+    }
+
+    // isBinderAlive is only a hint: a remote process can die between borrowing
+    // a lease and the actual transaction. Retire the exact lease, never a
+    // replacement acquired concurrently by another invocation.
+    private fun invalidateRuntime(lease: RuntimeLease) {
+        synchronized(bindingLock) {
+            if (cachedBinding === lease) {
+                cachedBinding = null
+                lease.expiration?.cancel(false)
+                lease.expiration = null
+                reportBinding(ProviderRuntimeBindingPhase.BIND_INVALIDATED)
+            }
+            if (lease.users == 0) lease.bound.close()
         }
     }
 
@@ -289,6 +305,9 @@ class ProviderRuntimeClient(
                 return descriptor.use {
                     block(lease.bound.remote, it)
                 }.also {
+                    if (it is ProviderRuntimeInvocationResponse && it.failure == ProviderRuntimeFailureCode.RUNTIME_DIED) {
+                        invalidateRuntime(lease)
+                    }
                     reportBinding(ProviderRuntimeBindingPhase.INVOKE_COMPLETED)
                 }
             } finally {

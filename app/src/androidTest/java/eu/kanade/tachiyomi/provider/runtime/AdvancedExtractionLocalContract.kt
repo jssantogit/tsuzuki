@@ -24,7 +24,12 @@ internal object AdvancedExtractionLocalContract {
         server.start()
         val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
         val factory = ProviderHostInvocationFactory(context, storageRoot = File(root, "local"))
-        val client = ProviderRuntimeClient(context, factory)
+        val bindingEvents = java.util.concurrent.CopyOnWriteArrayList<ProviderRuntimeBindingPhase>()
+        val client = ProviderRuntimeClient(
+            context, factory,
+            bindingObserver = { bindingEvents.add(it) },
+            bindingIdleTimeoutMs = 100L,
+        )
 
         suspend fun invoke(script: String, providerId: String = "app.tsuzuki.test.advanced", browser: Boolean = false): tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse {
             val invocationId = "local:" + UUID.randomUUID()
@@ -102,6 +107,26 @@ internal object AdvancedExtractionLocalContract {
             val rendered = invoke("""await tsuzuki.browser.query("$origin/dynamic", "#late", "data-value")""", browser = true)
             assertNull("rendered DOM", rendered.failure)
             assertEquals("[\"ready\"]", rendered.value)
+            // Exercise reuse after the actual idle lease expiry, without faking
+            // native process death or touching the network.
+            kotlinx.coroutines.withTimeout(3_000L) {
+                while (ProviderRuntimeBindingPhase.BIND_INVALIDATED !in bindingEvents) {
+                    kotlinx.coroutines.delay(25L)
+                }
+            }
+            val before = bindingEvents.count { it == ProviderRuntimeBindingPhase.BIND_STARTED }
+            kotlinx.coroutines.delay(250L)
+            val recovered = invoke("6 * 7")
+            assertNull("runtime after idle lease expiry", recovered.failure)
+            assertEquals("42", recovered.value)
+            assertTrue(bindingEvents.count { it == ProviderRuntimeBindingPhase.BIND_STARTED } > before)
+            val provider = tachiyomi.domain.tsuzuki.provider.ProviderId("app.tsuzuki.mangafire")
+            val standard = tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate("base123", "Fixture Work")
+            val variant = standard.copy(externalWorkId = "variant123", aliases = listOf("Fixture Work (Colored)"))
+            val portfolio = tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkSourcePortfolio
+            assertTrue(!portfolio.hasSourceAttestedAlternateEdition(provider, standard, "Fixture Work"))
+            assertTrue(portfolio.hasSourceAttestedAlternateEdition(provider, variant, "Fixture Work"))
+            assertTrue(!portfolio.hasSourceAttestedAlternateEdition(provider, variant.copy(aliases = emptyList()), "Fixture Work"))
         } finally {
             server.close()
         }
