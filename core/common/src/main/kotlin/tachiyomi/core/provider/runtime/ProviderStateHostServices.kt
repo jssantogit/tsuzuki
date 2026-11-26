@@ -136,7 +136,8 @@ class FileProviderStorageHostService(
                         return@mapNotNull null
                     }
                     val header = runCatching { json.parseToJsonElement(value) as? JsonObject }.getOrNull()
-                    if (header?.get("completed") != JsonPrimitive(true)) return@mapNotNull null
+                        ?: return@mapNotNull null
+                    if (header["completed"] != JsonPrimitive(true)) return@mapNotNull null
                     val expires = (header["expiresAt"] as? JsonPrimitive)?.longOrNull
                         ?: return@mapNotNull null
                     key.removeSuffix("index") to expires
