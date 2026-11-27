@@ -259,6 +259,67 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `late revocation discards only the earlier completed provider lane`() = runTest {
+        val first = registry().providers().single()
+        val secondId = ProviderId("app.tsuzuki.other")
+        val second = registry(provider = secondId).providers().single()
+        var active = listOf(first, second)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = DefaultProviderRegistry(registrations = { active }),
+            gateway = object : ProviderReadingGateway {
+                override suspend fun lookup(
+                    providerId: ProviderId,
+                    request: ProviderReadingLookupRequest,
+                ): ProviderCallResult<ProviderPage<ProviderWorkCandidate>> = ProviderCallResult.Success(
+                    ProviderPage(
+                        items = listOf(ProviderWorkCandidate("work-1", "Dandadan", language = "en")),
+                        nextCursor = null,
+                    ),
+                )
+
+                override suspend fun chapters(
+                    providerId: ProviderId,
+                    request: ProviderReadingChaptersRequest,
+                ): ProviderCallResult<ProviderPage<ProviderChapterObservation>> {
+                    if (providerId == secondId) {
+                        // The first lane has already returned its complete snapshot.
+                        delay(100)
+                        active = listOf(second)
+                    }
+                    return ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderChapterObservation(
+                                    if (providerId == secondId) "healthy-chapter" else "revoked-chapter",
+                                    "Chapter 1",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                }
+
+                override suspend fun pages(
+                    providerId: ProviderId,
+                    request: ProviderReadingPagesRequest,
+                ): ProviderCallResult<ProviderReadingDelivery> = error("not used")
+            },
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe false
+        result.bindingCount shouldBe 1
+        result.snapshots.shouldHaveSize(1)
+        result.evidence.map { it.externalChapterKey } shouldBe listOf("healthy-chapter")
+        result.partialEvidence shouldBe emptyList()
+        result.cursorProgress shouldBe emptyList()
+    }
+
+    @Test
     fun `detailed capture records bounded MangaFire page sample and chapter number range`(): Unit = runBlocking {
         val recorder = CapturingProviderDiagnostics(captureActive = true)
         val collector = CollectProviderReadingEvidence(
