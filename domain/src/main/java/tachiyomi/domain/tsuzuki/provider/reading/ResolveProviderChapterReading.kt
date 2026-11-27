@@ -728,8 +728,13 @@ class ResolveProviderChapterReading(
         if (current.catalogWorkFingerprint != null) {
             val titleId = canonicalChapterRepository.getById(current.canonicalChapterId)?.canonicalTitleId
                 ?: return unavailable()
-            if (catalogResearch?.permitsDelivery(titleId, current) != true ||
-                options(current.canonicalChapterId).none {
+            if (catalogResearch?.permitsDelivery(titleId, current) != true) return unavailable()
+        }
+        // A successful transport response is not a current identity grant.
+        // Every source must survive the same post-fetch mapping/authority check.
+        // Keep typed transport failures for ordinary sources unchanged.
+        if (result is ProviderCallResult.Success || current.catalogWorkFingerprint != null) {
+            if (options(current.canonicalChapterId).none {
                     it.copy(scanlationGroup = null) == current.copy(scanlationGroup = null)
                 }
             ) {
