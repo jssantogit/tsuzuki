@@ -17,6 +17,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -158,6 +159,15 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         require(searchHints.size <= works.size)
         require(searchHints.keys.all { title -> works.any { parseWork(it).title == title } })
         require(searchHints.values.all { it.isNotBlank() && it.length <= 256 })
+        val requiredCredits = args.getString("catalogRequiredCreditsBase64")?.let { encodedCredits ->
+            Json.parseToJsonElement(Base64.decode(encodedCredits, Base64.NO_WRAP).toString(Charsets.UTF_8))
+                .jsonObject.mapValues { (_, value) -> value.jsonArray.map { it.jsonPrimitive.content } }
+        }.orEmpty()
+        require(requiredCredits.size <= works.size)
+        require(requiredCredits.keys.all { title -> works.any { parseWork(it).title == title } })
+        require(requiredCredits.values.all { names ->
+            names.size in 1..8 && names.all { it.isNotBlank() && it.length <= 128 }
+        })
         val selected = works.withIndex().filter { it.index % shardCount == shardIndex }
         var conclusive = 0
         for ((index, line) in selected) {
@@ -170,7 +180,12 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
             } else {
                 try {
                     withTimeout(35_000L) {
-                        bootstrap.execute(work.title, work.format, searchTitle = searchHints[work.title])
+                        bootstrap.execute(
+                            work.title,
+                            work.format,
+                            searchTitle = searchHints[work.title],
+                            requiredCreatorNames = requiredCredits[work.title].orEmpty(),
+                        )
                     }
                 } catch (_: TimeoutCancellationException) {
                     MangaAllCatalogIdentityResult(status = MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE)
@@ -195,6 +210,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 put("caseId", "user-" + sha256(normalizedTitle(work.title)).take(12))
                 put("query", work.title)
                 put("retrievalHintUsed", work.title in searchHints)
+                put("creatorConstraintUsed", work.title in requiredCredits)
                 put("status", attested.status.name)
                 put("catalogSource", catalogName)
                 put("provider", attested.identity?.provider.orEmpty())

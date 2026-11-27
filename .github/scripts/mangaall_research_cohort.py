@@ -42,6 +42,7 @@ def load_cohort(key="manhwa"):
                       1: ("Ichiei Ishibumi", "Hiroji Mishima"),
                       3: ("Tetsuto Uesu", "Miyakokasiwa"),
                       5: ("Koushi Tachibana", "Sekihiko Inui"),
+                      25: ("Ichigo Takano",),
                   })
 
 def creator_key(name):

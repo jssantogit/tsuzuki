@@ -501,10 +501,22 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             if (titles.getById(titleId) != null) return "DIRTY_DATABASE"
             val catalogName = ownerScope(index)
             val bootstrap = ResolveMangaAllIndependentCatalogIdentity(catalogRegistry(setOf(catalogName)))
+            val required = if (japanese) {
+                when (index) {
+                    1 -> listOf("Ichiei Ishibumi", "Hiroji Mishima")
+                    3 -> listOf("Tetsuto Uesu", "Miyakokasiwa")
+                    5 -> listOf("Koushi Tachibana", "Sekihiko Inui")
+                    25 -> listOf("Ichigo Takano")
+                    else -> emptyList()
+                }
+            } else {
+                emptyList()
+            }
             var identity = bootstrap.execute(
                 works[index - 1],
                 expectedFormat,
                 searchTitle = nativeTitle(index),
+                requiredCreatorNames = required,
             )
             // Retry only transient catalog unavailability against the same
             // independent owner. Ambiguous or unverified identities stay red.
@@ -515,6 +527,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     works[index - 1],
                     expectedFormat,
                     searchTitle = nativeTitle(index),
+                    requiredCreatorNames = required,
                 )
             }
             if (identity.status != MangaAllCatalogIdentityStatus.RESOLVED) return identity.status.name
@@ -529,12 +542,6 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             // These controls reject an incorrect adaptation; they never supply
             // missing credits or override independent catalog identity.
             if (japanese) {
-                val required = when (index) {
-                    1 -> listOf("Ichiei Ishibumi", "Hiroji Mishima")
-                    3 -> listOf("Tetsuto Uesu", "Miyakokasiwa")
-                    5 -> listOf("Koushi Tachibana", "Sekihiko Inui")
-                    else -> emptyList()
-                }
                 fun creatorKey(name: String): List<String> = Normalizer.normalize(name, Normalizer.Form.NFKD)
                     .replace(Regex("""\p{M}+"""), "")
                     .lowercase()

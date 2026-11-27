@@ -61,12 +61,16 @@ class ResolveMangaAllIndependentCatalogIdentity(
         title: String,
         format: CatalogItemFormat? = null,
         searchTitle: String? = null,
+        requiredCreatorNames: List<String> = emptyList(),
     ): MangaAllCatalogIdentityResult = coroutineScope {
         val query = title.trim()
         require(query.isNotBlank() && query.length <= 256)
         // A more selective native-title query is a retrieval hint, not an identity override.
         val retrievalQuery = searchTitle?.trim() ?: query
         require(retrievalQuery.isNotBlank() && retrievalQuery.length <= 256)
+        require(requiredCreatorNames.size <= 8 && requiredCreatorNames.all { it.isNotBlank() && it.length <= 128 })
+        val requiredCreators = requiredCreatorNames.map(::creatorKey).toSet()
+        require(requiredCreators.none { it.isBlank() })
         registry.awaitReady()
         // A reading provider can never self-corroborate its own candidate.
         val sources = registry.searchProviders()
@@ -136,19 +140,60 @@ class ResolveMangaAllIndependentCatalogIdentity(
             candidateCount = exact.size,
             catalogsQueried = sources.size,
         )
-        when (exact.size) {
-            0 -> return@coroutineScope fields
-            1 -> Unit
-            else -> return@coroutineScope fields.copy(
-                status = MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS,
-            )
+        if (exact.isEmpty()) return@coroutineScope fields
+        if (exact.size > 1 && (requiredCreators.isEmpty() || exact.size > MAX_CREATOR_CANDIDATES)) {
+            return@coroutineScope fields.copy(status = MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS)
         }
 
-        val selected = exact.single()
+        // Published creator constraints narrow a complete set of exact-title
+        // matches; they never synthesize an owner ID, alias or creator credit.
+        // Missing detail/credits, or partially matching credits, cannot rule
+        // out an edition. Do not select the first available candidate.
+        val verified = exact.map { candidate ->
+            async {
+                gate.withPermit { verifyDetail(candidate, query, retrievalQuery, format) }
+            }
+        }.awaitAll()
+        if (verified.any { it == null }) {
+            return@coroutineScope fields.copy(status = MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED)
+        }
+        val details = verified.filterNotNull()
+        val selected = if (requiredCreators.isEmpty()) {
+            details.single()
+        } else {
+            val candidates = details.map { item ->
+                item to (item.authors + item.artists).map(::creatorKey).filter(String::isNotBlank).toSet()
+            }
+            val matches = candidates.filter { (_, names) -> names.containsAll(requiredCreators) }
+            val uncertain = candidates.any { (_, names) ->
+                names.isEmpty() || (!names.containsAll(requiredCreators) && names.any(requiredCreators::contains))
+            }
+            if (matches.size != 1 || uncertain) {
+                return@coroutineScope fields.copy(
+                    status = if (matches.size > 1 || (uncertain && exact.size > 1)) {
+                        MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS
+                    } else {
+                        MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+                    },
+                )
+            }
+            matches.single().first
+        }
+        fields.copy(
+            status = MangaAllCatalogIdentityStatus.RESOLVED,
+            identity = selected,
+            creatorsAttested = selected.authors.isNotEmpty() || selected.artists.isNotEmpty(),
+        )
+    }
+
+    private suspend fun verifyDetail(
+        selected: CatalogItem,
+        query: String,
+        retrievalQuery: String,
+        format: CatalogItemFormat?,
+    ): CatalogItem? {
         val owner = registry.metadataProviders().singleOrNull { it.integrationId.value == selected.provider }
-            ?: return@coroutineScope fields.copy(
-                status = MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED,
-            )
+            ?: return null
         val detail = try {
             withTimeoutOrNull(DETAIL_TIMEOUT_MILLIS) { owner.getDetails(selected.providerId) }
         } catch (error: CancellationException) {
@@ -158,11 +203,12 @@ class ResolveMangaAllIndependentCatalogIdentity(
         }
         val detailError = detail?.exceptionOrNull()
         if (detailError is CancellationException) throw detailError
-        val verified = detail?.getOrNull()?.takeIf {
+        return detail?.getOrNull()?.takeIf {
             it.provider == selected.provider &&
                 it.providerId == selected.providerId &&
                 (format == null || format == CatalogItemFormat.UNKNOWN || it.format == format) &&
                 (selected.format == CatalogItemFormat.UNKNOWN || it.format == selected.format) &&
+                (it.externalIds[it.provider] == null || it.externalIds[it.provider] == it.providerId) &&
                 selected.externalIds.all { (provider, id) ->
                     it.externalIds[provider] == null || it.externalIds[provider] == id
                 } &&
@@ -172,14 +218,11 @@ class ResolveMangaAllIndependentCatalogIdentity(
                 (listOf(it.title) + it.titles.values).any { name ->
                     normalize(name) == normalize(retrievalQuery)
                 }
-        } ?: return@coroutineScope fields.copy(status = MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED)
-
-        fields.copy(
-            status = MangaAllCatalogIdentityStatus.RESOLVED,
-            identity = verified,
-            creatorsAttested = verified.authors.isNotEmpty() || verified.artists.isNotEmpty(),
-        )
+        }
     }
+
+    private fun creatorKey(name: String): String =
+        normalize(name).split(' ').filter(String::isNotBlank).sorted().joinToString(" ")
 
     private fun hasConflictingIdentity(seed: CatalogItem, observed: List<CatalogItem>): Boolean {
         fun keys(item: CatalogItem): Set<Pair<String, String>> = buildSet {
@@ -297,6 +340,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
         const val MAX_NARROWED_PAGES_PER_CATALOG = 12
         const val NARROWED_CATALOG_TIMEOUT_MILLIS = 24_000L
         const val MAX_CONCURRENT_CATALOGS = 3
+        const val MAX_CREATOR_CANDIDATES = 8
         const val CATALOG_TIMEOUT_MILLIS = 15_000L
         const val DETAIL_TIMEOUT_MILLIS = 10_000L
         val COMBINING_MARKS = Regex("""\p{M}+""")

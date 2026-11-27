@@ -106,6 +106,42 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
     }
 
     @Test
+    fun `independent exact detail credits disambiguate same title without using search credits`() = runTest {
+        val catalog = source("mal", search = {
+            CatalogPage(
+                listOf(
+                    item("mal", "42", "Work", authors = listOf("Wrong Search Author")),
+                    item("mal", "43", "Work", authors = listOf("Expected Creator")),
+                ),
+                false,
+            )
+        }, detail = { id ->
+            item("mal", id, "Work", authors = listOf(if (id == "42") "Creator Expected" else "Other Author"))
+        })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(catalog))
+            .execute("Work", requiredCreatorNames = listOf("Expected Creator"))
+        result.status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+        result.identity?.providerId shouldBe "42"
+        result.identity?.authors shouldBe listOf("Creator Expected")
+    }
+
+    @Test
+    fun `uncredited or partially credited same title rival prevents edition selection`() = runTest {
+        for (rival in listOf(emptyList(), listOf("Expected Author"))) {
+            val catalog = source("mal", search = {
+                CatalogPage(listOf(item("mal", "42", "Work"), item("mal", "43", "Work")), false)
+            }, detail = { id ->
+                val credits = if (id == "42") listOf("Expected Author", "Expected Artist") else rival
+                item("mal", id, "Work", authors = credits)
+            })
+            val result = ResolveMangaAllIndependentCatalogIdentity(registry(catalog))
+                .execute("Work", requiredCreatorNames = listOf("Expected Author", "Expected Artist"))
+            result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS
+            result.identity shouldBe null
+        }
+    }
+
+    @Test
     fun `one unavailable catalog makes a lone match incomplete and unsafe to promote`() = runTest {
         val mal = source("mal", search = {
             CatalogPage(listOf(item("mal", "42", "Work")), false)

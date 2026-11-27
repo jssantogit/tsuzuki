@@ -70,12 +70,17 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
                 continue
             by_title={works[r["index"]-1]:r for r in group}
             hints={title:r["searchTitle"] for title,r in by_title.items() if "searchTitle" in r}
+            credits={title:cohort.required_credits[r["index"]] for title,r in by_title.items()
+                     if r["index"] in cohort.required_credits}
             payload=base64.b64encode("\n".join(cohort.format+"::"+t for t in by_title).encode()).decode()
             args=["shell","am","instrument","-w","-r","-e","mangaAllLiveCatalogOptIn","true",
                   "-e","mangaAllLiveCatalogSource",catalog,"-e","worksBase64",payload,
                   "-e","shardIndex","0","-e","shardCount","1","-e","class",TEST]
             if hints:
                 args.extend(["-e","catalogSearchHintsBase64",base64.b64encode(json.dumps(hints,ensure_ascii=False).encode()).decode()])
+            if credits:
+                args.extend(["-e","catalogRequiredCreditsBase64",base64.b64encode(
+                    json.dumps(credits,ensure_ascii=False).encode()).decode()])
             args.append(RUNNER)
             try:
                 run=adb(*args,timeout=950,check=False)
@@ -103,7 +108,8 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
                     title=record.get("query")
                     row=by_title.get(title)
                     if (row is None or record.get("caseId")!=case_id(title) or row["index"] in results
-                            or record.get("retrievalHintUsed") is not (title in hints)):
+                            or record.get("retrievalHintUsed") is not (title in hints)
+                            or (cohort.key == "manga" and record.get("creatorConstraintUsed") is not (title in credits))):
                         invalid+=1
                         continue
                     status,identity=classify(record,catalog,cohort.format.upper())
