@@ -47,7 +47,9 @@ def case_id(title):
     return "user-" + digest(name)[:12]
 
 
-def classify(record, catalog="mangaupdates"):
+def classify(record, catalog="mangaupdates", expected_format="MANHWA"):
+    if expected_format not in ("MANHWA", "MANGA"):
+        raise ValueError("Unknown frozen catalog format")
     if catalog not in ("mangaupdates", "shikimori"):
         raise ValueError("Unknown independent catalog scope")
     status = record.get("status")
@@ -71,7 +73,7 @@ def classify(record, catalog="mangaupdates"):
     # CatalogItem.provider/providerId are the detail owner identity. externalIds
     # contains optional crosswalks; the Kotlin resolver verified the search/detail
     # owner match and toCanonicalReadingMetadata validates and adds the self ID.
-    if record.get("format") != "MANHWA":
+    if record.get("format") != expected_format:
         return "FORMAT_UNVERIFIED", None
     authors = record.get("authors")
     artists = record.get("artists")

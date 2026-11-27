@@ -32,7 +32,13 @@ def change_one(blob: bytes, old: bytes, new: bytes, label: str) -> bytes:
 
 
 def candidate_bytes(source_root: Path, manhwa_only: bool = False,
-                    mangadot_creators: bool = False) -> bytes:
+                    mangadot_creators: bool = False,
+                    original_language: str | None = None) -> bytes:
+    if original_language not in (None, "ko", "ja"):
+        raise ValueError("INVALID_RESEARCH_ORIGINAL_LANGUAGE")
+    if manhwa_only and original_language not in (None, "ko"):
+        raise ValueError("CONFLICTING_RESEARCH_ORIGINAL_LANGUAGE")
+    language = "ko" if manhwa_only else original_language
     sys.path.insert(0, str(source_root / "tooling"))
     from mangaall_future_code11_candidate import unsigned_candidate_zip
     origin = unsigned_candidate_zip(source_root)
@@ -101,11 +107,9 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False,
         b"const CHAPTER_PAGE_SIZE = 50;",
         "MANGADEX_CHAPTERS",
     )
-    if manhwa_only:
-        # This opt-in is limited to the frozen Korean corpus Android probe.
-        # Do NOT filter other-manga generic code11 research or signed code10.
-        # Reproduce source-side language and exact-title recall corrections
-        # already evidenced in the independent 30-manhwa Node live suite.
+    if language is not None:
+        # Only explicit research cohorts filter original language.
+        lang = language.encode("ascii")
         dex_name = "modules/sources/mangadex/modules/mangadex.js"
         # Real CI wire observation #45396414321 confirmed the native API
         # filter preserves all four exact Korean controls while shrinking
@@ -113,13 +117,13 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False,
         files[dex_name] = change_one(
             files[dex_name],
             b'["title", title], ["limit", SEARCH_PAGE_SIZE], ["offset", offset],',
-            b'["title", title], ["originalLanguage[]", "ko"], ["limit", SEARCH_PAGE_SIZE], ["offset", offset],',
+            b'["title", title], ["originalLanguage[]", "' + lang + b'"], ["limit", SEARCH_PAGE_SIZE], ["offset", offset],',
             "MANHWA_MANGADEX_NATIVE_ORIGINAL_KO",
         )
         files[dex_name] = change_one(
             files[dex_name],
             b'if (item?.type !== "manga" || !ID_PATTERN.test(item.id || "") || seen.has(item.id)) continue;',
-            b'if (item?.type !== "manga" || !ID_PATTERN.test(item.id || "") || item?.attributes?.originalLanguage !== "ko" || seen.has(item.id)) continue;',
+            b'if (item?.type !== "manga" || !ID_PATTERN.test(item.id || "") || item?.attributes?.originalLanguage !== "' + lang + b'" || seen.has(item.id)) continue;',
             "MANHWA_MANGADEX_ORIGINAL_KO",
         )
         # Retrieval-only normalization for short article-prefixed searches.
@@ -185,8 +189,10 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False,
         raise ValueError("ORIGINAL_SOURCE_NETWORK_GRANTS_MISSING")
     perms["network"]["origins"] = sorted(TWO_ORIGINS)
     perms.pop("browser", None)
-    manifest["name"] = ("MangaAll — frozen 30 manhwa source research" if manhwa_only
-                        else "MangaAll — two-source unsigned research")
+    manifest["name"] = ({
+        "ko": "MangaAll — frozen 30 manhwa source research",
+        "ja": "MangaAll — frozen 30 manga source research",
+    }.get(language, "MangaAll — two-source unsigned research"))
     files["manifest.json"] = json.dumps(
         manifest, ensure_ascii=False, indent=2
     ).encode("utf-8")
@@ -216,12 +222,15 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--manhwa-only", action="store_true",
                         help="CI-only original-ko and scoped search for frozen manhwa cohort")
+    parser.add_argument("--original-language", choices=("ko", "ja"),
+                        help="Explicit original-language constraint for unsigned research")
     parser.add_argument("--mangadot-creators", action="store_true",
                         help="Research-only exact MangaDot JSON-LD creator evidence")
     args = parser.parse_args()
     source = args.source.resolve()
     raw = candidate_bytes(source, manhwa_only=args.manhwa_only,
-                          mangadot_creators=args.mangadot_creators)
+                          mangadot_creators=args.mangadot_creators,
+                          original_language=args.original_language)
     if args.output is not None:
         destination = args.output.resolve()
         if "androidTest/assets" not in str(destination):
@@ -232,6 +241,7 @@ def main():
           "|nativeChapterBridge=UNSIGNED_CODE11|signature=UNTOUCHED"
           "|release=NOT_STARTED|mangafire=NOT_IN_PACKAGE"
           "|manhwaOnly=" + ("YES" if args.manhwa_only else "NO") +
+                    "|originalLanguage=" + ("ko" if args.manhwa_only else args.original_language or "ANY") +
                     "|sha256=" + hashlib.sha256(raw).hexdigest())
 
 

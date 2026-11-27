@@ -12,17 +12,17 @@ from run_mangaall_frozen30_independent_catalog import (
     APP, DIGEST, RUNNER, TEST, adb, case_id, classify, locked_works,
 )
 
-PLAN=Path(".github/mangaall-frozen30-catalog-plan.json")
-OUT=Path(".github/results/mangaall-frozen30-catalog-plan")
+from mangaall_research_cohort import load_cohort, edition_credits_match
 SCOPES=("mangaupdates","shikimori")
 
 
-def plan():
-    raw=PLAN.read_bytes()
+def plan(cohort=None):
+    cohort = cohort or load_cohort()
+    raw=cohort.plan.read_bytes()
     doc=json.loads(raw)
     rows=doc["works"]
     assert doc["schemaVersion"]==1 and doc["scope"]=="RESEARCH_EXPLICIT_OWNERS_NO_FALLBACK"
-    assert doc["corpusSha256"]==DIGEST and [r["index"] for r in rows]==list(range(1,31))
+    assert doc["corpusSha256"]==cohort.digest and [r["index"] for r in rows]==list(range(1,31))
     for row in rows:
         assert set(row)<= {"index","catalog","searchTitle","reviewedCreatorReferences"}
         references=row.get("reviewedCreatorReferences",[])
@@ -42,7 +42,8 @@ def plan():
     return rows,hashlib.sha256(raw).hexdigest()
 
 
-def shard_run(works, rows, plan_digest, shard):
+def shard_run(works, rows, plan_digest, shard, cohort=None):
+    cohort = cohort or load_cohort()
     selected=rows[shard*10:(shard+1)*10]
     assert adb("shell","getprop","ro.kernel.qemu").stdout.strip()=="1"
     app=[p for p in Path("app/build/outputs/apk/debug").rglob("*.apk") if p.name=="app-debug.apk" or "universal" in p.name]
@@ -61,7 +62,7 @@ def shard_run(works, rows, plan_digest, shard):
                 continue
             by_title={works[r["index"]-1]:r for r in group}
             hints={title:r["searchTitle"] for title,r in by_title.items() if "searchTitle" in r}
-            payload=base64.b64encode("\n".join("manhwa::"+t for t in by_title).encode()).decode()
+            payload=base64.b64encode("\n".join(cohort.format+"::"+t for t in by_title).encode()).decode()
             args=["shell","am","instrument","-w","-r","-e","mangaAllLiveCatalogOptIn","true",
                   "-e","mangaAllLiveCatalogSource",catalog,"-e","worksBase64",payload,
                   "-e","shardIndex","0","-e","shardCount","1","-e","class",TEST]
@@ -84,7 +85,10 @@ def shard_run(works, rows, plan_digest, shard):
                             or record.get("retrievalHintUsed") is not (title in hints)):
                         invalid+=1
                         continue
-                    status,identity=classify(record,catalog)
+                    status,identity=classify(record,catalog,cohort.format.upper())
+                    if status == "CATALOG_IDENTITY_ATTESTED" and not edition_credits_match(
+                            record, cohort.required_credits.get(row["index"], ())):
+                        status,identity="EDITION_CREDITS_UNVERIFIED",None
                     results[row["index"]]=dict(index=row["index"],catalog=catalog,status=status,identityDigest=identity)
                 except (TypeError,ValueError,AttributeError):
                     invalid+=1
@@ -94,27 +98,28 @@ def shard_run(works, rows, plan_digest, shard):
         adb("shell","pm","clear",APP,check=False)
     reports=[results.get(row["index"],dict(index=row["index"],catalog=row["catalog"],status="NOT_OBSERVED",identityDigest=None)) for row in selected]
     ok=all_processes and invalid==0 and all(r["status"]=="CATALOG_IDENTITY_ATTESTED" for r in reports) and len({r["identityDigest"] for r in reports})==10
-    out=OUT/f"shard-{shard}"
+    out=cohort.output/f"shard-{shard}"
     out.mkdir(parents=True,exist_ok=True)
-    (out/"verdict.json").write_text(json.dumps(dict(schemaVersion=1,scope="EXPLICIT_OWNER_PLAN",corpusSha256=DIGEST,
+    (out/"verdict.json").write_text(json.dumps(dict(schemaVersion=1,scope="EXPLICIT_OWNER_PLAN",corpusSha256=cohort.digest,
         planSha256=plan_digest,shard=shard,processesPassed=all_processes,invalidAttestations=invalid,outcome="PASS" if ok else "RED",works=reports),indent=2)+"\n")
     for row in reports:
         print(f"CATALOG_PLAN|index={row['index']}|catalog={row['catalog']}|outcome={row['status']}")
     return ok
 
 
-def aggregate(rows, plan_digest):
+def aggregate(rows, plan_digest, cohort=None):
+    cohort = cohort or load_cohort()
     actual=[]
     valid=True
     for shard in range(3):
-        p=OUT/f"shard-{shard}"/"verdict.json"
+        p=cohort.output/f"shard-{shard}"/"verdict.json"
         if not p.is_file():
             valid=False
             continue
         doc=json.loads(p.read_text())
         found=doc.get("works",[])
         valid &= (doc.get("schemaVersion")==1 and doc.get("scope")=="EXPLICIT_OWNER_PLAN"
-                  and doc.get("corpusSha256")==DIGEST and doc.get("planSha256")==plan_digest
+                  and doc.get("corpusSha256")==cohort.digest and doc.get("planSha256")==plan_digest
                   and doc.get("shard")==shard and doc.get("outcome")=="PASS"
                   and doc.get("processesPassed") is True and doc.get("invalidAttestations")==0
                   and [(r.get("index"),r.get("catalog")) for r in found]==[(r["index"],r["catalog"]) for r in rows[shard*10:(shard+1)*10]])
@@ -132,13 +137,15 @@ def main():
     group.add_argument("--shard",type=int,choices=range(3))
     group.add_argument("--aggregate",action="store_true")
     group.add_argument("--check-plan",action="store_true")
+    parser.add_argument("--cohort", choices=("manhwa","manga"), default="manhwa")
     args=parser.parse_args()
-    works=locked_works()
-    rows,digest=plan()
+    cohort=load_cohort(args.cohort)
+    works=cohort.works
+    rows,digest=plan(cohort)
     if args.check_plan:
         print("CATALOG_PLAN|scope=EXPLICIT_OWNER_PLAN|works=30|fallback=NO")
         return True
-    return aggregate(rows,digest) if args.aggregate else shard_run(works,rows,digest,args.shard)
+    return aggregate(rows,digest,cohort) if args.aggregate else shard_run(works,rows,digest,args.shard,cohort)
 
 
 if __name__=="__main__":
