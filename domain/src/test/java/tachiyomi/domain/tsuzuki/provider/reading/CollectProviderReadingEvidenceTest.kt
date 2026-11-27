@@ -3675,7 +3675,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `empty preferred binding recovers native alternative in every supported facet without reading it twice`() = runTest {
+    fun `empty preferred binding reuses native alternative in each supported facet`() = runTest {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
         val metadata = mockk<CanonicalMetadataSnapshotRepository>()
