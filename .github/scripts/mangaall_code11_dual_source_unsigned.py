@@ -33,7 +33,8 @@ def change_one(blob: bytes, old: bytes, new: bytes, label: str) -> bytes:
 
 def candidate_bytes(source_root: Path, manhwa_only: bool = False,
                     mangadot_creators: bool = False,
-                    original_language: str | None = None) -> bytes:
+                    original_language: str | None = None,
+                    mangadex_internal_reading: bool = False) -> bytes:
     if original_language not in (None, "ko", "ja"):
         raise ValueError("INVALID_RESEARCH_ORIGINAL_LANGUAGE")
     if manhwa_only and original_language not in (None, "ko"):
@@ -148,6 +149,10 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False,
             b'if (n > mangaDotResearchPageLimit()) throw new Error("MangaAll bounded source search exhausted");',
             "MANHWA_DOT_UNIFORM_CURSOR_BOUND",
         )
+    if mangadex_internal_reading:
+        from mangaall_mangadex_reading_contract import patch_mangadex_reading_contract
+        dex_name = "modules/sources/mangadex/modules/mangadex.js"
+        files[dex_name] = patch_mangadex_reading_contract(files[dex_name])
     if mangadot_creators:
         # Separate opt-in; the five previous source-only live probes keep
         # exactly their original package shape. No authority or chapter
@@ -226,11 +231,14 @@ def main():
                         help="Explicit original-language constraint for unsigned research")
     parser.add_argument("--mangadot-creators", action="store_true",
                         help="Research-only exact MangaDot JSON-LD creator evidence")
+    parser.add_argument("--mangadex-internal-reading", action="store_true",
+                        help="Research-only staff expansion and internally deliverable chapters")
     args = parser.parse_args()
     source = args.source.resolve()
     raw = candidate_bytes(source, manhwa_only=args.manhwa_only,
                           mangadot_creators=args.mangadot_creators,
-                          original_language=args.original_language)
+                          original_language=args.original_language,
+                          mangadex_internal_reading=args.mangadex_internal_reading)
     if args.output is not None:
         destination = args.output.resolve()
         if "androidTest/assets" not in str(destination):

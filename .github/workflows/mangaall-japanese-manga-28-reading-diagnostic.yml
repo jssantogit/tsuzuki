@@ -64,7 +64,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
-          extra=()
+          python3 .github/scripts/verify_mangaall_mangadex_reading_contract.py --source future-code11-source
+          extra=(--mangadex-internal-reading)
           if [[ "$CATALOG_SCOPE" == 'explicit_plan' ]]; then extra+=(--mangadot-creators); fi
           python3 .github/scripts/mangaall_code11_dual_source_unsigned.py \
             --source future-code11-source --original-language ja "${extra[@]}" \
