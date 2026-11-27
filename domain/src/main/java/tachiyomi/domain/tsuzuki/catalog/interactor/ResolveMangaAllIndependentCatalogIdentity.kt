@@ -62,15 +62,14 @@ class ResolveMangaAllIndependentCatalogIdentity(
         format: CatalogItemFormat? = null,
         searchTitle: String? = null,
         requiredCreatorNames: List<String> = emptyList(),
+        requiredCreatorAliases: Map<String, List<String>> = emptyMap(),
     ): MangaAllCatalogIdentityResult = coroutineScope {
         val query = title.trim()
         require(query.isNotBlank() && query.length <= 256)
         // A more selective native-title query is a retrieval hint, not an identity override.
         val retrievalQuery = searchTitle?.trim() ?: query
         require(retrievalQuery.isNotBlank() && retrievalQuery.length <= 256)
-        require(requiredCreatorNames.size <= 8 && requiredCreatorNames.all { it.isNotBlank() && it.length <= 128 })
-        val requiredCreators = requiredCreatorNames.map(::creatorKey).toSet()
-        require(requiredCreators.none { it.isBlank() })
+        val requiredCreators = mangaAllCatalogCreatorGroups(requiredCreatorNames, requiredCreatorAliases)
         registry.awaitReady()
         // A reading provider can never self-corroborate its own candidate.
         val sources = registry.searchProviders()
@@ -164,9 +163,12 @@ class ResolveMangaAllIndependentCatalogIdentity(
             val candidates = details.map { item ->
                 item to (item.authors + item.artists).map(::creatorKey).filter(String::isNotBlank).toSet()
             }
-            val matches = candidates.filter { (_, names) -> names.containsAll(requiredCreators) }
+            val matches = candidates.filter { (_, names) ->
+                requiredCreators.all { group -> group.any(names::contains) }
+            }
             val uncertain = candidates.any { (_, names) ->
-                names.isEmpty() || (!names.containsAll(requiredCreators) && names.any(requiredCreators::contains))
+                val matched = requiredCreators.count { group -> group.any(names::contains) }
+                names.isEmpty() || matched in 1 until requiredCreators.size
             }
             if (matches.size != 1 || uncertain) {
                 return@coroutineScope fields.copy(
@@ -351,3 +353,19 @@ private fun normalizeMangaAllCatalogTitle(value: String): String {
 /** Compare complete published names, permitting given/family name order. */
 fun mangaAllCatalogCreatorKey(name: String): String =
     normalizeMangaAllCatalogTitle(name).split(' ').filter(String::isNotBlank).sorted().joinToString(" ")
+
+/** Each required creator is a separate non-overlapping group of reviewed spellings. */
+fun mangaAllCatalogCreatorGroups(
+    required: List<String>,
+    aliases: Map<String, List<String>> = emptyMap(),
+): List<Set<String>> {
+    require(required.size <= 8 && required.all { it.isNotBlank() && it.length <= 128 })
+    require(aliases.keys.all { it in required })
+    require(aliases.values.all { names -> names.size <= 8 && names.all { it.isNotBlank() && it.length <= 128 } })
+    val groups = required.map { name ->
+        (listOf(name) + aliases[name].orEmpty()).map(::mangaAllCatalogCreatorKey).toSet()
+    }
+    require(groups.all { group -> group.none(String::isBlank) })
+    require(groups.flatten().distinct().size == groups.sumOf { it.size })
+    return groups
+}

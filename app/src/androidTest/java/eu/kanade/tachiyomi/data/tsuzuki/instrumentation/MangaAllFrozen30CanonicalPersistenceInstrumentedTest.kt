@@ -48,6 +48,7 @@ import tachiyomi.data.tsuzuki.provider.ProviderReadingBindingRepositoryImpl
 import tachiyomi.data.tsuzuki.provider.ProviderWorkSourceAssociationRepositoryImpl
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
 import tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentity
+import tachiyomi.domain.tsuzuki.catalog.interactor.mangaAllCatalogCreatorGroups
 import tachiyomi.domain.tsuzuki.catalog.interactor.mangaAllCatalogCreatorKey
 import tachiyomi.domain.tsuzuki.catalog.interactor.toCanonicalReadingMetadata
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
@@ -549,11 +550,16 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             } else {
                 emptyList()
             }
+            val editionTitle = plan.getOrNull(index - 1)?.get("identityTitle")?.jsonPrimitive?.content
+                ?: works[index - 1]
+            val creatorAliases = plan.getOrNull(index - 1)?.get("creatorAliases")?.jsonObject
+                ?.mapValues { (_, aliases) -> aliases.jsonObject.keys.toList() }.orEmpty()
             var identity = bootstrap.execute(
-                works[index - 1],
+                editionTitle,
                 expectedFormat,
                 searchTitle = nativeTitle(index),
                 requiredCreatorNames = required,
+                requiredCreatorAliases = creatorAliases,
             )
             // Retry only transient catalog unavailability against the same
             // independent owner. Ambiguous or unverified identities stay red.
@@ -561,10 +567,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 if (identity.status != MangaAllCatalogIdentityStatus.CATALOG_UNAVAILABLE) break
                 delay(attempt * 2_000L)
                 identity = bootstrap.execute(
-                    works[index - 1],
+                    editionTitle,
                     expectedFormat,
                     searchTitle = nativeTitle(index),
                     requiredCreatorNames = required,
+                    requiredCreatorAliases = creatorAliases,
                 )
             }
             if (identity.status != MangaAllCatalogIdentityStatus.RESOLVED) return identity.status.name
@@ -581,7 +588,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             // missing credits or override independent catalog identity.
             if (japanese) {
                 val observed = (owner.authors + owner.artists).map(::mangaAllCatalogCreatorKey).toSet()
-                if (required.any { mangaAllCatalogCreatorKey(it) !in observed }) return "EDITION_CREDITS_UNVERIFIED"
+                val groups = mangaAllCatalogCreatorGroups(required, creatorAliases)
+                if (groups.any { group -> group.none(observed::contains) }) return "EDITION_CREDITS_UNVERIFIED"
             }
             // The fresh independent owner must publish the complete native
             // title before reviewed citations can attach to its exact ID.

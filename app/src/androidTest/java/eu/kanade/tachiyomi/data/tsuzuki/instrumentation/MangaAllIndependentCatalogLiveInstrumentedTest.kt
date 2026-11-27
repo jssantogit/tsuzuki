@@ -32,6 +32,7 @@ import tachiyomi.data.tsuzuki.kitsu.client.KitsuHttpClient
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityResult
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
 import tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentity
+import tachiyomi.domain.tsuzuki.catalog.interactor.mangaAllCatalogCreatorGroups
 import tachiyomi.domain.tsuzuki.catalog.interactor.mangaAllCatalogCreatorKey
 import tachiyomi.domain.tsuzuki.catalog.interactor.toCanonicalReadingMetadata
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogError
@@ -107,7 +108,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
             else -> "KITSU_SEARCH_CONTRACT"
         }
         var activeIndex = -1
-        var activeCredits = emptySet<String>()
+        var activeCredits = emptyList<Set<String>>()
         val observedMetadata = object : MetadataProvider by metadataCatalog {
             override suspend fun getDetails(externalId: String): Result<CatalogItem> {
                 val result = metadataCatalog.getDetails(externalId)
@@ -122,7 +123,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                     append("|authors=").append(item?.authors?.size ?: 0)
                     append("|artists=").append(item?.artists?.size ?: 0)
                     append("|required=").append(activeCredits.size)
-                    append("|matched=").append(activeCredits.count(names::contains))
+                    append("|matched=").append(activeCredits.count { group -> group.any(names::contains) })
                 }
                 instrument.sendStatus(1, Bundle().apply { putString("stream", facts) })
                 return result
@@ -195,12 +196,22 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 names.size in 1..8 && names.all { it.isNotBlank() && it.length <= 128 }
             },
         )
+        val creatorAliases = args.getString("catalogRequiredCreatorAliasesBase64")?.let { encodedAliases ->
+            Json.parseToJsonElement(Base64.decode(encodedAliases, Base64.NO_WRAP).toString(Charsets.UTF_8))
+                .jsonObject.mapValues { (_, value) ->
+                    value.jsonObject.mapValues { (_, names) -> names.jsonArray.map { it.jsonPrimitive.content } }
+                }
+        }.orEmpty()
+        require(creatorAliases.keys.all { it in requiredCredits })
         val selected = works.withIndex().filter { it.index % shardCount == shardIndex }
         var conclusive = 0
         for ((index, line) in selected) {
             activeIndex = index
             val work = parseWork(line)
-            activeCredits = requiredCredits[work.title].orEmpty().map(::mangaAllCatalogCreatorKey).toSet()
+            activeCredits = mangaAllCatalogCreatorGroups(
+                requiredCredits[work.title].orEmpty(),
+                creatorAliases[work.title].orEmpty(),
+            )
             val report = if (work.format == CatalogItemFormat.NOVEL) {
                 // Production MangaUpdates search explicitly excludes 'novel'.
                 // An empty response here would NOT certify absence of a novel.
@@ -218,6 +229,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                             work.format,
                             searchTitle = searchHints[work.title],
                             requiredCreatorNames = requiredCredits[work.title].orEmpty(),
+                            requiredCreatorAliases = creatorAliases[work.title].orEmpty(),
                         )
                     }
                 } catch (_: TimeoutCancellationException) {
@@ -244,6 +256,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 put("query", work.title)
                 put("retrievalHintUsed", work.title in searchHints)
                 put("creatorConstraintUsed", work.title in requiredCredits)
+                put("creatorAliasesUsed", work.title in creatorAliases)
                 put("status", attested.status.name)
                 put("catalogSource", catalogName)
                 put("provider", attested.identity?.provider.orEmpty())

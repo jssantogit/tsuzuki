@@ -29,7 +29,21 @@ def plan(cohort=None):
     assert doc["schemaVersion"]==1 and doc["scope"]=="RESEARCH_EXPLICIT_OWNERS_NO_FALLBACK"
     assert doc["corpusSha256"]==cohort.digest and [r["index"] for r in rows]==list(range(1,31))
     for row in rows:
-        assert set(row)<= {"index","catalog","searchTitle","reviewedCreatorReferences"}
+        assert set(row)<= {"index","catalog","searchTitle","reviewedCreatorReferences","identityTitle","editionEvidence","creatorAliases"}
+        edition=row.get("identityTitle")
+        if edition is not None:
+            assert cohort.key=="manga" and row["index"] in cohort.required_credits
+            assert isinstance(edition,str) and 0<len(edition.strip())<=256
+            assert isinstance(row.get("editionEvidence"),str) and row["editionEvidence"].startswith("https://")
+        else:
+            assert "editionEvidence" not in row
+        aliases=row.get("creatorAliases",{})
+        assert isinstance(aliases,dict) and set(aliases)<=set(cohort.required_credits.get(row["index"], ()))
+        for names in aliases.values():
+            assert isinstance(names,dict) and 1<=len(names)<=8
+            assert all(isinstance(name,str) and 0<len(name.strip())<=128 and isinstance(url,str)
+                       and url.startswith("https://") for name,url in names.items())
+        edition_credits_match(dict(authors=[],artists=[]),cohort.required_credits.get(row["index"],()),aliases)
         references=row.get("reviewedCreatorReferences",[])
         assert isinstance(references,list) and len(references)<=8
         for ref in references:
@@ -55,8 +69,7 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
     selected=rows[shard*10:(shard+1)*10]
     if probe:
         assert cohort.key == "manga" and probe in PROBE_SCOPES
-        selected=[dict(index=r["index"],catalog=probe,**({"searchTitle":r["searchTitle"]} if "searchTitle" in r else {}))
-                  for r in selected if r["index"] in JAPANESE_UNRESOLVED]
+        selected=[dict(r,catalog=probe) for r in selected if r["index"] in JAPANESE_UNRESOLVED]
     assert adb("shell","getprop","ro.kernel.qemu").stdout.strip()=="1"
     app=[p for p in Path("app/build/outputs/apk/debug").rglob("*.apk") if p.name=="app-debug.apk" or "universal" in p.name]
     tests=list(Path("app/build/outputs/apk/androidTest/debug").rglob("*.apk"))
@@ -73,10 +86,13 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
             group=[r for r in selected if r["catalog"]==catalog]
             if not group:
                 continue
-            by_title={works[r["index"]-1]:r for r in group}
+            by_title={r.get("identityTitle",works[r["index"]-1]):r for r in group}
+            assert len(by_title)==len(group)
             hints={title:r["searchTitle"] for title,r in by_title.items() if "searchTitle" in r}
             credits={title:cohort.required_credits[r["index"]] for title,r in by_title.items()
                      if r["index"] in cohort.required_credits}
+            aliases={title:{name:list(names) for name,names in r["creatorAliases"].items()}
+                     for title,r in by_title.items() if r.get("creatorAliases")}
             payload=base64.b64encode("\n".join(cohort.format+"::"+t for t in by_title).encode()).decode()
             args=["shell","am","instrument","-w","-r","-e","mangaAllLiveCatalogOptIn","true",
                   "-e","mangaAllLiveCatalogSource",catalog,"-e","worksBase64",payload,
@@ -86,6 +102,9 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
             if credits:
                 args.extend(["-e","catalogRequiredCreditsBase64",base64.b64encode(
                     json.dumps(credits,ensure_ascii=False).encode()).decode()])
+            if aliases:
+                args.extend(["-e","catalogRequiredCreatorAliasesBase64",base64.b64encode(
+                    json.dumps(aliases,ensure_ascii=False).encode()).decode()])
             args.append(RUNNER)
             try:
                 run=adb(*args,timeout=950,check=False)
@@ -125,7 +144,8 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
                     row=by_title.get(title)
                     if (row is None or record.get("caseId")!=case_id(title) or row["index"] in results
                             or record.get("retrievalHintUsed") is not (title in hints)
-                            or (cohort.key == "manga" and record.get("creatorConstraintUsed") is not (title in credits))):
+                            or (cohort.key == "manga" and record.get("creatorConstraintUsed") is not (title in credits))
+                            or (title in aliases and record.get("creatorAliasesUsed") is not True)):
                         invalid+=1
                         continue
                     status,identity=classify(record,catalog,cohort.format.upper())
@@ -133,7 +153,7 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
                         invalid+=1
                         continue
                     if status == "CATALOG_IDENTITY_ATTESTED" and not edition_credits_match(
-                            record, cohort.required_credits.get(row["index"], ())):
+                            record, cohort.required_credits.get(row["index"], ()),row.get("creatorAliases",{})):
                         status,identity="EDITION_CREDITS_UNVERIFIED",None
                     results[row["index"]]=dict(index=row["index"],catalog=catalog,status=status,identityDigest=identity)
                 except (TypeError,ValueError,AttributeError):

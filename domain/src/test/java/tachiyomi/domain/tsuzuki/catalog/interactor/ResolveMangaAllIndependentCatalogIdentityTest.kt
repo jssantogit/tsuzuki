@@ -494,6 +494,39 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
         }
     }
 
+    @Test
+    fun `reviewed creator aliases preserve two distinct required credits for every catalog`() = runTest {
+        for (provider in listOf("mangaupdates", "shikimori", "mal", "kitsu")) {
+            val row = item(provider, "42", "Work").copy(format = CatalogItemFormat.MANGA)
+            val required = listOf("Writer", "Artist")
+            val aliases = mapOf("Artist" to listOf("Alternate Artist"))
+            fun catalog(names: List<String>) = source(provider, search = {
+                CatalogPage(listOf(row), false)
+            }, detail = { row.copy(authors = names) })
+            val positive = ResolveMangaAllIndependentCatalogIdentity(
+                registry(catalog(listOf("Writer", "Alternate Artist"))),
+            ).execute(
+                "Work",
+                CatalogItemFormat.MANGA,
+                requiredCreatorNames = required,
+                requiredCreatorAliases = aliases,
+            )
+            positive.status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+            val missing = ResolveMangaAllIndependentCatalogIdentity(
+                registry(catalog(listOf("Alternate Artist"))),
+            ).execute(
+                "Work",
+                CatalogItemFormat.MANGA,
+                requiredCreatorNames = required,
+                requiredCreatorAliases = aliases,
+            )
+            missing.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+        }
+        shouldThrow<IllegalArgumentException> {
+            mangaAllCatalogCreatorGroups(listOf("Writer", "Artist"), mapOf("Artist" to listOf("Writer")))
+        }
+    }
+
     private fun item(
         provider: String,
         id: String,

@@ -58,8 +58,12 @@ def creator_key(name):
     normalized = "".join(c if c.isalnum() or unicodedata.category(c).startswith("M") else " " for c in value)
     return tuple(sorted(normalized.split()))
 
-def edition_credits_match(record, expected):
-    if not expected:
-        return True
+def edition_credits_match(record, expected, aliases=None):
+    aliases = aliases or {}
+    groups = [{creator_key(name), *(creator_key(alias) for alias in aliases.get(name, ()))}
+              for name in expected]
+    assert set(aliases) <= set(expected)
+    assert all(all(group) for group in groups)
+    assert len(set().union(*groups)) == sum(map(len, groups))
     observed = {creator_key(name) for name in record["authors"] + record["artists"]}
-    return all(creator_key(name) in observed for name in expected)
+    return all(group & observed for group in groups)
