@@ -251,6 +251,22 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
+    fun `Japanese title and creator marks do not collapse distinct source identities`() {
+        val provider = ProviderId("app.tsuzuki.mangaall")
+        val candidate = original.copy(title = "がく", authors = listOf("パク 花"))
+        fun assess(title: String, creator: String) = ProviderWorkSourcePortfolio.assess(
+            provider,
+            "en",
+            title,
+            setOf(creator),
+            listOf(candidate),
+        ).single().workVerification
+        assess("かく", "パク 花") shouldBe ProviderWorkVerification.TITLE_UNVERIFIED
+        assess("がく", "ハク 花") shouldBe ProviderWorkVerification.AUTHOR_CONFLICT
+        assess("か\u3099く", "ハ\u309Aク 花") shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
+    }
+
+    @Test
     fun `explicit bilingual creator credits compare whole spellings without granting editorial authority`() {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val observed = original.copy(

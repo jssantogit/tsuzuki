@@ -13,9 +13,9 @@ import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.catalog.model.mergeCatalogItemsByVerifiedIdentity
+import tachiyomi.domain.tsuzuki.identity.foldLatinIdentityDiacritics
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.SearchProvider
-import java.text.Normalizer
 
 /**
  * Fail-closed identity bootstrap for arbitrary MangaAll CI input.
@@ -339,23 +339,13 @@ class ResolveMangaAllIndependentCatalogIdentity(
     }
 }
 
-private val CATALOG_COMBINING_MARKS = Regex("""\p{M}+""")
 private val CATALOG_NON_ALPHANUMERIC = Regex("""[^\p{L}\p{N}\p{M}]+""")
 private val CATALOG_WHITESPACE = Regex("""\s+""")
 
 /** Fold Latin accents, not meaningful marks in other writing systems. */
 private fun normalizeMangaAllCatalogTitle(value: String): String {
-    val compatible = Normalizer.normalize(value, Normalizer.Form.NFKC)
-    val folded = buildString {
-        for (char in compatible) {
-            if (Character.UnicodeScript.of(char.code) == Character.UnicodeScript.LATIN) {
-                append(Normalizer.normalize(char.toString(), Normalizer.Form.NFD).replace(CATALOG_COMBINING_MARKS, ""))
-            } else {
-                append(char)
-            }
-        }
-    }
-    return folded.lowercase().replace(CATALOG_NON_ALPHANUMERIC, " ").trim().replace(CATALOG_WHITESPACE, " ")
+    return foldLatinIdentityDiacritics(value).lowercase()
+        .replace(CATALOG_NON_ALPHANUMERIC, " ").trim().replace(CATALOG_WHITESPACE, " ")
 }
 
 /** Compare complete published names, permitting given/family name order. */

@@ -1,5 +1,6 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
+import tachiyomi.domain.tsuzuki.identity.foldLatinIdentityDiacritics
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import java.text.Normalizer
 
@@ -237,8 +238,7 @@ object ProviderWorkSourcePortfolio {
         // pseudonyms (e.g. "ONE") into a broader identity.
         val normalized = if (tokens.size >= 2) {
             tokens.map { token ->
-                val withoutMacrons = Normalizer.normalize(token, Normalizer.Form.NFKD)
-                    .replace(CREATOR_COMBINING_MARKS, "")
+                val withoutMacrons = foldLatinIdentityDiacritics(token)
                 JAPANESE_LONG_YO.replace(withoutMacrons) { match -> match.value.dropLast(1) }
             }
         } else {
@@ -248,7 +248,8 @@ object ProviderWorkSourcePortfolio {
     }
 
     private fun normalizeTitle(title: String): String =
-        title.replace('’', '\'').replace('‘', '\'').replace('ʼ', '\'')
+        Normalizer.normalize(title, Normalizer.Form.NFC)
+            .replace('’', '\'').replace('‘', '\'').replace('ʼ', '\'')
             .trim().lowercase().replace(WHITESPACE, " ")
 
     private fun explicitlyQualifiedEdition(sourceTitle: String, normalizedBase: String): Boolean {
@@ -322,8 +323,7 @@ object ProviderWorkSourcePortfolio {
         ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
     )
     private val WHITESPACE = Regex("\\s+")
-    private val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
-    private val CREATOR_COMBINING_MARKS = Regex("\\p{M}+")
+    private val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}\\p{M}]+")
     private val HANGUL_CREDIT = Regex("""[가-힣]+(?:\s+[가-힣]+)*""")
     private val BILINGUAL_KOREAN_CREDIT = Regex(
         """([\p{IsLatin}][\p{IsLatin}\p{M} ,.'’_\-‐‑]{0,127}?)\s*\(([가-힣]+(?:\s+[가-힣]+)*)\)""",
