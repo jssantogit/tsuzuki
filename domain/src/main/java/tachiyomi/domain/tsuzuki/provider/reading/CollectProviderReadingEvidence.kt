@@ -375,7 +375,7 @@ class CollectProviderReadingEvidence private constructor(
                         // Preserve valid pages only for a genuine timeout. A malformed result,
                         // identity error or resource violation must not salvage untrusted pages.
                         val stillEnabled = providerRegistry.registration(target.registration.descriptor.id) ==
-                            target.registration
+                            target.registration && supplementaryTargetStillAuthorized(canonicalTitleId, target)
                         (
                             finished ?: ProviderReadingEvidenceCollection(
                                 // READ is entered only after a verified binding was selected
@@ -500,18 +500,8 @@ class CollectProviderReadingEvidence private constructor(
     ): ProviderReadingEvidenceCollection {
         return try {
             if (target.researchSource != null) {
-                val preferred = target.supplementaryPreferred
-                if (preferred != null) {
-                    val current = bindingRepository.get(canonicalTitleId, preferred.providerId, preferred.facetId)
-                    if (current?.ref != preferred || current.availability != ProviderBindingAvailability.AVAILABLE ||
-                        target.researchSource !in gateway.nativeCoverageSourceIds(
-                            preferred.providerId,
-                            preferred.facetId,
-                            target.registration.descriptor.version.code,
-                        )
-                    ) {
-                        return ProviderReadingEvidenceCollection(complete = false)
-                    }
+                if (!supplementaryTargetStillAuthorized(canonicalTitleId, target)) {
+                    return ProviderReadingEvidenceCollection(complete = false)
                 }
                 return collectResearchSource(
                     canonicalTitleId = canonicalTitleId,
@@ -1506,7 +1496,13 @@ class CollectProviderReadingEvidence private constructor(
                     traceChapterRequest(canonicalTitleId, target, assessment.ref, 1, DiagnosticOutcome.REJECTED)
                     continue
                 }
-                if (!catalogIsCurrent(catalogIdentity)) continue
+                if (!catalogIsCurrent(catalogIdentity) ||
+                    !supplementaryTargetStillAuthorized(canonicalTitleId, target) ||
+                    (!nativeMangaDotPortfolioResearch &&
+                        !gateway.supportsNativeChapterCoverage(assessment.ref, descriptor.version.code))
+                ) {
+                    continue
+                }
                 if (restart && saved != null) {
                     // Clearing an unusable operational hint never advances past
                     // unwritten evidence. CAS protects a concurrently newer cursor.
@@ -1808,6 +1804,7 @@ class CollectProviderReadingEvidence private constructor(
                 null
             }
             suspend fun sourceStillCurrent(): Boolean {
+                if (!supplementaryTargetStillAuthorized(canonicalTitleId, target)) return false
                 if (catalogIdentity != null &&
                     verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity
                 ) {
@@ -2113,6 +2110,27 @@ class CollectProviderReadingEvidence private constructor(
      * source lanes use the same global semaphore and cannot replace a binding.
      * The Host must attest scoped native support before any lane is created.
      */
+    private suspend fun supplementaryTargetStillAuthorized(
+        canonicalTitleId: String,
+        target: ReadingTarget,
+    ): Boolean {
+        val preferred = target.supplementaryPreferred ?: return true
+        return try {
+            val current = bindingRepository.get(canonicalTitleId, preferred.providerId, preferred.facetId)
+            current?.ref == preferred && current.availability == ProviderBindingAvailability.AVAILABLE &&
+                providerRegistry.registration(preferred.providerId) == target.registration &&
+                target.researchSource in gateway.nativeCoverageSourceIds(
+                    preferred.providerId,
+                    preferred.facetId,
+                    target.registration.descriptor.version.code,
+                )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private suspend fun supplementaryTargets(
         canonicalTitleId: String,
         target: ReadingTarget,

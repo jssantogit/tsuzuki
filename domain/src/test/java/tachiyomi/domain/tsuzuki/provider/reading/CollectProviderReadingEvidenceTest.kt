@@ -3775,7 +3775,9 @@ class CollectProviderReadingEvidenceTest {
             ),
             refreshedAt = 42L,
         )
-        for (slow in listOf(false, true)) {
+        for (scenario in listOf("success", "timeout", "revoked")) {
+            val slow = scenario == "timeout"
+            var granted = true
             val saved = ProviderReadingBinding(
                 id = "saved-dex",
                 canonicalTitleId = canonicalTitle.id,
@@ -3817,6 +3819,7 @@ class CollectProviderReadingEvidenceTest {
                         val key = if (request.binding == saved.ref) {
                             "mangadex:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
                         } else {
+                            if (scenario == "revoked") granted = false
                             "mangadot:chapters:111"
                         }
                         ProviderCallResult.Success(
@@ -3829,6 +3832,7 @@ class CollectProviderReadingEvidenceTest {
                     expectedProviderId = mangaAll,
                     nativeCoverageGranted = true,
                     supplementalSources = setOf("mangadot", "unknown"),
+                    supplementalGrant = { granted },
                 ),
                 bindingRepository = bindings,
                 evidenceAdapter = ProviderChapterEvidenceAdapter(),
@@ -3841,7 +3845,7 @@ class CollectProviderReadingEvidenceTest {
             result.snapshots.single().evidence.single().externalChapterKey shouldBe
                 "mangadex:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
             result.partialEvidence.map { it.externalChapterKey } shouldBe
-                if (slow) emptyList() else listOf("mangadot:chapters:111")
+                if (scenario == "success") listOf("mangadot:chapters:111") else emptyList()
             reads.count { it == saved.ref.externalWorkId } shouldBe 1
             reads.count { it == "mangadot:317" } shouldBe if (slow) 0 else 1
             scopedLookups shouldBe 1
@@ -4675,12 +4679,13 @@ class CollectProviderReadingEvidenceTest {
         expectedProviderId: ProviderId = providerId,
         nativeCoverageGranted: Boolean = false,
         supplementalSources: Set<String> = emptySet(),
+        supplementalGrant: () -> Boolean = { true },
     ) = object : ProviderReadingGateway {
         override suspend fun nativeCoverageSourceIds(
             providerId: ProviderId,
             facetId: String?,
             artifactVersionCode: Long,
-        ): Set<String> = supplementalSources
+        ): Set<String> = if (supplementalGrant()) supplementalSources else emptySet()
 
         override suspend fun supportsNativeChapterCoverage(
             binding: ProviderBindingRef,
