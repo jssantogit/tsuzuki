@@ -152,6 +152,47 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
     }
 
     @Test
+    fun `narrowed Japanese catalogs exhaust additional pages without selecting prematurely`() = runTest {
+        for (provider in listOf("mangaupdates", "shikimori")) {
+            val offsets = mutableListOf<Int>()
+            val catalog = source(provider, search = { query ->
+                offsets += query.offset
+                val rows = (query.offset until minOf(query.offset + query.limit, 176)).map { index ->
+                    item(provider, "${index + 1}", if (index == 175) "Work" else "Other $index")
+                        .copy(format = CatalogItemFormat.MANGA)
+                }
+                CatalogPage(rows, query.offset + rows.size < 176, totalCount = 176)
+            }, detail = { id ->
+                id shouldBe "176"
+                item(provider, id, "Work", authors = listOf("Verified Creator")).copy(format = CatalogItemFormat.MANGA)
+            })
+            val result = ResolveMangaAllIndependentCatalogIdentity(registry(catalog))
+                .execute("Work", CatalogItemFormat.MANGA)
+            result.status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+            offsets shouldBe (0..7).map { it * 25 }
+        }
+    }
+
+    @Test
+    fun `Kitsu identity lookup respects twenty record pages`() = runTest {
+        val offsets = mutableListOf<Int>()
+        val kitsu = source("kitsu", search = { query ->
+            query.limit shouldBe 20
+            offsets += query.offset
+            val rows = (query.offset until minOf(query.offset + query.limit, 21)).map { index ->
+                item("kitsu", "${index + 1}", if (index == 20) "Work" else "Other $index")
+                    .copy(format = CatalogItemFormat.MANGA)
+            }
+            CatalogPage(rows, query.offset + rows.size < 21, totalCount = 21)
+        }, detail = { id ->
+            item("kitsu", id, "Work", authors = listOf("Verified Creator")).copy(format = CatalogItemFormat.MANGA)
+        })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(kitsu)).execute("Work", CatalogItemFormat.MANGA)
+        result.status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+        offsets shouldBe listOf(0, 20)
+    }
+
+    @Test
     fun `oversized advertised catalog total stops after first page without accepting its exact match`() = runTest {
         val offsets = mutableListOf<Int>()
         val mu = source("mangaupdates", search = { query ->

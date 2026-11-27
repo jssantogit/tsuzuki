@@ -27,6 +27,7 @@ class MALMangaTest {
                     role = "Story & Art",
                 ),
             ),
+            alternativeTitles = MALAlternativeTitles(synonyms = listOf("Alternate"), en = "Monster"),
             genres = listOf(
                 MALGenre(id = 8, name = "Drama"),
                 MALGenre(id = 7, name = "Mystery"),
@@ -36,6 +37,7 @@ class MALMangaTest {
         track.score shouldBe 8.72
         track.score_votes shouldBe 143_215
         track.genres shouldContainExactly listOf("Drama", "Mystery")
+        track.alternate_titles shouldContainExactly listOf("Alternate", "Monster")
         track.authors shouldContainExactly listOf("Naoki Urasawa")
         track.artists shouldContainExactly listOf("Naoki Urasawa")
     }

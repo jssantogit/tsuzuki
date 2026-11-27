@@ -176,9 +176,9 @@ class ResolveMangaAllIndependentCatalogIdentity(
         title: String,
         format: CatalogItemFormat?,
     ): SourceSearchResult {
-        // The native MangaUpdates Manhwa filter still reports more than
-        // 100 candidates for some exact Korean work names. Bound the larger
-        // budget explicitly; never treat exhaustion as complete.
+        // Typed MangaUpdates and Japanese Shikimori searches can exceed
+        // 100 candidates. Keep a bounded larger budget without treating
+        // exhaustion as complete.
         val narrowed = (source.integrationId.value == "mangaupdates" &&
             format in setOf(CatalogItemFormat.MANHWA, CatalogItemFormat.MANGA)) ||
             (source.integrationId.value == "shikimori" && format == CatalogItemFormat.MANGA)

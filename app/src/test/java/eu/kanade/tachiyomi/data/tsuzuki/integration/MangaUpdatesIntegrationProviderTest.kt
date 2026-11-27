@@ -205,7 +205,13 @@ class MangaUpdatesIntegrationProviderTest {
         ).getOrThrow()
         last.items.single().providerId shouldBe "51"
         last.hasNextPage shouldBe false
-        calls shouldBe listOf(listOf("Title", 25, 25, "Manhwa"), listOf("Title", 50, 25, "Manhwa"))
+        provider.search(CatalogQuery(query = "Title", format = CatalogItemFormat.MANGA, offset = 0, limit = 25))
+            .getOrThrow()
+        calls shouldBe listOf(
+            listOf("Title", 25, 25, "Manhwa"),
+            listOf("Title", 50, 25, "Manhwa"),
+            listOf("Title", 0, 25, "Manga"),
+        )
     }
 
     private class FakeMangaUpdatesUserLibraryApi(
