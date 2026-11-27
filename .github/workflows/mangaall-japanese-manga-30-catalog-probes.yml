@@ -257,3 +257,5 @@ jobs:
 # Record closed detail verification failures without changing the acceptance policy.
 
 # Re-run catalog comparison after matching the Kotlin formatter.
+
+# Re-probe the locked identity without an uncorroborated retrieval hint; keep both creator groups.
