@@ -14,6 +14,10 @@ from run_mangaall_frozen30_independent_catalog import (
 
 from mangaall_research_cohort import load_cohort, edition_credits_match
 SCOPES=("mangaupdates","shikimori")
+PROBE_SCOPES=("shikimori","mal","kitsu")
+# Exactly the unresolved indices from #45923232242. These diagnostic probes
+# cannot pass the canonical gate or replace the explicit owner plan.
+JAPANESE_UNRESOLVED=frozenset(range(1,31)) - {4,9,12,15,16,22,29}
 
 
 def plan(cohort=None):
@@ -42,9 +46,12 @@ def plan(cohort=None):
     return rows,hashlib.sha256(raw).hexdigest()
 
 
-def shard_run(works, rows, plan_digest, shard, cohort=None):
+def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
     cohort = cohort or load_cohort()
     selected=rows[shard*10:(shard+1)*10]
+    if probe:
+        assert cohort.key == "manga" and probe in PROBE_SCOPES
+        selected=[dict(index=r["index"],catalog=probe) for r in selected if r["index"] in JAPANESE_UNRESOLVED]
     assert adb("shell","getprop","ro.kernel.qemu").stdout.strip()=="1"
     app=[p for p in Path("app/build/outputs/apk/debug").rglob("*.apk") if p.name=="app-debug.apk" or "universal" in p.name]
     tests=list(Path("app/build/outputs/apk/androidTest/debug").rglob("*.apk"))
@@ -52,11 +59,12 @@ def shard_run(works, rows, plan_digest, shard, cohort=None):
     results={}
     all_processes=True
     invalid=0
+    diagnostics=[]
     try:
         adb("install","-r",str(app[0]))
         adb("install","-r",str(tests[0]))
         adb("shell","cmd","connectivity","airplane-mode","disable")
-        for catalog in SCOPES:
+        for catalog in ((probe,) if probe else SCOPES):
             group=[r for r in selected if r["catalog"]==catalog]
             if not group:
                 continue
@@ -76,6 +84,19 @@ def shard_run(works, rows, plan_digest, shard, cohort=None):
             except subprocess.SubprocessError:
                 all_processes=False
                 continue
+            diagnostic_pattern = (
+                r"MANGAALL_CATALOG_DIAGNOSTIC\|index=(\d+)\|offset=(\d+)\|"
+                r"(?:MU|SHIKI|MAL|KITSU)_SEARCH_CONTRACT"
+                r"\|reason=(FIRST_GEOMETRY|PAGE_GEOMETRY|ROW_COUNT|INVALID_OR_REPEATED_ID|OTHER_FAILURE|OK)"
+                r"(?:\|page=-?\d+\|size=-?\d+\|total=-?\d+\|rows=\d+|\|total=-?\d+\|rows=\d+)?"
+                r"(?=\s|$)"
+            )
+            for match in re.finditer(diagnostic_pattern,raw):
+                local_index=int(match.group(1))
+                if 0 <= local_index < len(group) and len(diagnostics)<160:
+                    line=match.group(0).replace(f"index={local_index}|",f"index={group[local_index]['index']}|",1)
+                    diagnostics.append(line)
+                    print(line)
             for match in re.finditer(r"MANGAALL_CATALOG_ATTESTATION\|([A-Za-z0-9+/=]+)",raw):
                 try:
                     record=json.loads(base64.b64decode(match.group(1),validate=True))
@@ -89,6 +110,10 @@ def shard_run(works, rows, plan_digest, shard, cohort=None):
                     if status == "CATALOG_IDENTITY_ATTESTED" and not edition_credits_match(
                             record, cohort.required_credits.get(row["index"], ())):
                         status,identity="EDITION_CREDITS_UNVERIFIED",None
+                    # The existing MAL adapter only exposes the first upstream
+                    # search page; never certify complete identity from it.
+                    if probe == "mal" and status == "CATALOG_IDENTITY_ATTESTED":
+                        status,identity="SEARCH_COMPLETENESS_UNVERIFIED",None
                     results[row["index"]]=dict(index=row["index"],catalog=catalog,status=status,identityDigest=identity)
                 except (TypeError,ValueError,AttributeError):
                     invalid+=1
@@ -97,13 +122,19 @@ def shard_run(works, rows, plan_digest, shard, cohort=None):
         adb("shell","am","force-stop",APP,check=False)
         adb("shell","pm","clear",APP,check=False)
     reports=[results.get(row["index"],dict(index=row["index"],catalog=row["catalog"],status="NOT_OBSERVED",identityDigest=None)) for row in selected]
-    ok=all_processes and invalid==0 and all(r["status"]=="CATALOG_IDENTITY_ATTESTED" for r in reports) and len({r["identityDigest"] for r in reports})==10
-    out=cohort.output/f"shard-{shard}"
+    complete=all_processes and invalid==0 and len(results)==len(selected)
+    ok=complete and all(r["status"]=="CATALOG_IDENTITY_ATTESTED" for r in reports) and len({r["identityDigest"] for r in reports})==len(selected)
+    root=cohort.output.with_name(cohort.output.name+"-probe-"+probe) if probe else cohort.output
+    out=root/f"shard-{shard}"
     out.mkdir(parents=True,exist_ok=True)
-    (out/"verdict.json").write_text(json.dumps(dict(schemaVersion=1,scope="EXPLICIT_OWNER_PLAN",corpusSha256=cohort.digest,
-        planSha256=plan_digest,shard=shard,processesPassed=all_processes,invalidAttestations=invalid,outcome="PASS" if ok else "RED",works=reports),indent=2)+"\n")
+    (out/"pagination-diagnostics.txt").write_text("\n".join(diagnostics)+"\n")
+    (out/"verdict.json").write_text(json.dumps(dict(schemaVersion=1,scope="UNRESOLVED_CATALOG_PROBE" if probe else "EXPLICIT_OWNER_PLAN",corpusSha256=cohort.digest,
+        planSha256=plan_digest,shard=shard,processesPassed=all_processes,invalidAttestations=invalid,outcome="PASS" if (complete if probe else ok) else "RED",works=reports),indent=2)+"\n")
     for row in reports:
         print(f"CATALOG_PLAN|index={row['index']}|catalog={row['catalog']}|outcome={row['status']}")
+    if probe:
+        print(f"CATALOG_PROBE|catalog={probe}|shard={shard}|observed={len(results)}|expected={len(selected)}|attested={sum(r['status']=='CATALOG_IDENTITY_ATTESTED' for r in reports)}|canonical=NOT_TESTED")
+        return complete
     return ok
 
 
@@ -138,14 +169,17 @@ def main():
     group.add_argument("--aggregate",action="store_true")
     group.add_argument("--check-plan",action="store_true")
     parser.add_argument("--cohort", choices=("manhwa","manga"), default="manhwa")
+    parser.add_argument("--probe-catalog", choices=PROBE_SCOPES)
     args=parser.parse_args()
+    if args.probe_catalog and (args.cohort != "manga" or args.shard is None):
+        parser.error("Catalog probe is restricted to the Japanese unresolved shard")
     cohort=load_cohort(args.cohort)
     works=cohort.works
     rows,digest=plan(cohort)
     if args.check_plan:
         print("CATALOG_PLAN|scope=EXPLICIT_OWNER_PLAN|works=30|fallback=NO")
         return True
-    return aggregate(rows,digest,cohort) if args.aggregate else shard_run(works,rows,digest,args.shard,cohort)
+    return aggregate(rows,digest,cohort) if args.aggregate else shard_run(works,rows,digest,args.shard,cohort,args.probe_catalog)
 
 
 if __name__=="__main__":

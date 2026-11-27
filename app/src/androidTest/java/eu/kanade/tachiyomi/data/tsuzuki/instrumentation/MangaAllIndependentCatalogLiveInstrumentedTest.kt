@@ -6,6 +6,8 @@ import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.App
+import eu.kanade.tachiyomi.data.tsuzuki.integration.KitsuIntegrationProvider
+import eu.kanade.tachiyomi.data.tsuzuki.integration.MalIntegrationProvider
 import eu.kanade.tachiyomi.data.tsuzuki.integration.MangaUpdatesIntegrationProvider
 import eu.kanade.tachiyomi.data.tsuzuki.integration.ShikimoriIntegrationProvider
 import eu.kanade.tachiyomi.data.tsuzuki.integration.ShikimoriRequestGate
@@ -24,6 +26,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import tachiyomi.data.tsuzuki.kitsu.KitsuCatalogProvider
+import tachiyomi.data.tsuzuki.kitsu.client.KitsuHttpClient
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityResult
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
 import tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentity
@@ -82,12 +86,22 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         val catalog: SearchProvider = when (catalogName) {
             "mangaupdates" -> MangaUpdatesIntegrationProvider(app.graph.trackerManager)
             "shikimori" -> ShikimoriIntegrationProvider(app.graph.trackerManager, ShikimoriRequestGate())
+            "mal" -> MalIntegrationProvider(app.graph.trackerManager)
+            "kitsu" -> KitsuIntegrationProvider(
+                KitsuCatalogProvider(KitsuHttpClient(app.graph.networkHelper, app.graph.json)),
+                app.graph.trackerManager,
+            )
             else -> error("Unknown independent catalog scope")
         }
         val metadataCatalog = catalog as MetadataProvider
         // Emit only closed failure codes and pagination counts from the
         // actual adapter; never send its exception, query, or response body.
-        val diagnosticPrefix = if (catalogName == "mangaupdates") "MU_SEARCH_CONTRACT" else "SHIKI_SEARCH_CONTRACT"
+        val diagnosticPrefix = when (catalogName) {
+            "mangaupdates" -> "MU_SEARCH_CONTRACT"
+            "shikimori" -> "SHIKI_SEARCH_CONTRACT"
+            "mal" -> "MAL_SEARCH_CONTRACT"
+            else -> "KITSU_SEARCH_CONTRACT"
+        }
         var activeIndex = -1
         val observedSearch = object : SearchProvider by catalog {
             override suspend fun search(query: CatalogQuery): Result<CatalogPage> {
