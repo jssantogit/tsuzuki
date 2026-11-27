@@ -20,6 +20,8 @@ on:
       - 'domain/src/test/java/tachiyomi/domain/tsuzuki/catalog/interactor/ResolveMangaAllIndependentCatalogIdentityTest.kt'
       - '.github/scripts/run_mangaall_frozen30_catalog_plan.py'
       - '.github/scripts/run_mangaall_frozen30_canonical_persistence.py'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGateway.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllFutureGatewaySnapshotGateTest.kt'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/provider/reading/**'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/reader/**'
       - 'domain/src/test/java/tachiyomi/domain/tsuzuki/provider/reading/**'
