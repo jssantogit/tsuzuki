@@ -97,7 +97,8 @@ object ProviderWorkSourcePortfolio {
             val matchedGroups = requiredCreatorGroups.count { group -> group.any(exactCreditKeys::contains) }
             val verification = when {
                 !exactTitle -> ProviderWorkVerification.TITLE_UNVERIFIED
-                expectedAuthors == null || !constraintsVerified -> ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED
+                expectedAuthors == null || !constraintsVerified ->
+                    ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED
                 !detailVerified -> ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED
                 catalogConflict -> ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
                 // For a reviewed adaptation, a shared original writer alone is

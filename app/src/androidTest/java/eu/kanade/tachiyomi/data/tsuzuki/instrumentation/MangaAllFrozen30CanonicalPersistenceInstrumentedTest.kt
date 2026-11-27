@@ -810,7 +810,9 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     if (observed.singleOrNull()?.let { resolver.options(it.id).isNotEmpty() } == true) break
                     // Each refresh uses the same source/lane budget; only the
                     // bounded window of independently observed names changes.
-                    if (refreshForBatch(batch, references, creatorGroups).execute(titleId, forceRefresh = true).isFailure) {
+                    val result = refreshForBatch(batch, references, creatorGroups)
+                        .execute(titleId, forceRefresh = true)
+                    if (result.isFailure) {
                         return "REFRESH_FAILED"
                     }
                 }
