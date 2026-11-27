@@ -67,25 +67,73 @@ suspend fun resolveVerifiedCreatorAliases(
             if (failure is CancellationException) throw failure
             val evidence = result.getOrNull() ?: continue
             if (evidence.size > 32) continue
-            for (entry in evidence) {
-                if (entry.workExternalId != workId ||
-                    entry.creatorExternalId.isBlank() || entry.creatorExternalId.length > 128 ||
-                    entry.aliases.size > 32
-                ) {
-                    continue
-                }
-                val names = listOf(entry.primaryName) + entry.aliases
-                if (names.any { it.isBlank() || it.length > 128 }) continue
-                val creditedKey = creditKey(entry.creditedName)
-                if (creditedKey.isEmpty() || names.none { creditKey(it) == creditedKey }) continue
-                val credited = fields.any { (role, field) ->
-                    role == entry.role && field.value.any { creditKey(it) == creditedKey }
-                }
-                if (credited) expanded += names.map(String::trim)
+            val exactCredits = fields.flatMap { (role, field) ->
+                field.value.map { role to it }
             }
+            val people = verifiedCatalogCreatorAliasGroups(workId, exactCredits, evidence)
+            people.forEach { expanded += it.names }
         }
     }
     return expanded
+}
+
+/**
+ * A verified alias group anchored to one catalog person and one or more
+ * actual credits on the exact work. Keep the person identity available to
+ * callers that need to distinguish two adaptation creators.
+ */
+internal data class VerifiedCatalogCreatorAliasGroup(
+    val creatorExternalId: String,
+    val names: Set<String>,
+    val credits: Set<Pair<CreatorCreditRole, String>>,
+)
+
+/**
+ * Never expand a name claimed by competing person IDs or allow contradictory
+ * rows of a single person to donate aliases. Raw detail credits remain intact
+ * even when these optional aliases are rejected.
+ */
+internal fun verifiedCatalogCreatorAliasGroups(
+    workId: String,
+    credits: List<Pair<CreatorCreditRole, String>>,
+    evidence: List<CatalogCreatorAliasEvidence>,
+): List<VerifiedCatalogCreatorAliasGroup> {
+    if (workId.isBlank() || evidence.size > 32 || credits.size > 32) return emptyList()
+    val anchored = credits.map { (role, name) -> role to creditKey(name) }.toSet()
+    val valid = evidence.filter { entry ->
+        val names = listOf(entry.primaryName) + entry.aliases
+        val credited = creditKey(entry.creditedName)
+        entry.workExternalId == workId &&
+            entry.creatorExternalId.isNotBlank() && entry.creatorExternalId.length <= 128 &&
+            entry.aliases.size <= 32 &&
+            names.none { it.isBlank() || it.length > 128 } &&
+            credited.isNotEmpty() && names.any { creditKey(it) == credited } &&
+            (entry.role to credited) in anchored
+    }
+    val byPerson = valid.groupBy { it.creatorExternalId }
+    // Include all valid anchored claims in the collision index, even if one
+    // of those people later fails its own consistency check.
+    val ownersByName = mutableMapOf<String, MutableSet<String>>()
+    for (entry in valid) {
+        for (name in listOf(entry.primaryName) + entry.aliases) {
+            ownersByName.getOrPut(creditKey(name)) { mutableSetOf() }.add(entry.creatorExternalId)
+        }
+    }
+    return byPerson.mapNotNull { (id, rows) ->
+        val nameSets = rows.map { row ->
+            (listOf(row.primaryName) + row.aliases).map(::creditKey).toSet()
+        }
+        val shared = nameSets.reduce { left, right -> left intersect right }
+        val names = rows.flatMap { listOf(it.primaryName) + it.aliases }.map(String::trim).toSet()
+        if (shared.isEmpty() || names.any { ownersByName[creditKey(it)]?.size != 1 }) {
+            return@mapNotNull null
+        }
+        VerifiedCatalogCreatorAliasGroup(
+            creatorExternalId = id,
+            names = names,
+            credits = rows.map { it.role to creditKey(it.creditedName) }.toSet(),
+        )
+    }
 }
 
 /**
