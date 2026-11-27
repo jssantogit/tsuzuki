@@ -280,6 +280,33 @@ class MangaAllFutureHostChapterSnapshotTest {
     }
 
     @Test
+    fun contradictory_chapter_ids_and_malformed_nonempty_inventory_preserve_previous_generation(): Unit = runBlocking {
+        var current = source(400, 0)
+        val (service, _) = fixture { current }
+        val first = service.start("mangadot:131", "en")
+        val cursor = first.nextCursor!!
+        current = """
+            [
+              {"id":171,"chapter_number":1,"language":"en","source":"user"},
+              {"id":171,"chapter_number":2,"language":"en","source":"user"}
+            ]
+        """.trimIndent()
+        val conflict = runCatching { service.start("mangadot:131", "en") }.exceptionOrNull()
+        conflict?.message shouldBe "CONFLICTING_SOURCE_CHAPTER_ID"
+        service.next("mangadot:131", "en", cursor).items.isNotEmpty() shouldBe true
+
+        current = """[{"id":null,"chapter_number":1},null,{"id":17,"chapter_number":"invalid"}]"""
+        val malformed = runCatching { service.start("mangadot:131", "en") }.exceptionOrNull()
+        malformed?.message shouldBe "INCONCLUSIVE_SOURCE_ROWS"
+        service.next("mangadot:131", "en", cursor).items.isNotEmpty() shouldBe true
+
+        current = "[]"
+        val empty = service.start("mangadot:131", "en")
+        empty.items.size shouldBe 0
+        empty.nextCursor shouldBe null
+    }
+
+    @Test
     fun failed_shared_quota_preflight_keeps_unrelated_storage_and_previous_snapshot(): Unit = runBlocking {
         val shared = FileProviderStorageHostService(
             root = tempDir.resolve("shared-storage").toFile(),

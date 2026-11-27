@@ -123,7 +123,13 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                     append("|authors=").append(item?.authors?.size ?: 0)
                     append("|artists=").append(item?.artists?.size ?: 0)
                     append("|required=").append(activeCredits.size)
+                    append("|distinctCreators=").append(names.size)
                     append("|matched=").append(activeCredits.count { group -> group.any(names::contains) })
+                    append("|matchedGroups=").append(
+                        activeCredits.mapIndexedNotNull { index, group ->
+                            (index + 1).takeIf { group.any(names::contains) }
+                        }.joinToString(","),
+                    )
                 }
                 instrument.sendStatus(1, Bundle().apply { putString("stream", facts) })
                 return result

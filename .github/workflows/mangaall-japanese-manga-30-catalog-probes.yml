@@ -246,3 +246,5 @@ jobs:
 # Focus live on the two unresolved adaptations; keep all four adapter regressions.
 
 # Compare verified native-title retrieval on both unresolved adaptations while reading diagnostics run.
+
+# Recheck both adaptations with publisher-attested native credit spellings and per-group match diagnostics.

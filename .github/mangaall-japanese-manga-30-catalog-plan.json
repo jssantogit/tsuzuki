@@ -17,7 +17,11 @@
       "searchTitle": "新妹魔王の契約者",
       "creatorAliases": {
         "Miyakokasiwa": {
-          "Miyako Kashiwa": "https://www.manga-news.com/index.php/serie-vo/Shinmai-maho-no-testament-vo"
+          "Miyako Kashiwa": "https://www.manga-news.com/index.php/serie-vo/Shinmai-maho-no-testament-vo",
+          "みやこかしわ": "https://www.kadokawa.co.jp/product/321306000077/"
+        },
+        "Tetsuto Uesu": {
+          "上栖綴人": "https://www.kadokawa.co.jp/product/321306000077/"
         }
       }
     },
@@ -30,7 +34,15 @@
       "catalog": "shikimori",
       "searchTitle": "デート・ア・ライブ 十香デッドエンド",
       "identityTitle": "Date A Live: Tooka Dead End",
-      "editionEvidence": "https://www.kadokawa.co.jp/product/321311000118/"
+      "editionEvidence": "https://www.kadokawa.co.jp/product/321311000118/",
+      "creatorAliases": {
+        "Koushi Tachibana": {
+          "橘公司": "https://www.kadokawa.co.jp/product/321311000118/"
+        },
+        "Sekihiko Inui": {
+          "犬威赤彦": "https://www.kadokawa.co.jp/product/321311000118/"
+        }
+      }
     },
     {
       "index": 6,

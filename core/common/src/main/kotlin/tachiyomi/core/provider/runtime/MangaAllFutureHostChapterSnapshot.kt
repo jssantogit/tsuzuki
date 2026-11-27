@@ -290,7 +290,7 @@ internal class MangaAllFutureHostChapterSnapshot(
     }
 
     private fun compact(rows: JsonArray, language: String): List<JsonArray> {
-        val seen = HashSet<String>()
+        val seen = HashMap<String, JsonArray>()
         var rejectedFacet = false
         val result = mutableListOf<JsonArray>()
         for (entry in rows) {
@@ -317,9 +317,6 @@ internal class MangaAllFutureHostChapterSnapshot(
             } else {
                 1
             }
-            // Full source chapter identity includes the upload/chapter kind:
-            // one numeric upstream ID can represent two separate chapters.
-            if (!seen.add("$kind:$id")) continue
             val title = text(row["chapter_title"], 3900)
             val groups = row["groups"] as? JsonArray
             val firstGroup = groups?.firstOrNull() as? JsonObject
@@ -330,7 +327,7 @@ internal class MangaAllFutureHostChapterSnapshot(
             // A negative timestamp is not valid source evidence (JS dateMillis
             // returns null before 1970). Ambiguous local-time strings stay null.
             val date = row["date_added"]?.primitiveText()?.let(::sourceDateMillis)
-            result += JsonArray(
+            val tuple = JsonArray(
                 listOf(
                     JsonPrimitive(id),
                     JsonPrimitive(number),
@@ -341,9 +338,14 @@ internal class MangaAllFutureHostChapterSnapshot(
                     date?.let(::JsonPrimitive) ?: JsonNull,
                 ),
             )
+            // Exact repeated rows are idempotent. The same full chapter ID
+            // cannot represent contradictory chapter metadata in one snapshot.
+            val previous = seen.putIfAbsent("$kind:$id", tuple)
+            if (previous != null && previous != tuple) fail("CONFLICTING_SOURCE_CHAPTER_ID")
+            if (previous == null) result += tuple
         }
-        if (rows.isNotEmpty() && result.isEmpty() && rejectedFacet) {
-            fail("INCONCLUSIVE_SOURCE_LANGUAGE")
+        if (rows.isNotEmpty() && result.isEmpty()) {
+            fail(if (rejectedFacet) "INCONCLUSIVE_SOURCE_LANGUAGE" else "INCONCLUSIVE_SOURCE_ROWS")
         }
         return result
     }
