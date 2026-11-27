@@ -632,7 +632,7 @@ class CollectProviderReadingEvidence private constructor(
                     val fallback = if (
                         result.value == 0 &&
                         target.registration.descriptor.id.value == "app.tsuzuki.mangaall" &&
-                        target.facetId == "en" &&
+                        MangaAllReadingIdentity.supportsRequestedLanguage(binding.ref) &&
                         canonicalCreators != null &&
                         workSourceAssociationRepository != null
                     ) {
@@ -1688,7 +1688,7 @@ class CollectProviderReadingEvidence private constructor(
                 candidateCount = lookup.items.size,
                 errorCode = lookup.partialErrorCode,
             )
-            val matches = exactFacetMatches(title, target.facetId, lookup.items)
+            val matches = exactFacetMatches(title, target.facetId, lookup.items, retainConflictingObservations = true)
             traceLookupCandidates(
                 canonicalTitleId = canonicalTitleId,
                 target = target,
@@ -1699,12 +1699,14 @@ class CollectProviderReadingEvidence private constructor(
                 selected = null,
                 primary = null,
             )
+            val nativePreviews = mutableMapOf<ProviderBindingRef, NativeChapterPreview>()
             val verified = observeSourcePortfolio(
                 canonicalTitleId,
                 title,
                 target,
                 canonicalCreators,
-                matches,
+                matches.filterNot { it.externalWorkId == preferredRef.externalWorkId },
+                nativePreviews,
             ).filter { assessment ->
                 assessment.ref != preferredRef && assessment.canCollectProvisionalChapters
             }.take(MAX_COVERAGE_CONTENDERS)
@@ -1724,6 +1726,7 @@ class CollectProviderReadingEvidence private constructor(
                     sources = verified,
                     onPageCollected = onPageCollected,
                     onProvisionalCursorReady = onProvisionalCursorReady,
+                    nativePreviews = nativePreviews,
                 )
             }
         }
