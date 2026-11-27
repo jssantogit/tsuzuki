@@ -232,3 +232,5 @@ jobs:
           python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --cohort manga --aggregate
           test '${{ needs.build-once.result }}' = 'success'
           test '${{ needs.independent-catalog.result }}' = 'success'
+
+# Strict gate for integrated diagnostics and provider authorization guards, frozen Japanese corpus.
