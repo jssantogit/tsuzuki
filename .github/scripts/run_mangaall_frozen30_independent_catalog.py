@@ -96,6 +96,9 @@ def evaluate(works, shard, log, instrument_ok, catalog="mangaupdates"):
             if title not in selected or record.get("caseId") != case_id(title) or title in records:
                 invalid += 1
                 continue
+            if classify(record, catalog)[0] == "INVALID_ATTESTATION":
+                invalid += 1
+                continue
             records[title] = record
         except (ValueError, TypeError, AttributeError):
             invalid += 1

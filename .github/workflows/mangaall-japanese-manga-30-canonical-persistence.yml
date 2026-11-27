@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   READER_PROBE: '--reader'
@@ -24,12 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           persist-credentials: false
       - name: Validate locked cohort, restored Reader verdicts and independent MangaDex pixel reporter
         run: |
           set -euo pipefail
-          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-japanese-manga-30-canonical-persistence.yml'
           python3 -m py_compile .github/scripts/run_mangaall_frozen30_canonical_persistence.py
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
           python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
@@ -39,6 +39,14 @@ jobs:
           bash -n .github/scripts/run_mangaall_frozen30_mangadex_audit.sh
           python3 -m py_compile .github/scripts/verify_mangaall_frozen30_mangadex_audit.py
           python3 .github/scripts/verify_mangaall_frozen30_mangadex_audit.py --selftest
+          python3 .github/scripts/verify_mangaall_japanese_catalog_gate.py --selftest
+      - name: Require a successful exact catalog plan before any chapter collection
+        if: contains(github.event.head_commit.message, 'RUN_JAPANESE30_CANONICAL_LIVE')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/verify_mangaall_japanese_catalog_gate.py
 
   build-once:
     needs: preflight

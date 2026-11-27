@@ -107,6 +107,9 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
                         invalid+=1
                         continue
                     status,identity=classify(record,catalog,cohort.format.upper())
+                    if status == "INVALID_ATTESTATION":
+                        invalid+=1
+                        continue
                     if status == "CATALOG_IDENTITY_ATTESTED" and not edition_credits_match(
                             record, cohort.required_credits.get(row["index"], ())):
                         status,identity="EDITION_CREDITS_UNVERIFIED",None
