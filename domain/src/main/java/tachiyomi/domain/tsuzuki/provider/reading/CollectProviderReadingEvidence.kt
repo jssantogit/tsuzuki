@@ -374,38 +374,38 @@ class CollectProviderReadingEvidence private constructor(
                         }
                         // Preserve valid pages only for a genuine timeout. A malformed result,
                         // identity error or resource violation must not salvage untrusted pages.
-                        val stillEnabled = providerRegistry.registration(target.registration.descriptor.id) ==
-                            target.registration && supplementaryTargetStillAuthorized(canonicalTitleId, target)
-                        (
+                        if (!targetStillAuthorized(canonicalTitleId, target)) {
+                            ProviderReadingEvidenceCollection(complete = false)
+                        } else {
                             finished ?: ProviderReadingEvidenceCollection(
                                 // READ is entered only after a verified binding was selected
                                 // and persisted. A later timeout cannot erase that fact.
                                 bindingCount = if (preferredBindingSelected) 1 else 0,
                                 complete = false,
+                                partialEvidence = partial.toList(),
+                                cursorProgress = readyCursors.toList(),
                             )
-                            ).copy(
-                            partialEvidence = when {
-                                !stillEnabled -> emptyList()
-                                finished == null -> partial.toList()
-                                else -> finished.partialEvidence
-                            },
-                            cursorProgress = if (stillEnabled) {
-                                finished?.cursorProgress ?: readyCursors.toList()
-                            } else {
-                                emptyList()
-                            },
-                        )
+                        }
                     }
                 }
             }.awaitAll()
         }
 
+        // Another lane may have been waiting on a slow source after this lane finished.
+        // Recheck at the aggregate boundary, before handing any inventory to reconciliation.
+        val authorizedResults = targets.zip(results).map { (target, result) ->
+            if (targetStillAuthorized(canonicalTitleId, target)) {
+                result
+            } else {
+                ProviderReadingEvidenceCollection(complete = false)
+            }
+        }
         val collection = ProviderReadingEvidenceCollection(
-            snapshots = results.flatMap(ProviderReadingEvidenceCollection::snapshots),
-            bindingCount = results.sumOf(ProviderReadingEvidenceCollection::bindingCount),
-            partialEvidence = results.flatMap(ProviderReadingEvidenceCollection::partialEvidence),
-            cursorProgress = results.flatMap(ProviderReadingEvidenceCollection::cursorProgress),
-            complete = results.all(ProviderReadingEvidenceCollection::complete),
+            snapshots = authorizedResults.flatMap(ProviderReadingEvidenceCollection::snapshots),
+            bindingCount = authorizedResults.sumOf(ProviderReadingEvidenceCollection::bindingCount),
+            partialEvidence = authorizedResults.flatMap(ProviderReadingEvidenceCollection::partialEvidence),
+            cursorProgress = authorizedResults.flatMap(ProviderReadingEvidenceCollection::cursorProgress),
+            complete = authorizedResults.all(ProviderReadingEvidenceCollection::complete),
         )
         val acceptedChapters = collection.snapshots.sumOf { it.evidence.size }
         trace(
@@ -2112,6 +2112,10 @@ class CollectProviderReadingEvidence private constructor(
      * source lanes use the same global semaphore and cannot replace a binding.
      * The Host must attest scoped native support before any lane is created.
      */
+    private suspend fun targetStillAuthorized(canonicalTitleId: String, target: ReadingTarget): Boolean =
+        providerRegistry.registration(target.registration.descriptor.id) == target.registration &&
+            supplementaryTargetStillAuthorized(canonicalTitleId, target)
+
     private suspend fun supplementaryTargetStillAuthorized(
         canonicalTitleId: String,
         target: ReadingTarget,

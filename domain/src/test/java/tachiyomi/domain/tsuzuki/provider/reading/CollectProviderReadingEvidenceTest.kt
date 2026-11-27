@@ -214,6 +214,51 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `revoked or reconfigured provider cannot publish completed inventory`() = runTest {
+        for (removeProvider in listOf(true, false)) {
+            val original = registry().providers().single()
+            var active = listOf(original)
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(canonicalTitle),
+                providerRegistry = DefaultProviderRegistry(registrations = { active }),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(ProviderWorkCandidate("work-1", "Dandadan", language = "en")),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = {
+                        active = if (removeProvider) {
+                            emptyList()
+                        } else {
+                            listOf(original.copy(configurationFingerprint = "changed"))
+                        }
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(ProviderChapterObservation("chapter-one", "Chapter 1")),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                ),
+                bindingRepository = MemoryBindingRepository(),
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+            )
+
+            val result = collector.execute(canonicalTitle.id)
+            result.complete shouldBe false
+            result.bindingCount shouldBe 0
+            result.snapshots shouldBe emptyList()
+            result.partialEvidence shouldBe emptyList()
+            result.cursorProgress shouldBe emptyList()
+        }
+    }
+
+    @Test
     fun `detailed capture records bounded MangaFire page sample and chapter number range`(): Unit = runBlocking {
         val recorder = CapturingProviderDiagnostics(captureActive = true)
         val collector = CollectProviderReadingEvidence(
