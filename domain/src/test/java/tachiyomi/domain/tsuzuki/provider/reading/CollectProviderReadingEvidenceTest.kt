@@ -3675,6 +3675,89 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `ordinary collector admits native coverage only with Host grant and independent creator evidence`() = runTest {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        for ((version, grant, creator) in listOf(
+            Triple(11L, true, "Arakawa Hiromu"),
+            Triple(11L, false, "Arakawa Hiromu"),
+            Triple(10L, true, "Arakawa Hiromu"),
+            Triple(11L, true, "Unrelated Person"),
+        )) {
+            val bindings = MemoryBindingRepository()
+            val observed = MemoryWorkSourceAssociationRepository()
+            var reads = 0
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(canonicalTitle),
+                providerRegistry = registry(provider = mangaAll, versionCode = version),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                listOf(
+                                    ProviderWorkCandidate(
+                                        externalWorkId = "mangadot:317",
+                                        title = canonicalTitle.displayTitle,
+                                        url = "https://mangadot.net/manga/317",
+                                        authors = listOf(creator),
+                                        detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    ),
+                                    ProviderWorkCandidate(
+                                        externalWorkId = "mangadex:unverified",
+                                        title = canonicalTitle.displayTitle,
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = { request ->
+                        request.binding.externalWorkId shouldBe "mangadot:317"
+                        reads++
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                listOf(
+                                    ProviderChapterObservation(
+                                        providerChapterId = "mangadot:chapters:111",
+                                        rawLabel = "Chapter 1",
+                                        rawNumber = 1.0,
+                                        language = "en",
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    expectedProviderId = mangaAll,
+                    nativeCoverageGranted = grant,
+                ),
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+                canonicalMetadataSnapshotRepository = metadata,
+                workSourceAssociationRepository = observed,
+            )
+            val result = collector.execute(canonicalTitle.id)
+            val expected = version == 11L && grant && creator == "Arakawa Hiromu"
+            reads shouldBe if (expected) 1 else 0
+            result.partialEvidence.map { it.externalChapterKey } shouldBe
+                if (expected) listOf("mangadot:chapters:111") else emptyList()
+            result.snapshots shouldBe emptyList()
+            bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        }
+    }
+
+    @Test
     fun `research checks observed aliases before another broad primary search page`() = runTest {
         verifyResearchAliasBatch(
             0,
@@ -4414,7 +4497,13 @@ class CollectProviderReadingEvidenceTest {
             ProviderReadingChaptersRequest,
         ) -> ProviderCallResult<ProviderPage<ProviderChapterObservation>>,
         expectedProviderId: ProviderId = providerId,
+        nativeCoverageGranted: Boolean = false,
     ) = object : ProviderReadingGateway {
+        override suspend fun supportsNativeChapterCoverage(
+            binding: ProviderBindingRef,
+            artifactVersionCode: Long,
+        ): Boolean = nativeCoverageGranted
+
         override suspend fun lookup(
             providerId: ProviderId,
             request: ProviderReadingLookupRequest,

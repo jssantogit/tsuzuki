@@ -112,7 +112,7 @@ jobs:
         run: |
           ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck \
             :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' \
-            --tests '*ProviderWorkSourcePortfolioTest' --tests '*MangaAllMangaDotNativeCoverageTest' \
+            --tests '*ProviderWorkSourcePortfolioTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*MangaAllNativeChapterCoverageTest' \
             --tests '*CollectProviderReadingEvidenceTest' --tests '*CollectProviderReadingEvidenceEligibilityTest' \
             --tests '*RefreshProviderReadingChaptersTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' \
             --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' \

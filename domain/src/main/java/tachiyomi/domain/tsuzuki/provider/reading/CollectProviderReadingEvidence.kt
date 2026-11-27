@@ -535,6 +535,7 @@ class CollectProviderReadingEvidence private constructor(
                             sources = discovery.value.workSources,
                             onPageCollected = onPageCollected,
                             onProvisionalCursorReady = onProvisionalCursorReady,
+                            nativePreviews = discovery.value.nativePreviews,
                         )
                     } else {
                         ProviderReadingEvidenceCollection(complete = !discovery.value.unresolved)
@@ -1005,6 +1006,7 @@ class CollectProviderReadingEvidence private constructor(
         var unresolved = false
         var incompleteResearchLookup = false
         val collectedWorkSources = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssessment>()
+        val nativePreviews = mutableMapOf<ProviderBindingRef, NativeChapterPreview>()
         for ((queryIndex, title) in titles.withIndex()) {
             val queryStarted = System.nanoTime()
             traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
@@ -1058,8 +1060,14 @@ class CollectProviderReadingEvidence private constructor(
             // Source association is deliberately a shadow work-level portfolio.
             // Multiple corroborated HIDs never become one preferred edition or
             // Reader authority merely because their authors/title match.
-            observeSourcePortfolio(canonicalTitleId, title, target, canonicalCreators, matches)
-                .forEach { assessment -> collectedWorkSources[assessment.ref] = assessment }
+            observeSourcePortfolio(
+                canonicalTitleId,
+                title,
+                target,
+                canonicalCreators,
+                exactFacetMatches(title, target.facetId, candidates, retainConflictingObservations = true),
+                nativePreviews,
+            ).forEach { assessment -> collectedWorkSources[assessment.ref] = assessment }
             if (!lookup.complete || incompleteResearchLookup) {
                 // MangaAll can have more upstream source pages than the Host's
                 // bounded lookup permits. Retain verified work evidence, but
@@ -1096,7 +1104,11 @@ class CollectProviderReadingEvidence private constructor(
                     continue
                 }
                 return ProviderCallResult.Success(
-                    BindingDiscovery(unresolved = true, workSources = confirmedSources),
+                    BindingDiscovery(
+                        unresolved = true,
+                        workSources = confirmedSources,
+                        nativePreviews = nativePreviews,
+                    ),
                 )
             }
             val sourcePrimaryMatches = matches.filter { normalize(it.title) == normalizedTitle }
@@ -1276,6 +1288,7 @@ class CollectProviderReadingEvidence private constructor(
                         BindingDiscovery(
                             unresolved = true,
                             workSources = confirmedSources.take(MAX_COVERAGE_CONTENDERS),
+                            nativePreviews = nativePreviews,
                         ),
                     )
                 }
@@ -1312,6 +1325,7 @@ class CollectProviderReadingEvidence private constructor(
         return ProviderCallResult.Success(
             BindingDiscovery(
                 unresolved = unresolved,
+                nativePreviews = nativePreviews,
                 workSources = if (incompleteResearchLookup) {
                     collectedWorkSources.values
                         .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
@@ -1330,12 +1344,11 @@ class CollectProviderReadingEvidence private constructor(
     )
 
     /**
-     * Nonshipping opt-in on the disposable code11 research collector only.
-     * Source-supplied coverage is insufficient: fetch the exact HID/facet
-     * through the actual gateway, validate native page rows, and keep the
-     * result provisional. The ordinary injected app collector stays closed.
+     * Native coverage requires either the isolated research contract or an
+     * explicit grant from the installed-package Host. Neither source lookup
+     * metadata nor a package version by itself grants this normal-app path.
      */
-    private suspend fun observeNativeMangaDotPreviews(
+    private suspend fun observeNativeSourcePreviews(
         canonicalTitleId: String,
         target: ReadingTarget,
         queryTitle: String,
@@ -1345,13 +1358,26 @@ class CollectProviderReadingEvidence private constructor(
         independentlyVerifiedMangaUpdatesId: String?,
     ): List<ProviderWorkCandidate> {
         val descriptor = target.registration.descriptor
-        if (!nativeMangaDotPortfolioResearch || descriptor.id.value != "app.tsuzuki.mangaall" ||
-            descriptor.version.code != 11L || canonicalCreators.isNullOrEmpty()
-        ) {
-            return emptyList()
+        if (canonicalCreators.isNullOrEmpty()) return emptyList()
+        val scoped = candidates.filter {
+            MangaAllNativeChapterCoverage.supports(
+                descriptor.version.code,
+                ProviderBindingRef(descriptor.id, target.facetId, it.externalWorkId),
+            )
         }
-        val contenders = candidates.filter { it.externalWorkId.startsWith("mangadot:") }
-        if (contenders.map { it.externalWorkId }.distinct().size > MAX_COVERAGE_CONTENDERS) return emptyList()
+        if (scoped.map { it.externalWorkId }.distinct().size > MAX_COVERAGE_CONTENDERS) return emptyList()
+        val contenders = if (nativeMangaDotPortfolioResearch) {
+            scoped
+        } else {
+            val allowed = scoped.map { it.externalWorkId }.distinct().filter { id ->
+                gateway.supportsNativeChapterCoverage(
+                    ProviderBindingRef(descriptor.id, target.facetId, id),
+                    descriptor.version.code,
+                )
+            }.toSet()
+            scoped.filter { it.externalWorkId in allowed }
+        }
+        if (contenders.isEmpty()) return emptyList()
         val assessments = ProviderWorkSourcePortfolio.assess(
             descriptor.id,
             target.facetId,
@@ -1449,13 +1475,17 @@ class CollectProviderReadingEvidence private constructor(
                     initial
                 }
                 val page = (result as? ProviderCallResult.Success)?.value ?: continue
-                val preview = MangaAllMangaDotNativeCoverage.fromObservedPage(
-                    descriptor.version.code,
-                    assessment.ref,
-                    candidate,
-                    page,
-                    independentlyVerifiedMangaUpdatesId = catalogIdentity,
-                )
+                val preview = if (catalogIdentity != null) {
+                    MangaAllMangaDotNativeCoverage.fromObservedPage(
+                        descriptor.version.code,
+                        assessment.ref,
+                        candidate,
+                        page,
+                        independentlyVerifiedMangaUpdatesId = catalogIdentity,
+                    )
+                } else {
+                    MangaAllNativeChapterCoverage.project(descriptor.version.code, assessment.ref, candidate, page)
+                }
                 if (preview == null) {
                     traceChapterRequest(canonicalTitleId, target, assessment.ref, 1, DiagnosticOutcome.REJECTED)
                     continue
@@ -1489,15 +1519,14 @@ class CollectProviderReadingEvidence private constructor(
         independentlyVerifiedMangaUpdatesId: String? = null,
     ): List<ProviderWorkSourceAssessment> {
         val repository = workSourceAssociationRepository ?: return emptyList()
-        // Keep source-specific trust. MangaDex requires explicit details and
-        // numeric facet coverage; MangaDot is only admitted to the nonshipping
-        // research preview below after an exact native chapter request.
+        // Keep source-specific trust. Native coverage contracts additionally
+        // require a real exact-HID chapter request under a trusted Host grant.
         // A title match alone never qualifies an internal source.
         val trusted = ProviderWorkSourcePortfolio.trustedCandidates(
             providerId = target.registration.descriptor.id,
             facetId = target.facetId,
             candidates = matches,
-        ) + observeNativeMangaDotPreviews(
+        ) + observeNativeSourcePreviews(
             canonicalTitleId,
             target,
             queryTitle,
@@ -2627,6 +2656,7 @@ class CollectProviderReadingEvidence private constructor(
         val binding: ProviderReadingBinding? = null,
         val unresolved: Boolean = false,
         val workSources: List<ProviderWorkSourceAssessment> = emptyList(),
+        val nativePreviews: Map<ProviderBindingRef, NativeChapterPreview> = emptyMap(),
     )
 
     private data class ReadingTarget(

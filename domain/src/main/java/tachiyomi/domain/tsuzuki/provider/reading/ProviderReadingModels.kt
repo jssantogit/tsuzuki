@@ -375,6 +375,13 @@ sealed interface ProviderCallResult<out T> {
 }
 
 interface ProviderReadingGateway {
+    /**
+     * Host-attested native evidence capability, not an assertion from lookup JSON.
+     * Older installations and gateways stay closed by default.
+     */
+    suspend fun supportsNativeChapterCoverage(binding: ProviderBindingRef, artifactVersionCode: Long): Boolean =
+        false
+
     suspend fun lookup(
         providerId: ProviderId,
         request: ProviderReadingLookupRequest,

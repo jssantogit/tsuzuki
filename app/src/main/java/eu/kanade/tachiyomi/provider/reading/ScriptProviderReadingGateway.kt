@@ -28,6 +28,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllNativeChapterCoverage
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterObservation
@@ -138,6 +139,45 @@ class ScriptProviderReadingGateway internal constructor(
         encodeDefaults = true
         explicitNulls = false
         ignoreUnknownKeys = false
+    }
+
+    override suspend fun supportsNativeChapterCoverage(
+        binding: ProviderBindingRef,
+        artifactVersionCode: Long,
+    ): Boolean {
+        if (!MangaAllNativeChapterCoverage.supports(artifactVersionCode, binding)) return false
+        if (packageSource !is StoredProviderScriptPackageSource) return false
+        val providerId = binding.providerId
+        registry.awaitReady()
+        val registration = registry.registration(providerId) ?: return false
+        val capability = tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.ReadingChaptersV1
+        if (registration.lifecycleStatus != ProviderLifecycleStatus.ENABLED ||
+            registration.descriptor.runtime != ProviderRuntimeKind.SCRIPT ||
+            registration.descriptor.version.code != artifactVersionCode ||
+            capability !in registration.enabledCapabilities ||
+            registration.facets.none { it.facetId == binding.facetId }
+        ) {
+            return false
+        }
+        return try {
+            val active = packageSource.get(providerId) ?: return false
+            if (!matchesRegistration(registration, active, capability) ||
+                active.repositoryId != MANGAALL_TRUSTED_REPOSITORY ||
+                active.repositoryTrustAnchorSha256 != MANGAALL_TRUST_ANCHOR_SHA256 ||
+                active.installedArtifactSha256 != sha256Hex(active.bytes)
+            ) {
+                return false
+            }
+            val policy = ProviderHostInvocationPolicy.fromManifest(
+                manifest = active.parsed.manifest,
+                invocationId = invocationIdFactory(),
+            ).forCapability(capability.id)
+            ProviderHostModule.MANGAALL_CHAPTER_SNAPSHOT in policy.allowedHostModules()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            false
+        }
     }
 
     override suspend fun lookup(
