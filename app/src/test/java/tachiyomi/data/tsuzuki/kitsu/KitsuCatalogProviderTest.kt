@@ -438,6 +438,32 @@ class KitsuCatalogProviderTest {
         unexpResult.exceptionOrNull().shouldBeInstanceOf<CatalogError.ProviderUnavailable>()
     }
 
+    @Test
+    fun `Kitsu rejects conflicting and foreign MAL mappings instead of choosing the last id`() = runTest {
+        fun response(secondId: String, secondItem: String) = json.decodeFromString<KitsuMangaResponse>(
+            """
+            {
+              "data": [{"id":"12","type":"manga","attributes":{"canonicalTitle":"Work","subtype":"manga"},
+                "relationships":{"mappings":{"data":[{"id":"a","type":"mappings"},{"id":"b","type":"mappings"}]}}}],
+              "included":[
+                {"id":"a","type":"mappings","attributes":{"externalSite":"myanimelist/manga","externalId":"42"},
+                 "relationships":{"item":{"data":{"type":"manga","id":"12"}}}},
+                {"id":"b","type":"mappings","attributes":{"externalSite":"myanimelist/manga","externalId":"$secondId"},
+                 "relationships":{"item":{"data":{"type":"manga","id":"$secondItem"}}}}
+              ]
+            }
+            """.trimIndent(),
+        )
+        suspend fun mapped(secondId: String, secondItem: String): Map<String, String> {
+            val client = FakeKitsuClient(searchResult = Result.success(response(secondId, secondItem)))
+            return KitsuCatalogProvider(client).search(CatalogQuery(query = "Work"))
+                .getOrThrow().items.single().externalIds
+        }
+        mapped("43", "12") shouldBe emptyMap()
+        mapped("43", "99") shouldBe mapOf("mal" to "42")
+        mapped("42", "12") shouldBe mapOf("mal" to "42")
+    }
+
     private class FakeKitsuClient(
         var searchResult: Result<KitsuMangaResponse> = Result.success(KitsuMangaResponse()),
         var trendingResult: Result<KitsuMangaResponse> = Result.success(KitsuMangaResponse()),

@@ -181,28 +181,7 @@ class KitsuCatalogProvider(
             status = mappedStatus,
             format = mappedFormat,
             score = score,
-            externalIds = included
-                .asSequence()
-                .filter { mapping ->
-                    mapping.type == "mappings" &&
-                        mapping.attributes.externalSite == "myanimelist/manga" &&
-                        (
-                            mapping.id in resource.relationships.mappings.data
-                                .asSequence()
-                                .filter { identifier -> identifier.type == "mappings" }
-                                .map { identifier -> identifier.id }
-                                .toSet() ||
-                                mapping.relationships.item.data?.let { item ->
-                                    item.type == "manga" && item.id == resource.id
-                                } == true
-                            )
-                }
-                .mapNotNull { mapping ->
-                    mapping.attributes.externalId
-                        .takeIf(String::isNotBlank)
-                        ?.let { "mal" to it }
-                }
-                .toMap(),
+            externalIds = verifiedMalMapping(resource, included),
             genres = emptyList(),
             tags = emptyList(),
             popularity = attr.userCount?.toLong(),
@@ -212,6 +191,28 @@ class KitsuCatalogProvider(
             chapterCount = attr.chapterCount,
             volumeCount = attr.volumeCount,
         )
+    }
+
+    private fun verifiedMalMapping(
+        resource: KitsuMangaResource,
+        included: List<KitsuMappingResource>,
+    ): Map<String, String> {
+        val linked = resource.relationships.mappings.data
+            .filter { it.type == "mappings" }
+            .map { it.id }
+            .toSet()
+        val ids = included.filter { mapping ->
+            if (mapping.type != "mappings" || mapping.attributes.externalSite != "myanimelist/manga") {
+                return@filter false
+            }
+            val item = mapping.relationships.item.data
+            val sameItem = item?.let { it.type == "manga" && it.id == resource.id }
+            // A contradictory explicit item backlink is never proof even if
+            // the manga's relationship list mentions this mapping.
+            sameItem != false && (mapping.id in linked || sameItem == true)
+        }.map { it.attributes.externalId }.distinct()
+        val id = ids.singleOrNull()?.takeIf { it.matches(Regex("[1-9][0-9]*")) }
+        return id?.let { mapOf("mal" to it) }.orEmpty()
     }
 
     private fun CatalogItemFormat.toKitsuSubtype(): String? = when (this) {

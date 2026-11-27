@@ -74,6 +74,38 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
     }
 
     @Test
+    fun `contradictory crosswalks cannot collapse two editions into a verified owner`() = runTest {
+        val mal = source("mal", search = {
+            CatalogPage(
+                listOf(item("mal", "42", "Work"), item("mal", "43", "Another edition")),
+                false,
+            )
+        }, detail = { error("Conflicting component cannot authorize details") })
+        val kitsu = source("kitsu", search = {
+            CatalogPage(
+                listOf(
+                    item("kitsu", "71", "Work", externalIds = mapOf("mal" to "42", "mangaupdates" to "91")),
+                    item("kitsu", "72", "Another edition", externalIds = mapOf("mal" to "43", "mangaupdates" to "91")),
+                ),
+                false,
+            )
+        }, detail = { error("Conflicting component cannot authorize details") })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(mal, kitsu)).execute("Work")
+        result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS
+        result.identity shouldBe null
+    }
+
+    @Test
+    fun `same catalog crosswalk cannot contradict its own owner id`() = runTest {
+        val mal = source("mal", search = {
+            CatalogPage(listOf(item("mal", "42", "Work", externalIds = mapOf("mal" to "43"))), false)
+        }, detail = { error("Conflicting self mapping cannot authorize details") })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(mal)).execute("Work")
+        result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS
+        result.identity shouldBe null
+    }
+
+    @Test
     fun `one unavailable catalog makes a lone match incomplete and unsafe to promote`() = runTest {
         val mal = source("mal", search = {
             CatalogPage(listOf(item("mal", "42", "Work")), false)

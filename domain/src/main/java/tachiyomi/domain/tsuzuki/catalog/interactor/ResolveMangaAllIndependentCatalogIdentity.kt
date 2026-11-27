@@ -106,6 +106,22 @@ class ResolveMangaAllIndependentCatalogIdentity(
             )
         }
 
+        // The UI merger is intentionally permissive for presentation. Before
+        // using it as identity evidence, reject contradictions in any connected
+        // component relevant to the requested title, including indirect links.
+        val relevant = observed.filter { item ->
+            (
+                format == null || format == CatalogItemFormat.UNKNOWN ||
+                    item.format == CatalogItemFormat.UNKNOWN || item.format == format
+                ) &&
+                (listOf(item.title) + item.titles.values).any { normalize(it) == normalize(query) }
+        }
+        if (relevant.any { hasConflictingIdentity(it, observed) }) {
+            return@coroutineScope MangaAllCatalogIdentityResult(
+                status = MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS,
+                catalogsQueried = sources.size,
+            )
+        }
         // This is the same verified cross-provider identity merger used by
         // SearchIntegrations; it never merges by title similarity alone.
         val exact = mergeCatalogItemsByVerifiedIdentity(observed).filter { item ->
@@ -163,6 +179,28 @@ class ResolveMangaAllIndependentCatalogIdentity(
             identity = verified,
             creatorsAttested = verified.authors.isNotEmpty() || verified.artists.isNotEmpty(),
         )
+    }
+
+    private fun hasConflictingIdentity(seed: CatalogItem, observed: List<CatalogItem>): Boolean {
+        fun keys(item: CatalogItem): Set<Pair<String, String>> = buildSet {
+            add(item.provider to item.providerId)
+            addAll(item.externalIds.entries.map { it.key to it.value })
+        }
+        val component = mutableSetOf(seed)
+        val known = keys(seed).toMutableSet()
+        var changed: Boolean
+        do {
+            changed = false
+            for (item in observed) {
+                if (item !in component && keys(item).any(known::contains)) {
+                    component += item
+                    known += keys(item)
+                    changed = true
+                }
+            }
+        } while (changed)
+        return known.groupBy({ it.first }, { it.second }).values.any { it.distinct().size > 1 } ||
+            component.map { it.format }.filter { it != CatalogItemFormat.UNKNOWN }.distinct().size > 1
     }
 
     private data class SourceSearchResult(
