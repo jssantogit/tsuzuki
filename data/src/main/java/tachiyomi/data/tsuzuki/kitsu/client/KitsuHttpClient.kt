@@ -6,13 +6,13 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.await
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
 import tachiyomi.data.tsuzuki.kitsu.dto.KitsuGenreResponse
 import tachiyomi.data.tsuzuki.kitsu.dto.KitsuMangaResponse
 import tachiyomi.data.tsuzuki.kitsu.dto.KitsuSingleMangaResponse
@@ -144,21 +144,23 @@ class KitsuHttpClient(
 
     private suspend inline fun <reified T> executeRequest(url: HttpUrl): Result<T> {
         return try {
-            val response: Response = client.newCall(requestBuilder(url).build()).await()
-            when (response.code) {
-                in 200..299 -> {
-                    val bodyString = response.body.string()
-                    val parsed = kitsuJson.decodeFromString<T>(bodyString)
-                    Result.success(parsed)
+            client.newCall(requestBuilder(url).build()).await().use { response ->
+                when (response.code) {
+                    in 200..299 -> {
+                        val bodyString = response.body.string()
+                        val parsed = kitsuJson.decodeFromString<T>(bodyString)
+                        Result.success(parsed)
+                    }
+                    404 -> Result.failure(CatalogError.ItemNotFound(url.encodedPath))
+                    429 -> {
+                        val retryAfter = response.header("Retry-After")?.toLongOrNull()
+                        Result.failure(CatalogError.RateLimitExceeded(retryAfter))
+                    }
+                    else -> Result.failure(CatalogError.HttpError(response.code, response.message))
                 }
-                404 -> Result.failure(CatalogError.ItemNotFound(url.encodedPath))
-                429 -> {
-                    val retryAfter = response.header("Retry-After")?.toLongOrNull()
-                    Result.failure(CatalogError.RateLimitExceeded(retryAfter))
-                }
-                in 500..599 -> Result.failure(CatalogError.ProviderUnavailable("Kitsu server error: ${response.code}"))
-                else -> Result.failure(CatalogError.HttpError(response.code, response.message))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: SerializationException) {
             Result.failure(CatalogError.SerializationError(e))
         } catch (e: IOException) {

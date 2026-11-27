@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALOAuth
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALSearchResult
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUser
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUserListPage
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.toSearchWindow
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.toTrackSearch
 import eu.kanade.tachiyomi.network.DELETE
 import eu.kanade.tachiyomi.network.GET
@@ -155,12 +156,7 @@ class MyAnimeListApi(
                 val page = publicClient.newCall(GET(url.toString()))
                     .awaitSuccess()
                     .parseAs<MALSearchResult>()
-                val items = page.data.map { it.node.toTrackSearch(trackerId) }
-                check(items.size <= limit && items.all { it.remote_id > 0 })
-                check(items.distinctBy { it.remote_id }.size == items.size)
-                val hasNext = !page.paging.next.isNullOrBlank()
-                check(!hasNext || items.size == limit)
-                MalSearchWindow(items, hasNext)
+                page.toSearchWindow(trackerId, offset, limit)
             }
         }
     }

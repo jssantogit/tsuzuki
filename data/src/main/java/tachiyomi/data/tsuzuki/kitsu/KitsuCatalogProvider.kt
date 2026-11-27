@@ -4,6 +4,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CancellationException
 import tachiyomi.data.tsuzuki.kitsu.client.KitsuClient
 import tachiyomi.data.tsuzuki.kitsu.dto.KitsuMangaResource
 import tachiyomi.data.tsuzuki.kitsu.dto.KitsuMappingResource
@@ -121,6 +122,7 @@ class KitsuCatalogProvider(
         resource: KitsuMangaResource,
         included: List<KitsuMappingResource> = emptyList(),
     ): CatalogItem {
+        check(resource.type == "manga" && resource.id.isNotBlank())
         val attr = resource.attributes
         val bestTitle = attr.canonicalTitle?.takeIf { it.isNotBlank() }
             ?: attr.titles?.en?.takeIf { it.isNotBlank() }
@@ -232,6 +234,8 @@ class KitsuCatalogProvider(
             onSuccess = { value ->
                 try {
                     Result.success(transform(value))
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     if (e is CatalogError) {
                         Result.failure(e)
@@ -241,6 +245,7 @@ class KitsuCatalogProvider(
                 }
             },
             onFailure = { error ->
+                if (error is CancellationException) throw error
                 if (error is CatalogError) {
                     Result.failure(error)
                 } else {
