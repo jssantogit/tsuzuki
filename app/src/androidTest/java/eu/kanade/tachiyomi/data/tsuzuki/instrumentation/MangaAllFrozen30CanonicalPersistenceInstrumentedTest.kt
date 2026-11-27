@@ -343,6 +343,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         // Retain only closed codes/counts for the fixed public corpus. Never
         // export actual titles, creator names, HIDs, URLs or chapter IDs.
         val acquisitionFacts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val lookupFailureFacts = java.util.Collections.synchronizedList(mutableListOf<String>())
         val diagnosticRecorder = object : StructuredDiagnosticRecorder {
             override val sessionId = "00000000-0000-0000-0000-000000000000"
             override val detailedCaptureActive = true
@@ -369,6 +370,14 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 }
                 val rawError = (event.attributes["provider_error_code"] as? DiagnosticAttributeValue.Text)?.value
                 val error = ProviderErrorCode.entries.firstOrNull { it.name == rawError }?.name
+                if (event.name == DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT &&
+                    error != null && lookupFailureFacts.size < 2_048
+                ) {
+                    val category = code("error_category") ?: "NONE"
+                    val status = (event.attributes["http_status"] as? DiagnosticAttributeValue.Number)?.value
+                        ?.takeIf { it in 100..599 } ?: 0
+                    lookupFailureFacts += "source=$source|code=$error|category=$category|http=$status"
+                }
                 val reason = code("provider_work_verification") ?: code("provider_detail_outcome")
                     ?: error ?: code("error_category") ?: "NONE"
                 val candidates = (event.attributes["candidate_count"] as? DiagnosticAttributeValue.Number)?.value ?: 0
@@ -563,8 +572,23 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 requiredCreatorNames = required,
                 requiredCreatorAliases = creatorAliases,
             )
-            // Retry only transient catalog unavailability against the same
-            // independent owner. Ambiguous or unverified identities stay red.
+            fun reportCatalogSearchFailures(attempt: Int) {
+                for ((reason, count) in identity.searchFailures) {
+                    instrument.sendStatus(
+                        1,
+                        Bundle().apply {
+                            putString(
+                                "stream",
+                                "MANGAALL_CATALOG_SEARCH_FAILURE|index=$index|attempt=$attempt" +
+                                    "|reason=${reason.name}|count=$count",
+                            )
+                        },
+                    )
+                }
+            }
+            reportCatalogSearchFailures(1)
+            // Retry unavailable searches against the same independent owner.
+            // Ambiguous or unverified identities stay red.
             for (attempt in 1..2) {
                 if (identity.status != MangaAllCatalogIdentityStatus.CATALOG_UNAVAILABLE) break
                 delay(attempt * 2_000L)
@@ -575,6 +599,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     requiredCreatorNames = required,
                     requiredCreatorAliases = creatorAliases,
                 )
+                reportCatalogSearchFailures(attempt + 1)
             }
             if (identity.status != MangaAllCatalogIdentityStatus.RESOLVED) return identity.status.name
             val owner = requireNotNull(identity.identity)
@@ -942,7 +967,22 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             }.singleOrNull() ?: return "CHAPTER_MISSING"
             val option = selected.execute(chapter.id, "en") ?: return "SELECTED_OPTION_MISSING"
             val prepared = when (val result = resolver.preparedContent(option)) {
-                is ProviderCallResult.Failure -> return "PREPARATION_FAILED"
+                is ProviderCallResult.Failure -> {
+                    val error = result.error
+                    instrument.sendStatus(
+                        1,
+                        Bundle().apply {
+                            putString(
+                                "stream",
+                                "MANGAALL_READER_FAILURE|index=$index|code=${error.code.name}" +
+                                    "|retryable=${error.retryable}|http=${error.httpStatus ?: 0}" +
+                                    "|category=${error.sourceFailureCode?.name ?: "NONE"}" +
+                                    "|stage=${error.pageFailureStage?.name ?: "NONE"}",
+                            )
+                        },
+                    )
+                    return "PREPARATION_FAILED"
+                }
                 is ProviderCallResult.Success ->
                     result.value as? PreparedChapterContent.HttpPages
                         ?: return "UNEXPECTED_DELIVERY"
@@ -994,6 +1034,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         for (index in indices) {
             val titleId = "$receiptNamespace-canonical-$index"
             acquisitionFacts.clear()
+            lookupFailureFacts.clear()
             val result = try {
                 if (phase == "COLLECT" || creditAudit) {
                     collect(index, titleId)
@@ -1019,6 +1060,19 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                         1,
                         Bundle().apply {
                             putString("stream", "MANGAALL_CANONICAL_ACQUISITION|index=$index|$fact|count=$count")
+                        },
+                    )
+                }
+            }
+            if (phase == "COLLECT") {
+                val failures = synchronized(lookupFailureFacts) {
+                    lookupFailureFacts.toList().groupingBy { it }.eachCount()
+                }
+                for ((fact, count) in failures.toSortedMap()) {
+                    instrument.sendStatus(
+                        1,
+                        Bundle().apply {
+                            putString("stream", "MANGAALL_LOOKUP_FAILURE|index=$index|$fact|count=$count")
                         },
                     )
                 }

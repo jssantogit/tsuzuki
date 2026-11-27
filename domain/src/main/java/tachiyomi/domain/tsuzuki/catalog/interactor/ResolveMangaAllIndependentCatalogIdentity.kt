@@ -50,6 +50,13 @@ enum class MangaAllCatalogDetailRejection {
     RETRIEVAL_TITLE_MISSING,
 }
 
+/** Closed search failures; no raw exception text or source payload. */
+enum class MangaAllCatalogSearchFailure {
+    REQUEST_FAILED,
+    INVALID_RESPONSE,
+    TIMEOUT,
+}
+
 data class MangaAllCatalogIdentityResult(
     val status: MangaAllCatalogIdentityStatus,
     val identity: CatalogItem? = null,
@@ -59,6 +66,7 @@ data class MangaAllCatalogIdentityResult(
     /** True only when the independent metadata detail endpoint supplied actual author/artist credits. */
     val creatorsAttested: Boolean = false,
     val detailRejections: Map<MangaAllCatalogDetailRejection, Int> = emptyMap(),
+    val searchFailures: Map<MangaAllCatalogSearchFailure, Int> = emptyMap(),
 ) {
     init {
         require((status == MangaAllCatalogIdentityStatus.RESOLVED) == (identity != null))
@@ -104,13 +112,15 @@ class ResolveMangaAllIndependentCatalogIdentity(
         val results = sources.map { source ->
             async { gate.withPermit { searchFully(source, retrievalQuery, format) } }
         }.awaitAll()
-        val failures = results.count { it.failed }
+        val searchFailures = results.mapNotNull { it.failure }.groupingBy { it }.eachCount()
+        val failures = searchFailures.values.sum()
         val observed = results.flatMap(SourceSearchResult::items)
         if (failures == results.size) {
             return@coroutineScope MangaAllCatalogIdentityResult(
                 status = MangaAllCatalogIdentityStatus.CATALOG_UNAVAILABLE,
                 catalogsQueried = sources.size,
                 catalogsFailed = failures,
+                searchFailures = searchFailures,
             )
         }
         if (failures > 0 || results.any { !it.complete }) {
@@ -118,6 +128,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
                 status = MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE,
                 catalogsQueried = sources.size,
                 catalogsFailed = failures,
+                searchFailures = searchFailures,
             )
         }
 
@@ -275,7 +286,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
     private data class SourceSearchResult(
         val items: List<CatalogItem> = emptyList(),
         val complete: Boolean = false,
-        val failed: Boolean = false,
+        val failure: MangaAllCatalogSearchFailure? = null,
     )
 
     private suspend fun searchFully(
@@ -296,6 +307,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
         // Kitsu JSON:API caps manga pages at twenty records.
         val pageSize = if (source.integrationId.value == "kitsu") 20 else PAGE_SIZE
         return withTimeoutOrNull(timeout) {
+            val requestFailed = SourceSearchResult(failure = MangaAllCatalogSearchFailure.REQUEST_FAILED)
             val seen = mutableListOf<CatalogItem>()
             val seenIds = mutableSetOf<String>()
             var expectedTotal: Int? = null
@@ -308,16 +320,16 @@ class ResolveMangaAllIndependentCatalogIdentity(
                 } catch (error: CancellationException) {
                     throw error
                 } catch (_: Exception) {
-                    return@withTimeoutOrNull SourceSearchResult(failed = true)
+                    return@withTimeoutOrNull requestFailed
                 }
                 val error = result.exceptionOrNull()
                 if (error is CancellationException) throw error
                 val page: CatalogPage = result.getOrNull()
-                    ?: return@withTimeoutOrNull SourceSearchResult(failed = true)
+                    ?: return@withTimeoutOrNull requestFailed
                 if (page.items.size > pageSize ||
                     page.items.any { it.provider != source.integrationId.value || it.providerId.isBlank() }
                 ) {
-                    return@withTimeoutOrNull SourceSearchResult(failed = true)
+                    return@withTimeoutOrNull SourceSearchResult(failure = MangaAllCatalogSearchFailure.INVALID_RESPONSE)
                 }
                 if (page.items.any { !seenIds.add(it.providerId) }) {
                     return@withTimeoutOrNull SourceSearchResult(seen)
@@ -349,7 +361,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
                 offset += page.items.size
             }
             SourceSearchResult(seen, complete = false)
-        } ?: SourceSearchResult(failed = true)
+        } ?: SourceSearchResult(failure = MangaAllCatalogSearchFailure.TIMEOUT)
     }
 
     private fun normalize(value: String): String = normalizeMangaAllCatalogTitle(value)

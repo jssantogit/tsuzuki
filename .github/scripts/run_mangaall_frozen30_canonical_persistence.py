@@ -141,6 +141,69 @@ def parse_reader(log, shard, restored, process_ok, catalog, owners, focused=Fals
                        "status": rows.get(i, "NOT_OBSERVED")} for i in sorted(indices)]}
 
 
+def collect_catalog_search_failures(log, shard, focused=False):
+    pattern = (r"MANGAALL_CATALOG_SEARCH_FAILURE\|index=(\d+)\|attempt=([123])"
+               r"\|reason=(REQUEST_FAILED|INVALID_RESPONSE|TIMEOUT)\|count=(\d{1,2})(?=\s|$)")
+    rows = {}
+    for match in re.finditer(pattern, log):
+        index, attempt, reason, count = match.groups()
+        index, attempt, count = int(index), int(attempt), int(count)
+        key = (index, attempt, reason)
+        if index not in expected_indices(shard, focused) or key in rows or not 0 < count <= 32:
+            return []
+        rows[key] = dict(index=index, attempt=attempt, reason=reason, count=count)
+    return [rows[k] for k in sorted(rows)]
+
+
+# These are diagnostic-only rows. They cannot grant a chapter or a Reader verdict.
+PROVIDER_ERROR_CODES = {
+    "UNAVAILABLE", "HOST_ERROR", "PACKAGE_INVALID", "MALFORMED_REQUEST",
+    "SOURCE_TOO_LARGE", "SOURCE_READ_ERROR", "INVOCATION_CONFLICT",
+    "PERMISSION_DENIED", "HOST_API_UNSUPPORTED", "SCRIPT_ERROR", "TIMEOUT",
+    "RUNTIME_DIED", "NETWORK_POLICY", "CHAPTER_IDENTITY_UNVERIFIED",
+    "NETWORK_ERROR", "BROWSER_ERROR", "RESOURCE_LIMIT", "MALFORMED_RESULT",
+    "AUTH_REQUIRED", "ACQUISITION_FAILED",
+}
+
+
+def collect_lookup_failures(log, shard, focused=False):
+    pattern = (r"MANGAALL_LOOKUP_FAILURE\|index=(\d+)\|source=(MANGADEX|MANGADOT|UNKNOWN)"
+               r"\|code=([A-Z_]{1,48})\|category=(NONE|CAPTCHA|HTTP|MALFORMED_RESPONSE|UNKNOWN)"
+               r"\|http=(\d{1,3})\|count=(\d{1,4})(?=\s|$)")
+    rows = {}
+    for match in re.finditer(pattern, log):
+        index, source, code, category, http, count = match.groups()
+        index, http, count = int(index), int(http), int(count)
+        key = (index, source, code, category, http)
+        if (index not in expected_indices(shard, focused) or key in rows
+                or code not in PROVIDER_ERROR_CODES or not (http == 0 or 100 <= http <= 599)
+                or not 0 < count <= 2048 or len(rows) >= 2048):
+            return []
+        rows[key] = dict(index=index, source=source, code=code, category=category,
+                         http=http, count=count)
+    return [rows[k] for k in sorted(rows)]
+
+
+def collect_reader_failures(log, shard, reader, focused=False):
+    pattern = (r"MANGAALL_READER_FAILURE\|index=(\d+)\|code=([A-Z_]{1,48})"
+               r"\|retryable=(true|false)\|http=(\d{1,3})"
+               r"\|category=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|UNCLASSIFIED_ERROR)"
+               r"\|stage=([A-Z_]{1,64})(?=\s|$)")
+    failed = {r["index"] for r in reader["works"] if r["status"] == "PREPARATION_FAILED"}
+    rows = {}
+    for match in re.finditer(pattern, log):
+        index, code, retryable, http, category, stage = match.groups()
+        index, http = int(index), int(http)
+        if (index not in expected_indices(shard, focused) or index not in failed or index in rows
+                or code not in PROVIDER_ERROR_CODES or not (http == 0 or 100 <= http <= 599)
+                or (http != 0 and category == "NONE")
+                or (stage != "NONE" and code != "SOURCE_READ_ERROR")):
+            return []
+        rows[index] = dict(index=index, code=code, retryable=retryable, http=http,
+                           category=category, stage=stage)
+    return [rows[k] for k in sorted(rows)]
+
+
 def collect_diagnostics(log, shard, focused=False):
     fields = ("chapters", "chapterOne", "evidence", "associations", "verified",
               "dexOptions", "dotOptions", "rivalReleaseRefs")
@@ -322,12 +385,15 @@ def invoke(shard, phase, catalog, reader=False, focused=False, cohort=None):
         log, ok = "", False
     parsed = parse_phase(log,shard,phase,ok,catalog,owners,focused)
     if phase == "COLLECT":
+        parsed["catalogSearchFailures"] = collect_catalog_search_failures(log, shard, focused)
+        parsed["lookupFailures"] = collect_lookup_failures(log, shard, focused)
         parsed["diagnostics"] = collect_diagnostics(log, shard, focused)
         parsed["ranges"] = collect_ranges(log, shard, focused)
         parsed["acquisition"] = collect_acquisition(log, shard, focused)
         parsed["optionRejections"] = collect_option_rejections(log, shard, focused)
     if reader and phase == "RESTORE":
         parsed["reader"] = parse_reader(log, shard, parsed, ok, catalog, owners, focused)
+        parsed["readerFailures"] = collect_reader_failures(log, shard, parsed["reader"], focused)
     return parsed
 
 
@@ -376,6 +442,12 @@ def run(shard, catalog, reader=False, focused=False, cohort=None):
         for phase in ("collect", "restore"):
             for row in report[phase]["works"]:
                 print(f"MANGAALL_CANONICAL_PERSISTENCE|phase={phase.upper()}|index={row['index']}|outcome={row['status']}")
+        for row in report["collect"].get("lookupFailures", []):
+            print("MANGAALL_LOOKUP_FAILURE|" + "|".join(f"{key}={value}" for key, value in row.items()))
+        for row in report["restore"].get("readerFailures", []):
+            print("MANGAALL_READER_FAILURE|" + "|".join(f"{key}={value}" for key, value in row.items()))
+        for row in report["collect"].get("catalogSearchFailures", []):
+            print("MANGAALL_CATALOG_SEARCH_FAILURE|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("diagnostics", []):
             print("MANGAALL_CANONICAL_DIAGNOSTIC|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("ranges", []):
@@ -451,6 +523,35 @@ def aggregate(catalog, reader=False, focused=False, cohort=None):
 
 
 def selftest():
+    lookup = ("MANGAALL_LOOKUP_FAILURE|index=1|source=MANGADOT|code=SOURCE_READ_ERROR"
+              "|category=HTTP|http=429|count=2")
+    assert collect_lookup_failures(lookup, 0) == [
+        dict(index=1, source="MANGADOT", code="SOURCE_READ_ERROR", category="HTTP", http=429, count=2)]
+    assert collect_lookup_failures(lookup + "\n" + lookup, 0) == []
+    assert collect_lookup_failures(lookup.replace("http=429", "http=999"), 0) == []
+    assert collect_lookup_failures(lookup.replace("SOURCE_READ_ERROR", "UNRECOGNIZED"), 0) == []
+    reader = {"works": [dict(index=1, status="PREPARATION_FAILED")]}
+    failure = ("MANGAALL_READER_FAILURE|index=1|code=SOURCE_READ_ERROR|retryable=false"
+               "|http=403|category=CHALLENGE_BLOCKED|stage=NONE")
+    assert collect_reader_failures(failure, 0, reader) == [
+        dict(index=1, code="SOURCE_READ_ERROR", retryable="false", http=403,
+             category="CHALLENGE_BLOCKED", stage="NONE")]
+    assert collect_reader_failures(failure + "\n" + failure, 0, reader) == []
+    assert collect_reader_failures(failure, 0, {"works": [dict(index=1, status="FIRST_PAGE_DECODED")]}) == []
+    assert collect_reader_failures(failure.replace("http=403", "http=600"), 0, reader) == []
+
+    failure = "MANGAALL_CATALOG_SEARCH_FAILURE|index=1|attempt=1|reason=TIMEOUT|count=1"
+    assert collect_catalog_search_failures(failure, 0) == [
+        dict(index=1, attempt=1, reason="TIMEOUT", count=1)]
+    assert collect_catalog_search_failures(failure + "\n" + failure, 0) == []
+    assert collect_catalog_search_failures(failure, 1) == []
+    assert collect_catalog_search_failures(failure.replace("TIMEOUT", "OTHER"), 0) == []
+    assert collect_catalog_search_failures(failure.replace("count=1", "count=0"), 0) == []
+    assert collect_catalog_search_failures(failure.replace("count=1", "count=33"), 0) == []
+    assert collect_catalog_search_failures(failure + "\n" + failure.replace("attempt=1", "attempt=2"), 0) == [
+        dict(index=1, attempt=1, reason="TIMEOUT", count=1),
+        dict(index=1, attempt=2, reason="TIMEOUT", count=1)]
+
     rejected = ("MANGAALL_CANONICAL_OPTION_REJECTION|index=1|source=mangadot"
                 "|reason=SOURCE_LANGUAGE_MISSING|identity=NONE|count=2")
     assert collect_option_rejections(rejected, 0) == [

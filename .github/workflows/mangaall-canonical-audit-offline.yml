@@ -117,7 +117,7 @@ jobs:
       - name: Compile and exercise identity, continuation, SQLite and Reader
         run: |
           ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck \
-            :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' \
+            :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*ResolveMangaAllIndependentCatalogIdentityTest' \
             --tests '*ProviderWorkSourcePortfolioTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*MangaAllNativeChapterCoverageTest' \
             --tests '*CollectProviderReadingEvidenceTest' --tests '*CollectProviderReadingEvidenceEligibilityTest' \
             --tests '*RefreshProviderReadingChaptersTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' \
