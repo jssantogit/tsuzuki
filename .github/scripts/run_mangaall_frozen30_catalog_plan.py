@@ -64,12 +64,53 @@ def plan(cohort=None):
     return rows,hashlib.sha256(raw).hexdigest()
 
 
+# The owner-specific search hint is retrieval only. Alternate-catalog probes
+# must not inherit another catalog's search dialect (e.g. native Japanese).
+# The independently locked identity and creator constraints remain identical.
+def probe_row(row, catalog):
+    result = dict(row, catalog=catalog)
+    if catalog != row["catalog"]:
+        result.pop("searchTitle", None)
+    return result
+
+
+def detail_diagnostics(raw, group):
+    pattern = (
+        r"MANGAALL_CATALOG_DETAIL\|index=(\d+)\|outcome=(OK|UNAVAILABLE)"
+        r"\|ownerMatch=(true|false)\|format=([A-Z_]+)\|authors=(\d+)\|artists=(\d+)"
+        r"\|required=(\d+)\|distinctCreators=(\d+)\|matched=(\d+)"
+        r"\|matchedGroups=([1-8](?:,[1-8])*)?(?=\s|$)"
+    )
+    for match in re.finditer(pattern, raw):
+        index, _, _, _, authors, artists, required, distinct, matched, groups = match.groups()
+        index, authors, artists, required, distinct, matched = map(
+            int, (index, authors, artists, required, distinct, matched))
+        groups = [int(g) for g in groups.split(",")] if groups else []
+        if (0 <= index < len(group) and 0 <= required <= 8
+                and 0 <= matched <= required and distinct <= authors + artists
+                and groups == sorted(set(groups)) and len(groups) == matched
+                and all(1 <= g <= required for g in groups)):
+            yield match.group(0).replace(f"index={index}|", f"index={group[index]['index']}|", 1)
+
+
+def diagnostic_selftest():
+    row = dict(index=3, catalog="shikimori", searchTitle="native", identityTitle="locked")
+    assert probe_row(row, "shikimori") == row
+    assert probe_row(row, "mangaupdates") == dict(index=3, catalog="mangaupdates", identityTitle="locked")
+    line = ("MANGAALL_CATALOG_DETAIL|index=0|outcome=OK|ownerMatch=true|format=MANGA"
+            "|authors=1|artists=1|required=2|distinctCreators=2|matched=1|matchedGroups=2")
+    assert list(detail_diagnostics(line, [row])) == [line.replace("index=0", "index=3")]
+    assert list(detail_diagnostics(line.replace("matchedGroups=2", "matchedGroups=3"), [row])) == []
+    assert list(detail_diagnostics(line.replace("matchedGroups=2", "matchedGroups=2,2"), [row])) == []
+    assert list(detail_diagnostics(line.replace("matched=1|matchedGroups=2", "matched=0|matchedGroups="), [row]))
+
+
 def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
     cohort = cohort or load_cohort()
     selected=rows[shard*10:(shard+1)*10]
     if probe:
         assert cohort.key == "manga" and probe in PROBE_SCOPES
-        selected=[dict(r,catalog=probe) for r in selected if r["index"] in JAPANESE_UNRESOLVED]
+        selected=[probe_row(r, probe) for r in selected if r["index"] in JAPANESE_UNRESOLVED]
     assert adb("shell","getprop","ro.kernel.qemu").stdout.strip()=="1"
     app=[p for p in Path("app/build/outputs/apk/debug").rglob("*.apk") if p.name=="app-debug.apk" or "universal" in p.name]
     tests=list(Path("app/build/outputs/apk/androidTest/debug").rglob("*.apk"))
@@ -126,15 +167,8 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
                     line=match.group(0).replace(f"index={local_index}|",f"index={group[local_index]['index']}|",1)
                     diagnostics.append(line)
                     print(line)
-            detail_pattern = (
-                r"MANGAALL_CATALOG_DETAIL\|index=(\d+)\|outcome=(OK|UNAVAILABLE)"
-                r"\|ownerMatch=(true|false)\|format=([A-Z_]+)\|authors=(\d+)\|artists=(\d+)"
-                r"\|required=(\d+)\|matched=(\d+)(?=\s|$)"
-            )
-            for match in re.finditer(detail_pattern,raw):
-                local_index=int(match.group(1))
-                if 0 <= local_index < len(group) and len(diagnostics)<200:
-                    line=match.group(0).replace(f"index={local_index}|",f"index={group[local_index]['index']}|",1)
+            for line in detail_diagnostics(raw, group):
+                if len(diagnostics)<200:
                     diagnostics.append(line)
                     print(line)
             for match in re.finditer(r"MANGAALL_CATALOG_ATTESTATION\|([A-Za-z0-9+/=]+)",raw):
@@ -218,6 +252,7 @@ def main():
     works=cohort.works
     rows,digest=plan(cohort)
     if args.check_plan:
+        diagnostic_selftest()
         print("CATALOG_PLAN|scope=EXPLICIT_OWNER_PLAN|works=30|fallback=NO")
         return True
     return aggregate(rows,digest,cohort) if args.aggregate else shard_run(works,rows,digest,args.shard,cohort,args.probe_catalog)

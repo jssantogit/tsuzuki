@@ -178,6 +178,38 @@ def collect_ranges(log, shard, focused=False):
     return [rows[k] for k in sorted(rows)]
 
 
+OPTION_REJECTION_REASONS = {
+    "CHAPTER_IDENTITY_REJECTED", "MISSING_CHAPTER_KEY", "SOURCE_NOT_AUTHORIZED",
+    "CATALOG_PROOF_MISMATCH", "SOURCE_LANGUAGE_MISSING", "SOURCE_LANGUAGE_MISMATCH",
+    "SOURCE_KEY_OR_FACET_REJECTED",
+}
+OPTION_IDENTITY_REASONS = {
+    "UNPARSEABLE_SOURCE_IDENTITY", "UNVERIFIED_EARLY_TITLE", "LOW_CONFIDENCE",
+    "CHAPTER_IDENTITY_MISMATCH", "SOURCE_VOLUME_BUNDLE", "CONFLICTING_NUMBER_HINT",
+    "CONFLICTING_CHAPTER_MARKERS", "MALFORMED_VOLUME_LABEL", "SOURCE_VOLUME_CONFLICT",
+    "CANONICAL_VOLUME_CONFLICT", "MIXED_REJECTIONS",
+}
+
+
+def collect_option_rejections(log, shard, focused=False):
+    pattern = (
+        r"MANGAALL_CANONICAL_OPTION_REJECTION\|index=(\d+)\|source=(mangadex|mangadot)"
+        r"\|reason=([A-Z_]{1,64})\|identity=([A-Z_]{1,64})\|count=(\d{1,7})(?=\s|$)"
+    )
+    rows = {}
+    for match in re.finditer(pattern, log):
+        index, source, reason, identity, count = match.groups()
+        index, count = int(index), int(count)
+        key = (index, source, reason, identity)
+        if (index not in expected_indices(shard, focused) or key in rows
+                or reason not in OPTION_REJECTION_REASONS or not 0 < count <= 1_000_000
+                or (reason == "CHAPTER_IDENTITY_REJECTED" and identity not in OPTION_IDENTITY_REASONS)
+                or (reason != "CHAPTER_IDENTITY_REJECTED" and identity != "NONE")):
+            return []
+        rows[key] = dict(index=index, source=source, reason=reason, identity=identity, count=count)
+    return [rows[k] for k in sorted(rows)]
+
+
 def collect_acquisition(log, shard, focused=False):
     # Closed codes and bounded counts only; never forward raw instrumentation.
     pattern = (
@@ -293,6 +325,7 @@ def invoke(shard, phase, catalog, reader=False, focused=False, cohort=None):
         parsed["diagnostics"] = collect_diagnostics(log, shard, focused)
         parsed["ranges"] = collect_ranges(log, shard, focused)
         parsed["acquisition"] = collect_acquisition(log, shard, focused)
+        parsed["optionRejections"] = collect_option_rejections(log, shard, focused)
     if reader and phase == "RESTORE":
         parsed["reader"] = parse_reader(log, shard, parsed, ok, catalog, owners, focused)
     return parsed
@@ -349,6 +382,8 @@ def run(shard, catalog, reader=False, focused=False, cohort=None):
             print("MANGAALL_CANONICAL_RANGE|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("acquisition", []):
             print("MANGAALL_CANONICAL_ACQUISITION|" + "|".join(f"{key}={value}" for key, value in row.items()))
+        for row in report["collect"].get("optionRejections", []):
+            print("MANGAALL_CANONICAL_OPTION_REJECTION|" + "|".join(f"{key}={value}" for key, value in row.items()))
         if focused == "japanese28":
             for row in source_diagnostics(report["collect"]):
                 print("MANGAALL_SOURCE_DIAGNOSTIC|" + "|".join(f"{key}={value}" for key,value in row.items()))
@@ -416,6 +451,17 @@ def aggregate(catalog, reader=False, focused=False, cohort=None):
 
 
 def selftest():
+    rejected = ("MANGAALL_CANONICAL_OPTION_REJECTION|index=1|source=mangadot"
+                "|reason=SOURCE_LANGUAGE_MISSING|identity=NONE|count=2")
+    assert collect_option_rejections(rejected, 0) == [
+        dict(index=1, source="mangadot", reason="SOURCE_LANGUAGE_MISSING", identity="NONE", count=2)]
+    assert collect_option_rejections(rejected + "\n" + rejected, 0) == []
+    assert collect_option_rejections(rejected.replace("NONE", "LOW_CONFIDENCE"), 0) == []
+    assert collect_option_rejections(rejected.replace("SOURCE_LANGUAGE_MISSING", "UNKNOWN_REASON"), 0) == []
+    assert collect_option_rejections(rejected, 1) == []
+    identity = rejected.replace("SOURCE_LANGUAGE_MISSING", "CHAPTER_IDENTITY_REJECTED").replace("NONE", "LOW_CONFIDENCE")
+    assert collect_option_rejections(identity, 0)[0]["identity"] == "LOW_CONFIDENCE"
+    assert collect_option_rejections(identity.replace("LOW_CONFIDENCE", "NONE"), 0) == []
     def sample(phase, status, pid):
         return "\n".join(
             [f"MANGAALL_CANONICAL_PROCESS|phase={phase}|shard=0|pid={pid}"]

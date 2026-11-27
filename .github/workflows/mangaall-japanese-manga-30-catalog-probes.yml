@@ -248,3 +248,5 @@ jobs:
 # Compare verified native-title retrieval on both unresolved adaptations while reading diagnostics run.
 
 # Recheck both adaptations with publisher-attested native credit spellings and per-group match diagnostics.
+
+# Keep owner-specific retrieval hints separate and retain typed creator-group diagnostics.
