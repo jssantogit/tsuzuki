@@ -1498,8 +1498,10 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 if (!catalogIsCurrent(catalogIdentity) ||
                     !supplementaryTargetStillAuthorized(canonicalTitleId, target) ||
-                    (!nativeMangaDotPortfolioResearch &&
-                        !gateway.supportsNativeChapterCoverage(assessment.ref, descriptor.version.code))
+                    (
+                        !nativeMangaDotPortfolioResearch &&
+                            !gateway.supportsNativeChapterCoverage(assessment.ref, descriptor.version.code)
+                        )
                 ) {
                     continue
                 }
