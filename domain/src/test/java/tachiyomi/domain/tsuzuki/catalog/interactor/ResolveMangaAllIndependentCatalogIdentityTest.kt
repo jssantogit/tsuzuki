@@ -424,6 +424,48 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
         }
     }
 
+    @Test
+    fun `all four independent catalog adapters share the same closed identity and creator contract`() = runTest {
+        for (provider in listOf("mangaupdates", "shikimori", "mal", "kitsu")) {
+            val first = item(provider, "42", "Work").copy(format = CatalogItemFormat.MANGA)
+            val second = first.copy(providerId = "43")
+            val positive = source(provider, search = {
+                CatalogPage(listOf(first, second), false, totalCount = 2)
+            }, detail = { id ->
+                first.copy(providerId = id, authors = listOf(if (id == "42") "Creator A" else "Creator B"))
+            })
+            val result = ResolveMangaAllIndependentCatalogIdentity(registry(positive))
+                .execute("Work", CatalogItemFormat.MANGA, requiredCreatorNames = listOf("Creator A"))
+            result.status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+            result.identity?.provider shouldBe provider
+            result.identity?.providerId shouldBe "42"
+            result.creatorsAttested shouldBe true
+
+            val missing = source(provider, search = {
+                CatalogPage(listOf(first, second), false, totalCount = 2)
+            }, detail = { id ->
+                first.copy(providerId = id, authors = if (id == "42") listOf("Creator A") else emptyList())
+            })
+            ResolveMangaAllIndependentCatalogIdentity(registry(missing))
+                .execute("Work", CatalogItemFormat.MANGA, requiredCreatorNames = listOf("Creator A"))
+                .status shouldBe MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS
+
+            val truncated = source(provider, search = {
+                CatalogPage(listOf(first), false, totalCount = 2)
+            }, detail = { error("Incomplete catalog cannot authorize details") })
+            ResolveMangaAllIndependentCatalogIdentity(registry(truncated))
+                .execute("Work", CatalogItemFormat.MANGA).status shouldBe
+                MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE
+
+            val wrong = source(provider, search = {
+                CatalogPage(listOf(first), false, totalCount = 1)
+            }, detail = { first.copy(providerId = "99") })
+            ResolveMangaAllIndependentCatalogIdentity(registry(wrong))
+                .execute("Work", CatalogItemFormat.MANGA).status shouldBe
+                MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+        }
+    }
+
     private fun item(
         provider: String,
         id: String,

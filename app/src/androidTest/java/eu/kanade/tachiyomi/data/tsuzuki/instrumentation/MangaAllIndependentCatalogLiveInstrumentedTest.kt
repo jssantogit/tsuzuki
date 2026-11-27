@@ -32,8 +32,10 @@ import tachiyomi.data.tsuzuki.kitsu.client.KitsuHttpClient
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityResult
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
 import tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentity
+import tachiyomi.domain.tsuzuki.catalog.interactor.mangaAllCatalogCreatorKey
 import tachiyomi.domain.tsuzuki.catalog.interactor.toCanonicalReadingMetadata
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogError
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
@@ -105,6 +107,27 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
             else -> "KITSU_SEARCH_CONTRACT"
         }
         var activeIndex = -1
+        var activeCredits = emptySet<String>()
+        val observedMetadata = object : MetadataProvider by metadataCatalog {
+            override suspend fun getDetails(externalId: String): Result<CatalogItem> {
+                val result = metadataCatalog.getDetails(externalId)
+                val item = result.getOrNull()
+                val names = (item?.authors.orEmpty() + item?.artists.orEmpty())
+                    .map(::mangaAllCatalogCreatorKey).toSet()
+                val facts = buildString {
+                    append("MANGAALL_CATALOG_DETAIL|index=").append(activeIndex)
+                    append("|outcome=").append(if (item == null) "UNAVAILABLE" else "OK")
+                    append("|ownerMatch=").append(item?.provider == catalogName && item.providerId == externalId)
+                    append("|format=").append(item?.format?.name ?: "UNKNOWN")
+                    append("|authors=").append(item?.authors?.size ?: 0)
+                    append("|artists=").append(item?.artists?.size ?: 0)
+                    append("|required=").append(activeCredits.size)
+                    append("|matched=").append(activeCredits.count(names::contains))
+                }
+                instrument.sendStatus(1, Bundle().apply { putString("stream", facts) })
+                return result
+            }
+        }
         val observedSearch = object : SearchProvider by catalog {
             override suspend fun search(query: CatalogQuery): Result<CatalogPage> {
                 val result = catalog.search(query)
@@ -144,7 +167,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         }
         val registry = object : IntegrationRegistry {
             override fun searchProviders(): List<SearchProvider> = listOf(observedSearch)
-            override fun metadataProviders(): List<MetadataProvider> = listOf(metadataCatalog)
+            override fun metadataProviders(): List<MetadataProvider> = listOf(observedMetadata)
             override fun discoveryProviders(): List<DiscoveryProvider> = emptyList()
             override fun chapterEvidenceProviders(): List<ChapterEvidenceProvider> = emptyList()
             override fun ratingsProviders(): List<RatingsProvider> = emptyList()
@@ -175,6 +198,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         for ((index, line) in selected) {
             activeIndex = index
             val work = parseWork(line)
+            activeCredits = requiredCredits[work.title].orEmpty().map(::mangaAllCatalogCreatorKey).toSet()
             val report = if (work.format == CatalogItemFormat.NOVEL) {
                 // Production MangaUpdates search explicitly excludes 'novel'.
                 // An empty response here would NOT certify absence of a novel.

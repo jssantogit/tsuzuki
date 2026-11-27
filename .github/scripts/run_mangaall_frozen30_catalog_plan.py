@@ -15,9 +15,10 @@ from run_mangaall_frozen30_independent_catalog import (
 from mangaall_research_cohort import load_cohort, edition_credits_match
 SCOPES=("mangaupdates","shikimori")
 PROBE_SCOPES=("mangaupdates","shikimori","mal","kitsu")
-# Exactly the unresolved indices from #45923232242. These diagnostic probes
-# cannot pass the canonical gate or replace the explicit owner plan.
-JAPANESE_UNRESOLVED=frozenset(range(1,31)) - {4,9,12,15,16,22,29}
+# Scope of the next diagnostic cycle after #45995837697.
+# Other catalogs retain adapter support; the scheduled live matrix focuses
+# on the two unresolved adaptations and never substitutes the strict gate.
+JAPANESE_UNRESOLVED=frozenset({3,5})
 
 
 def plan(cohort=None):
@@ -99,6 +100,17 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
             for match in re.finditer(diagnostic_pattern,raw):
                 local_index=int(match.group(1))
                 if 0 <= local_index < len(group) and len(diagnostics)<160:
+                    line=match.group(0).replace(f"index={local_index}|",f"index={group[local_index]['index']}|",1)
+                    diagnostics.append(line)
+                    print(line)
+            detail_pattern = (
+                r"MANGAALL_CATALOG_DETAIL\|index=(\d+)\|outcome=(OK|UNAVAILABLE)"
+                r"\|ownerMatch=(true|false)\|format=([A-Z_]+)\|authors=(\d+)\|artists=(\d+)"
+                r"\|required=(\d+)\|matched=(\d+)(?=\s|$)"
+            )
+            for match in re.finditer(detail_pattern,raw):
+                local_index=int(match.group(1))
+                if 0 <= local_index < len(group) and len(diagnostics)<200:
                     line=match.group(0).replace(f"index={local_index}|",f"index={group[local_index]['index']}|",1)
                     diagnostics.append(line)
                     print(line)

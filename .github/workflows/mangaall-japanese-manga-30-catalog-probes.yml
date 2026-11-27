@@ -125,7 +125,7 @@ jobs:
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
           # Prefer already cached, pinned dependencies; do not suppress real failures.
-          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' --tests '*MangaAllCatalogCanonicalMetadataTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*MangaAllCatalogCanonicalMetadataTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
             cat "$log"
             exit 0
           fi
@@ -134,7 +134,7 @@ jobs:
             exit 1
           fi
           for attempt in 1 2 3; do
-            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' --tests '*MangaAllCatalogCanonicalMetadataTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*MangaAllCatalogCanonicalMetadataTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               exit 0
             fi
@@ -159,8 +159,8 @@ jobs:
       fail-fast: false
       max-parallel: 3
       matrix:
-        catalog: [mangaupdates, shikimori, mal, kitsu]
-        shard: [0, 1, 2]
+        catalog: [mangaupdates, shikimori]
+        shard: [0]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -213,9 +213,9 @@ jobs:
           from run_mangaall_frozen30_catalog_plan import plan, JAPANESE_UNRESOLVED
           cohort=load_cohort("manga")
           _, digest=plan(cohort)
-          for catalog in ("mangaupdates", "shikimori", "mal", "kitsu"):
+          for catalog in ("mangaupdates", "shikimori"):
               seen=[]
-              for shard in range(3):
+              for shard in (0,):
                   p=Path(f"probes/mangaall-probe-{catalog}-{shard}/verdict.json")
                   doc=json.loads(p.read_text())
                   rows=doc["works"]
@@ -242,3 +242,5 @@ jobs:
 # Revalidate after exact import ordering, crosswalk conflict and Kitsu public staff corrections.
 
 # Run the grouped contract, pagination, creator-disambiguation and Kitsu fixture corrections.
+
+# Focus live on the two unresolved adaptations; keep all four adapter regressions.
