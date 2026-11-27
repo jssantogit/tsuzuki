@@ -201,6 +201,60 @@ def collect_acquisition(log, shard, focused=False):
     return rows
 
 
+def source_diagnostics(collect):
+    """Source observations, not inventory completeness or an absence certificate."""
+    ranges = {(r["index"], r["source"]): r for r in collect.get("ranges", [])}
+    summaries = {r["index"]: r for r in collect.get("diagnostics", [])}
+    acquisition = collect.get("acquisition", [])
+    rows = []
+    for work in collect.get("works", []):
+        index = work["index"]
+        for source in ("mangadex", "mangadot"):
+            events = [e for e in acquisition if e["index"] == index and e["source"] == source.upper()]
+            coverage = ranges.get((index, source))
+            mapped = coverage["mapped"] if coverage else None
+            chapter_one = coverage["chapterOne"] if coverage else None
+            options = summaries.get(index, {}).get("dexOptions" if source == "mangadex" else "dotOptions")
+            failure_count = sum(e["count"] for e in events
+                                if e["outcome"] in ("FAILED", "TIMEOUT"))
+            incomplete = any(e["event"] == "PROVIDER_READING_LOOKUP_ATTEMPT"
+                             and e["outcome"] == "PARTIAL" for e in events)
+            empty = any(e["reason"] == "COVERAGE_EMPTY" or
+                        (e["event"] == "PROVIDER_READING_CHAPTER_ATTEMPT" and e["outcome"] == "EMPTY")
+                        for e in events)
+            negative_identity = any(e["reason"] in (
+                "AUTHOR_CONFLICT", "CATALOG_REFERENCE_CONFLICT", "MISSING_AUTHOR_EVIDENCE",
+                "CANONICAL_METADATA_UNVERIFIED", "SOURCE_DETAIL_UNVERIFIED", "TITLE_UNVERIFIED",
+                "EDITION_SOURCE_ATTESTED_VARIANT",
+            ) for e in events)
+            catalog_blocked = (work["status"].startswith("CATALOG_") or
+                               work["status"] in ("EDITION_CREDITS_UNVERIFIED", "DUPLICATE_CATALOG_OWNER"))
+            if chapter_one and options:
+                status = "CHAPTER_ONE_OPTION_OBSERVED"
+            elif chapter_one:
+                status = "CHAPTER_ONE_MAPPED_OPTION_UNPROVEN"
+            elif mapped:
+                status = "CHAPTERS_OBSERVED_WITHOUT_ONE"
+            elif not events and coverage is None:
+                status = "CATALOG_BLOCKED" if catalog_blocked else "SOURCE_NOT_OBSERVED"
+            elif failure_count:
+                status = "ACQUISITION_FAILURE_OBSERVED"
+            elif negative_identity:
+                status = "IDENTITY_OR_EDITION_UNVERIFIED"
+            elif empty:
+                status = "EMPTY_CANDIDATE_OBSERVED"
+            elif incomplete:
+                status = "LOOKUP_INCOMPLETE"
+            else:
+                status = "NO_MAPPED_CHAPTERS_CAUSE_UNPROVEN"
+            rows.append(dict(index=index, source=source, status=status,
+                             mapped=mapped, chapterOne=chapter_one, readerOptions=options,
+                             failureCount=failure_count, lookupPartial=incomplete,
+                             emptyCandidateObserved=empty, negativeIdentityObserved=negative_identity,
+                             inventoryCompleteness="NOT_PROVEN"))
+    return rows
+
+
 def scope(catalog, cohort=None):
     if catalog!="explicit_plan":
         return None, None
@@ -295,6 +349,9 @@ def run(shard, catalog, reader=False, focused=False, cohort=None):
             print("MANGAALL_CANONICAL_RANGE|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("acquisition", []):
             print("MANGAALL_CANONICAL_ACQUISITION|" + "|".join(f"{key}={value}" for key, value in row.items()))
+        if focused == "japanese28":
+            for row in source_diagnostics(report["collect"]):
+                print("MANGAALL_SOURCE_DIAGNOSTIC|" + "|".join(f"{key}={value}" for key,value in row.items()))
         if reader:
             for row in report["restore"]["reader"]["works"]:
                 print(f"MANGAALL_CANONICAL_READER|index={row['index']}|outcome={row['status']}|ui=NOT_TESTED")
@@ -309,12 +366,15 @@ def aggregate(catalog, reader=False, focused=False, cohort=None):
     owners, plan_digest=scope(catalog, cohort)
     complete = True
     decoded = 0
+    source_rows = []
     for shard in range(3):
         path = report_root(focused, cohort) / f"shard-{shard}" / "verdict.json"
         if not path.is_file():
             complete = False
             continue
         report = json.loads(path.read_text())
+        if focused == "japanese28":
+            source_rows.extend(source_diagnostics(report.get("collect", {})))
         expected = sorted(expected_indices(shard, focused))
         if (report.get("schemaVersion") != 1 or report.get("corpusSha256") != (cohort.digest if cohort else DIGEST)
                 or report.get("catalogSource") != catalog or report.get("planSha256") != plan_digest
@@ -341,6 +401,13 @@ def aggregate(catalog, reader=False, focused=False, cohort=None):
     total = len(focused_indices(focused))
     if focused == "japanese28":
         print("MANGAALL_READING_DIAGNOSTIC|scope=JAPANESE28|finalGate=NOT_TESTED|catalogOwners=FRESH_VERIFICATION")
+        for source in ("mangadex", "mangadot"):
+            rows = [row for row in source_rows if row["source"] == source]
+            counts = {}
+            for row in rows:
+                counts[row["status"]] = counts.get(row["status"], 0) + 1
+            for status,count in sorted(counts.items()):
+                print(f"MANGAALL_SOURCE_SUMMARY|source={source}|status={status}|count={count}|inventory=NOT_PROVEN")
     if reader:
         print(f"MANGAALL_CANONICAL_READER|decoded={decoded}|expected={total}|ui=NOT_TESTED")
     print(f"MANGAALL_CANONICAL_PERSISTENCE|outcome={'PASS' if complete else 'RED'}"
@@ -448,6 +515,23 @@ def selftest():
                                    if "|index=3|" not in line and "|index=5|" not in line)
     assert parse_phase(diagnostic_collect, 0, "COLLECT", True, "explicit_plan", owners, "japanese28")["complete"]
     assert not parse_phase(diagnostic_collect, 0, "COLLECT", True, "explicit_plan", owners)["complete"]
+    sample_sources = dict(works=[dict(index=1,status="COLLECTED"),
+                                 dict(index=2,status="CATALOG_UNAVAILABLE"),
+                                 dict(index=4,status="REFRESH_FAILED")],
+                          ranges=[dict(index=1,source="mangadot",mapped=20,chapterOne=1),
+                                  dict(index=1,source="mangadex",mapped=0,chapterOne=0)],
+                          diagnostics=[dict(index=1,dexOptions=0,dotOptions=1)],
+                          acquisition=[dict(index=1,source="MANGADEX",event="PROVIDER_READING_CANDIDATE",
+                                            reason="COVERAGE_EMPTY",outcome="REJECTED",count=1),
+                                       dict(index=4,source="MANGADOT",event="PROVIDER_READING_CHAPTER_ATTEMPT",
+                                            reason="MALFORMED_RESULT",outcome="FAILED",count=1)])
+    classified={(r["index"],r["source"]):r for r in source_diagnostics(sample_sources)}
+    assert classified[1,"mangadot"]["status"] == "CHAPTER_ONE_OPTION_OBSERVED"
+    assert classified[1,"mangadex"]["status"] == "EMPTY_CANDIDATE_OBSERVED"
+    assert classified[2,"mangadex"]["status"] == "CATALOG_BLOCKED"
+    assert classified[4,"mangadot"]["status"] == "ACQUISITION_FAILURE_OBSERVED"
+    assert classified[4,"mangadex"]["status"] == "SOURCE_NOT_OBSERVED"
+    assert all(row["inventoryCompleteness"]=="NOT_PROVEN" for row in classified.values())
     print("MANGAALL_CANONICAL_PERSISTENCE|selftest=PASS|cohorts=SEPARATE")
 
 
