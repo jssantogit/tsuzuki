@@ -380,8 +380,8 @@ class ReconcileChapterEvidence internal constructor(
                     observation.rawNumber,
                     observation.volume,
                 )
-            val contradictoryProviderVolume = hasContradictoryProviderVolume(observation)
-            val identityEvidenceUnsafe = numericHintConflicts || unsafeProvisionalEvidence || contradictoryProviderVolume
+            val volumeConflicts = hasContradictoryProviderVolume(observation)
+            val identityEvidenceUnsafe = numericHintConflicts || unsafeProvisionalEvidence || volumeConflicts
             val parsedIdentityIsReliable = observation.confidence >= RELIABLE_CONFIDENCE &&
                 parsed.confidence >= RELIABLE_CONFIDENCE &&
                 parsed.identity.isSpecific &&
