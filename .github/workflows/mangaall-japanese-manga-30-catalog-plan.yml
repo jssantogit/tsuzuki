@@ -13,7 +13,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate both immutable plans and catalog proof contract
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --cohort manga --check-plan
+          python3 .github/scripts/verify_mangaall_japanese_catalog_gate.py --selftest
   build-once:
+    needs: preflight
+    if: contains(github.event.head_commit.message, 'RUN_JAPANESE30_STRICT_CATALOG')
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
@@ -123,7 +138,7 @@ jobs:
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
           # Prefer already cached, pinned dependencies; do not suppress real failures.
-          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' --tests '*MangaAllCatalogCanonicalMetadataTest' --tests '*ProviderWorkSourcePortfolioTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
             cat "$log"
             exit 0
           fi
@@ -132,7 +147,7 @@ jobs:
             exit 1
           fi
           for attempt in 1 2 3; do
-            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' --tests '*MangaAllCatalogCanonicalMetadataTest' --tests '*ProviderWorkSourcePortfolioTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               exit 0
             fi
@@ -189,7 +204,7 @@ jobs:
           retention-days: 2
 
   strict-catalog-verdict:
-    if: always()
+    if: always() && contains(github.event.head_commit.message, 'RUN_JAPANESE30_STRICT_CATALOG')
     needs: [build-once, independent-catalog]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
