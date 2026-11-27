@@ -40,7 +40,7 @@ def plan(cohort=None):
             assert isinstance(ref["aliases"],dict) and 1<=len(ref["aliases"])<=8
             assert all(isinstance(name,str) and 0<len(name.strip())<=128 and isinstance(url,str)
                        and url.startswith("https://") for name,url in ref["aliases"].items())
-        assert row["catalog"] in SCOPES
+        assert row["catalog"] in (SCOPES if cohort.key == "manhwa" else PROBE_SCOPES)
         hint=row.get("searchTitle")
         assert hint is None or (row["catalog"]=="mangaupdates" and isinstance(hint,str) and 0<len(hint)<=256)
     return rows,hashlib.sha256(raw).hexdigest()
@@ -64,7 +64,7 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
         adb("install","-r",str(app[0]))
         adb("install","-r",str(tests[0]))
         adb("shell","cmd","connectivity","airplane-mode","disable")
-        for catalog in ((probe,) if probe else SCOPES):
+        for catalog in ((probe,) if probe else (SCOPES if cohort.key == "manhwa" else PROBE_SCOPES)):
             group=[r for r in selected if r["catalog"]==catalog]
             if not group:
                 continue

@@ -7,6 +7,8 @@ import android.os.Process
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.App
+import eu.kanade.tachiyomi.data.tsuzuki.integration.KitsuIntegrationProvider
+import eu.kanade.tachiyomi.data.tsuzuki.integration.MalIntegrationProvider
 import eu.kanade.tachiyomi.data.tsuzuki.integration.MangaUpdatesIntegrationProvider
 import eu.kanade.tachiyomi.data.tsuzuki.integration.ShikimoriIntegrationProvider
 import eu.kanade.tachiyomi.data.tsuzuki.integration.ShikimoriRequestGate
@@ -42,6 +44,8 @@ import tachiyomi.data.tsuzuki.provider.MangaAllSourceSelectionRepositoryImpl
 import tachiyomi.data.tsuzuki.provider.ProviderProvisionalCursorRepositoryImpl
 import tachiyomi.data.tsuzuki.provider.ProviderReadingBindingRepositoryImpl
 import tachiyomi.data.tsuzuki.provider.ProviderWorkSourceAssociationRepositoryImpl
+import tachiyomi.data.tsuzuki.kitsu.KitsuCatalogProvider
+import tachiyomi.data.tsuzuki.kitsu.client.KitsuHttpClient
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
 import tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentity
 import tachiyomi.domain.tsuzuki.catalog.interactor.toCanonicalReadingMetadata
@@ -123,6 +127,12 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         assertEquals("I_ACCEPT_FROZEN30_CANONICAL_RESEARCH", args.getString("mangaAllCanonicalOptIn"))
         val catalogScope = args.getString("mangaAllCanonicalCatalog") ?: "mangaupdates"
         require(catalogScope in setOf("mangaupdates", "shikimori", "explicit_plan"))
+        val cohort = args.getString("mangaAllCanonicalCohort") ?: "manhwa"
+        require(cohort in setOf("manhwa", "manga"))
+        val japanese = cohort == "manga"
+        val expectedFormat = if (japanese) CatalogItemFormat.MANGA else CatalogItemFormat.MANHWA
+        val corpusSha = if (japanese) JAPANESE_CORPUS_SHA else CORPUS_SHA
+        require(!japanese || catalogScope == "explicit_plan")
         val readerMode = args.getString("mangaAllCanonicalReaderProbe") ?: "0"
         require(readerMode in setOf("0", "1"))
         val phase = requireNotNull(args.getString("mangaAllCanonicalPhase"))
@@ -134,6 +144,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val pendingMode = args.getString("mangaAllCanonicalPending14") ?: "0"
         require(pendingMode in setOf("0", "1"))
         require(pendingMode == "0" || catalogScope == "explicit_plan")
+        require(!japanese || (pendingMode == "0" && !creditAudit))
         val pending14 = setOf(5, 6, 8, 11, 15, 16, 19, 20, 21, 23, 25, 27, 28, 29)
         require(!creditAudit || (pendingMode == "1" && readerMode == "0"))
         val remainingSix = setOf(8, 15, 21, 27, 28, 29)
@@ -156,20 +167,25 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 Build.HARDWARE in setOf("ranchu", "goldfish") ||
                 Build.PRODUCT.startsWith("sdk_gphone"),
         )
-        val lock = instrument.context.assets.open("mangaall-dual-source-30-cohort-lock.json")
+        val lockName = if (japanese) "mangaall-japanese-manga-30-cohort-lock.json"
+        else "mangaall-dual-source-30-cohort-lock.json"
+        val lock = instrument.context.assets.open(lockName)
             .bufferedReader().use { Json.parseToJsonElement(it.readText()).jsonObject }
         val works = requireNotNull(lock["works"]).jsonArray.map { it.jsonPrimitive.content }
-        assertEquals("MANHWA_30_FIXED_20261123", lock["cohort"]?.jsonPrimitive?.content)
-        assertEquals("manhwa", lock["format"]?.jsonPrimitive?.content)
+        assertEquals(if (japanese) "MANGA_30_FIXED_20261126" else "MANHWA_30_FIXED_20261123", lock["cohort"]?.jsonPrimitive?.content)
+        assertEquals(cohort, lock["format"]?.jsonPrimitive?.content)
+        if (japanese) assertEquals("ja", lock["originalLanguage"]?.jsonPrimitive?.content)
         assertEquals(30, works.size)
         assertEquals(30, works.toSet().size)
-        assertEquals(CORPUS_SHA, hash(JsonArray(works.map { JsonPrimitive(it) }).toString()))
+        assertEquals(corpusSha, hash(JsonArray(works.map { JsonPrimitive(it) }).toString()))
         val plan = if (catalogScope == "explicit_plan") {
-            val planText = instrument.context.assets.open("mangaall-frozen30-catalog-plan.json")
+            val planName = if (japanese) "mangaall-japanese-manga-30-catalog-plan.json"
+            else "mangaall-frozen30-catalog-plan.json"
+            val planText = instrument.context.assets.open(planName)
                 .bufferedReader().use { it.readText() }
             assertEquals(requireNotNull(args.getString("mangaAllCanonicalPlanSha256")), hash(planText))
             val doc = Json.parseToJsonElement(planText).jsonObject
-            assertEquals(CORPUS_SHA, doc.getValue("corpusSha256").jsonPrimitive.content)
+            assertEquals(corpusSha, doc.getValue("corpusSha256").jsonPrimitive.content)
             assertEquals("RESEARCH_EXPLICIT_OWNERS_NO_FALLBACK", doc.getValue("scope").jsonPrimitive.content)
             val rows = doc.getValue("works").jsonArray.map { it.jsonObject }
             assertEquals((1..30).toList(), rows.map { it.getValue("index").jsonPrimitive.content.toInt() })
@@ -180,7 +196,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
 
         fun ownerScope(index: Int): String = if (catalogScope == "explicit_plan") {
             plan[index - 1].getValue("catalog").jsonPrimitive.content.also {
-                require(it in setOf("mangaupdates", "shikimori"))
+                require(it in setOf("mangaupdates", "shikimori") || japanese && it in setOf("mal", "kitsu"))
             }
         } else {
             catalogScope
@@ -195,6 +211,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val manifest = parsed.manifest
         assertEquals("app.tsuzuki.mangaall", manifest.id)
         assertEquals(11L, manifest.version.code)
+        if (japanese) assertEquals("MangaAll — frozen 30 manga source research", manifest.name)
         val origins = requireNotNull(manifest.permissions.network).origins
         assertTrue(origins.none { it.contains("mangafire", true) || it.contains("mfcdn", true) })
         val id = ProviderId(manifest.id)
@@ -248,10 +265,20 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val associations = ProviderWorkSourceAssociationRepositoryImpl(database)
         val cursors = ProviderProvisionalCursorRepositoryImpl(database)
         val selections = MangaAllSourceSelectionRepositoryImpl(database)
-        val catalogs = mapOf<String, SearchProvider>(
-            "mangaupdates" to MangaUpdatesIntegrationProvider(app.graph.trackerManager),
-            "shikimori" to ShikimoriIntegrationProvider(app.graph.trackerManager, ShikimoriRequestGate()),
-        )
+        val catalogs = buildMap<String, SearchProvider> {
+            put("mangaupdates", MangaUpdatesIntegrationProvider(app.graph.trackerManager))
+            put("shikimori", ShikimoriIntegrationProvider(app.graph.trackerManager, ShikimoriRequestGate()))
+            if (japanese) {
+                put("mal", MalIntegrationProvider(app.graph.trackerManager))
+                put(
+                    "kitsu",
+                    KitsuIntegrationProvider(
+                        KitsuCatalogProvider(KitsuHttpClient(app.graph.networkHelper, app.graph.json)),
+                        app.graph.trackerManager,
+                    ),
+                )
+            }
+        }
         fun catalogRegistry(names: Set<String>): IntegrationRegistry {
             val selectedCatalogs = names.map(catalogs::getValue)
             return object : IntegrationRegistry {
@@ -382,7 +409,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 else -> false
             }
         }
-        val receipts = File(context.filesDir, "mangaall-frozen30-canonical-receipts-$catalogScope").apply { mkdirs() }
+        val receiptNamespace = if (japanese) "mangaall-japanese-manga-30" else "mangaall-frozen30"
+        val receipts = File(context.filesDir, "$receiptNamespace-canonical-receipts-$catalogScope").apply { mkdirs() }
 
         suspend fun fingerprint(titleId: String, catalogName: String): String? {
             val title = titles.getById(titleId) ?: return null
@@ -466,7 +494,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             val bootstrap = ResolveMangaAllIndependentCatalogIdentity(catalogRegistry(setOf(catalogName)))
             var identity = bootstrap.execute(
                 works[index - 1],
-                CatalogItemFormat.MANHWA,
+                expectedFormat,
                 searchTitle = nativeTitle(index),
             )
             // Retry only transient catalog unavailability against the same
@@ -476,7 +504,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 delay(attempt * 2_000L)
                 identity = bootstrap.execute(
                     works[index - 1],
-                    CatalogItemFormat.MANHWA,
+                    expectedFormat,
                     searchTitle = nativeTitle(index),
                 )
             }
@@ -484,10 +512,29 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             val owner = requireNotNull(identity.identity)
             val provenance = identity.toCanonicalReadingMetadata()
                 ?: return "CATALOG_PROVENANCE_MISSING"
-            if (owner.provider != catalogName || owner.format != CatalogItemFormat.MANHWA ||
+            if (owner.provider != catalogName || owner.format != expectedFormat ||
                 !identity.creatorsAttested
             ) {
                 return "CATALOG_FORMAT_OR_CREATOR_UNVERIFIED"
+            }
+            // These controls reject an incorrect adaptation; they never supply
+            // missing credits or override independent catalog identity.
+            if (japanese) {
+                val required = when (index) {
+                    1 -> listOf("Ichiei Ishibumi", "Hiroji Mishima")
+                    3 -> listOf("Tetsuto Uesu", "Miyakokasiwa")
+                    5 -> listOf("Koushi Tachibana", "Sekihiko Inui")
+                    else -> emptyList()
+                }
+                fun creatorKey(name: String): List<String> = Normalizer.normalize(name, Normalizer.Form.NFKD)
+                    .replace(Regex("""\p{M}+"""), "")
+                    .lowercase()
+                    .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
+                    .trim()
+                    .split(' ')
+                    .sorted()
+                val observed = (owner.authors + owner.artists).map(::creatorKey).toSet()
+                if (required.any { creatorKey(it) !in observed }) return "EDITION_CREDITS_UNVERIFIED"
             }
             // The fresh independent owner must publish the complete native
             // title before reviewed citations can attach to its exact ID.
@@ -870,7 +917,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         )
         var passed = 0
         for (index in indices) {
-            val titleId = "mangaall-frozen30-canonical-$index"
+            val titleId = "$receiptNamespace-canonical-$index"
             acquisitionFacts.clear()
             val result = try {
                 if (phase == "COLLECT" || creditAudit) {
@@ -960,5 +1007,6 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
 
     private companion object {
         const val CORPUS_SHA = "19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1"
+        const val JAPANESE_CORPUS_SHA = "5fbf70722e1ed87e2d9847f6b138728115b77be14dae64ac9730cb72c9d1dcc9"
     }
 }

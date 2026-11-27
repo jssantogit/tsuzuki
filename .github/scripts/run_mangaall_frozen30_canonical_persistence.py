@@ -8,6 +8,7 @@ from pathlib import Path
 
 from run_mangaall_frozen30_independent_catalog import DIGEST, locked_works
 from run_mangaall_frozen30_catalog_plan import plan as load_plan
+from mangaall_research_cohort import load_cohort
 
 APP = "app.tsuzuki.dev"
 RUNNER = APP + ".test/androidx.test.runner.AndroidJUnitRunner"
@@ -26,7 +27,10 @@ def focused_indices(focused):
     return PENDING14 if focused else frozenset(range(1, 31))
 
 
-def report_root(focused):
+def report_root(focused, cohort=None):
+    if cohort and cohort.key == "manga":
+        assert not focused
+        return Path(".github/results/mangaall-japanese-manga-30-canonical-persistence")
     if focused == "remaining6":
         return REMAINING_OUT
     return FOCUSED_OUT if focused else OUT
@@ -37,7 +41,10 @@ def expected_indices(shard, focused=False):
     return indices & focused_indices(focused)
 
 
-def receipt_scope(focused):
+def receipt_scope(focused, cohort=None):
+    if cohort and cohort.key == "manga":
+        assert not focused
+        return "CANONICAL_JAPANESE_MANGA30_SQLITE_SELECTED_OPTION_RESTART"
     if focused == "remaining6":
         return "CANONICAL_FROZEN30_REMAINING6_RESTART"
     return ("CANONICAL_FROZEN30_PENDING14_RESTART" if focused
@@ -47,7 +54,7 @@ STATUS = {
     "DIRTY_DATABASE", "CATALOG_AMBIGUOUS", "CATALOG_NOT_FOUND",
     "CATALOG_UNAVAILABLE", "CATALOG_INCOMPLETE", "CATALOG_UNVERIFIED",
     "CATALOG_FORMAT_UNSUPPORTED", "CATALOG_PROVENANCE_MISSING",
-    "CATALOG_FORMAT_OR_CREATOR_UNVERIFIED", "DUPLICATE_CATALOG_OWNER",
+    "CATALOG_FORMAT_OR_CREATOR_UNVERIFIED", "EDITION_CREDITS_UNVERIFIED", "DUPLICATE_CATALOG_OWNER",
     "REFRESH_FAILED", "CANONICAL_CHAPTER_ONE_MISSING_OR_AMBIGUOUS",
     "READER_OPTION_MISSING_OR_AMBIGUOUS", "SOURCE_ASSOCIATION_MISSING",
     "SOURCE_AUTHOR_OR_EDITION_UNVERIFIED", "SOURCE_SELECTION_FAILED",
@@ -66,7 +73,7 @@ def parse_phase(log, shard, phase, process_ok, catalog="mangaupdates", owners=No
     rows = {}
     invalid = 0
     for match in re.finditer(
-        r"MANGAALL_CANONICAL_PERSISTENCE\|phase=(COLLECT|RESTORE)\|index=(\d+)\|outcome=([A-Z_0-9]+)\|catalog=(mangaupdates|shikimori)",
+        r"MANGAALL_CANONICAL_PERSISTENCE\|phase=(COLLECT|RESTORE)\|index=(\d+)\|outcome=([A-Z_0-9]+)\|catalog=(mangaupdates|shikimori|mal|kitsu)",
         log,
     ):
         observed_phase, index, status, observed_owner = match.groups()
@@ -108,7 +115,7 @@ def parse_reader(log, shard, restored, process_ok, catalog, owners, focused=Fals
     invalid = 0
     restored_by_index = {row["index"]: row["status"] for row in restored["works"]}
     for match in re.finditer(
-        r"MANGAALL_CANONICAL_READER\|index=(\d+)\|outcome=([A-Z_0-9]+)\|catalog=(mangaupdates|shikimori)\|ui=NOT_TESTED",
+        r"MANGAALL_CANONICAL_READER\|index=(\d+)\|outcome=([A-Z_0-9]+)\|catalog=(mangaupdates|shikimori|mal|kitsu)\|ui=NOT_TESTED",
         log,
     ):
         index, status, owner = match.groups()
@@ -186,20 +193,22 @@ def collect_acquisition(log, shard, focused=False):
     return rows
 
 
-def scope(catalog):
+def scope(catalog, cohort=None):
     if catalog!="explicit_plan":
         return None, None
-    rows, digest=load_plan()
+    rows, digest=load_plan(cohort)
     return {r["index"]:r["catalog"] for r in rows}, digest
 
 
-def invoke(shard, phase, catalog, reader=False, focused=False):
-    owners, plan_digest=scope(catalog)
+def invoke(shard, phase, catalog, reader=False, focused=False, cohort=None):
+    owners, plan_digest=scope(catalog, cohort)
     args=["shell", "am", "instrument", "-w", "-r",
           "-e", "mangaAllCanonicalOptIn", "I_ACCEPT_FROZEN30_CANONICAL_RESEARCH",
           "-e", "mangaAllCanonicalPhase", phase,
           "-e", "mangaAllCanonicalCatalog", catalog,
           "-e", "mangaAllFrozen30Shard", str(shard)]
+    if cohort and cohort.key == "manga":
+        args.extend(["-e", "mangaAllCanonicalCohort", "manga"])
     if focused:
         args.extend(["-e", "mangaAllCanonicalPending14", "1"])
     if focused == "remaining6":
@@ -225,13 +234,13 @@ def invoke(shard, phase, catalog, reader=False, focused=False):
     return parsed
 
 
-def evaluate(shard, collect, restore, force_stopped, catalog="mangaupdates", reader=False, focused=False):
+def evaluate(shard, collect, restore, force_stopped, catalog="mangaupdates", reader=False, focused=False, cohort=None):
     restart = (force_stopped and collect["pid"] is not None and restore["pid"] is not None
                and collect["pid"] != restore["pid"])
     return {
-        "schemaVersion": 1, "corpusSha256": DIGEST, "shard": shard,
-        "catalogSource": catalog, "planSha256": scope(catalog)[1],
-        "scope": receipt_scope(focused),
+        "schemaVersion": 1, "corpusSha256": cohort.digest if cohort else DIGEST, "shard": shard,
+        "catalogSource": catalog, "planSha256": scope(catalog, cohort)[1],
+        "scope": receipt_scope(focused, cohort),
         "restartObserved": restart,
         "outcome": "PASS" if restart and collect["complete"] and restore["complete"]
             and (not reader or restore.get("reader", {}).get("complete") is True) else "RED",
@@ -242,7 +251,7 @@ def evaluate(shard, collect, restore, force_stopped, catalog="mangaupdates", rea
     }
 
 
-def run(shard, catalog, reader=False, focused=False):
+def run(shard, catalog, reader=False, focused=False, cohort=None):
     if adb("shell", "getprop", "ro.kernel.qemu").stdout.strip() != "1":
         raise SystemExit("EMULATOR_REQUIRED")
     target = [p for p in Path("app/build/outputs/apk/debug").rglob("*.apk")
@@ -250,7 +259,7 @@ def run(shard, catalog, reader=False, focused=False):
     tests = list(Path("app/build/outputs/apk/androidTest/debug").rglob("*.apk"))
     if len(target) != 1 or len(tests) != 1:
         raise SystemExit("APK_INPUT_COUNT")
-    output = report_root(focused) / f"shard-{shard}"
+    output = report_root(focused, cohort) / f"shard-{shard}"
     output.mkdir(parents=True, exist_ok=True)
     try:
         adb("install", "-r", str(target[0]))
@@ -260,12 +269,12 @@ def run(shard, catalog, reader=False, focused=False):
         adb("shell", "cmd", "connectivity", "airplane-mode", "disable")
         if adb("shell", "settings", "get", "global", "airplane_mode_on").stdout.strip() != "0":
             raise SystemExit("NETWORK_UNAVAILABLE")
-        collect = invoke(shard, "COLLECT", catalog, focused=focused)
+        collect = invoke(shard, "COLLECT", catalog, focused=focused, cohort=cohort)
         adb("shell", "am", "force-stop", APP)
         force_stopped = not adb("shell", "pidof", APP, check=False).stdout.strip()
         # Do not clear application data between the two instrumentation runs.
-        restore = invoke(shard, "RESTORE", catalog, reader, focused)
-        report = evaluate(shard, collect, restore, force_stopped, catalog, reader, focused)
+        restore = invoke(shard, "RESTORE", catalog, reader, focused, cohort)
+        report = evaluate(shard, collect, restore, force_stopped, catalog, reader, focused, cohort)
         (output / "verdict.json").write_text(json.dumps(report, indent=2) + "\n")
         for phase in ("collect", "restore"):
             for row in report[phase]["works"]:
@@ -286,22 +295,22 @@ def run(shard, catalog, reader=False, focused=False):
         adb("shell", "pm", "clear", APP, check=False)
 
 
-def aggregate(catalog, reader=False, focused=False):
-    owners, plan_digest=scope(catalog)
+def aggregate(catalog, reader=False, focused=False, cohort=None):
+    owners, plan_digest=scope(catalog, cohort)
     complete = True
     decoded = 0
     for shard in range(3):
-        path = report_root(focused) / f"shard-{shard}" / "verdict.json"
+        path = report_root(focused, cohort) / f"shard-{shard}" / "verdict.json"
         if not path.is_file():
             complete = False
             continue
         report = json.loads(path.read_text())
         expected = sorted(expected_indices(shard, focused))
-        if (report.get("schemaVersion") != 1 or report.get("corpusSha256") != DIGEST
+        if (report.get("schemaVersion") != 1 or report.get("corpusSha256") != (cohort.digest if cohort else DIGEST)
                 or report.get("catalogSource") != catalog or report.get("planSha256") != plan_digest
                 or report.get("shard") != shard or report.get("outcome") != "PASS"
                 or report.get("restartObserved") is not True
-                or report.get("scope") != receipt_scope(focused)):
+                or report.get("scope") != receipt_scope(focused, cohort)):
             complete = False
         if reader:
             stage = report.get("restore", {}).get("reader", {})
@@ -410,16 +419,19 @@ def main():
     group.add_argument("--shard", type=int, choices=range(3))
     group.add_argument("--aggregate", action="store_true")
     group.add_argument("--selftest", action="store_true")
+    parser.add_argument("--cohort", choices=("manhwa", "manga"), default="manhwa")
     args = parser.parse_args()
-    locked_works()
+    cohort = load_cohort(args.cohort)
     if args.selftest:
         selftest()
         return
     focused = "remaining6" if args.remaining6 else args.pending14
+    if args.cohort == "manga" and (focused or args.catalog != "explicit_plan" or not args.reader):
+        parser.error("Japanese canonical gate requires explicit plan, all 30 and Reader probe")
     if focused and (args.catalog != "explicit_plan" or not args.reader):
         parser.error("Focused runs require the original explicit catalog plan and Reader probe")
-    raise SystemExit(0 if (aggregate(args.catalog, args.reader, focused) if args.aggregate
-                           else run(args.shard, args.catalog, args.reader, focused)) else 1)
+    raise SystemExit(0 if (aggregate(args.catalog, args.reader, focused, cohort) if args.aggregate
+                           else run(args.shard, args.catalog, args.reader, focused, cohort)) else 1)
 
 
 if __name__ == "__main__":
