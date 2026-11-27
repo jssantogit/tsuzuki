@@ -212,6 +212,32 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             catalogScope
         }
 
+        val attestedIdentities = if (japanese) {
+            val doc = instrument.context.assets.open("attested-identities.json")
+                .bufferedReader().use { Json.parseToJsonElement(it.readText()).jsonObject }
+            assertEquals("1", doc.getValue("schemaVersion").jsonPrimitive.content)
+            assertEquals(corpusSha, doc.getValue("corpusSha256").jsonPrimitive.content)
+            assertEquals(
+                args.getString("mangaAllCanonicalPlanSha256"),
+                doc.getValue("planSha256").jsonPrimitive.content,
+            )
+            val rows = doc.getValue("works").jsonArray.map { it.jsonObject }
+            assertEquals((1..30).toList(), rows.map { it.getValue("index").jsonPrimitive.content.toInt() })
+            val digests = rows.mapIndexed { offset, row ->
+                assertEquals(ownerScope(offset + 1), row.getValue("catalog").jsonPrimitive.content)
+                row.getValue("identityDigest").jsonPrimitive.content.also {
+                    require(it.matches(Regex("[0-9a-f]{64}")))
+                }
+            }
+            assertEquals(30, digests.toSet().size)
+            digests
+        } else {
+            emptyList()
+        }
+
+        fun matchesAttestedOwner(index: Int, provider: String, externalId: String): Boolean =
+            !japanese || hash("$provider:$externalId") == attestedIdentities[index - 1]
+
         fun nativeTitle(index: Int): String? = plan.getOrNull(index - 1)
             ?.get("searchTitle")?.jsonPrimitive?.content
 
@@ -422,13 +448,14 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val receiptNamespace = if (japanese) "mangaall-japanese-manga-30" else "mangaall-frozen30"
         val receipts = File(context.filesDir, "$receiptNamespace-canonical-receipts-$catalogScope").apply { mkdirs() }
 
-        suspend fun fingerprint(titleId: String, catalogName: String): String? {
+        suspend fun fingerprint(titleId: String, catalogName: String, index: Int): String? {
             val title = titles.getById(titleId) ?: return null
             val snapshot = metadata.get(titleId) ?: return null
             val identities = titles.getExternalIdentities(titleId)
             if (identities.size != 1 || !identities.single().verified) return null
             val owner = identities.single()
             if (owner.provider != catalogName) return null
+            if (!matchesAttestedOwner(index, owner.provider, owner.externalId)) return null
             val ownerIntegration = IntegrationId(owner.provider)
             if (snapshot.metadata.externalIds[ownerIntegration] != owner.externalId) return null
             val credits = listOfNotNull(snapshot.metadata.authors, snapshot.metadata.artists)
@@ -533,6 +560,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             }
             if (identity.status != MangaAllCatalogIdentityStatus.RESOLVED) return identity.status.name
             val owner = requireNotNull(identity.identity)
+            if (!matchesAttestedOwner(index, owner.provider, owner.providerId)) return "CATALOG_ATTESTED_OWNER_CHANGED"
             val provenance = identity.toCanonicalReadingMetadata()
                 ?: return "CATALOG_PROVENANCE_MISSING"
             if (owner.provider != catalogName || owner.format != expectedFormat ||
@@ -861,7 +889,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     return "SOURCE_SELECTION_FAILED"
                 }
             }
-            val receipt = fingerprint(titleId, catalogName) ?: return "SQLITE_INVARIANT_FAILED"
+            val receipt = fingerprint(titleId, catalogName, index) ?: return "SQLITE_INVARIANT_FAILED"
             File(receipts, "$index.sha256").writeText(receipt)
             return "COLLECTED"
         }
@@ -936,7 +964,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     val receipt = File(receipts, "$index.sha256")
                     if (!receipt.isFile) {
                         "NO_COLLECTED_RECEIPT"
-                    } else if (fingerprint(titleId, ownerScope(index)) != receipt.readText()) {
+                    } else if (fingerprint(titleId, ownerScope(index), index) != receipt.readText()) {
                         "SQLITE_RESTORE_MISMATCH"
                     } else {
                         "RESTORED"

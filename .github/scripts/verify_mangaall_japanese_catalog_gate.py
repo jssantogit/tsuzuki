@@ -73,6 +73,16 @@ def verify_verdicts(root, cohort, rows, digest):
                     "CATALOG_GATE_UNATTESTED_WORK")
             identities.append(identity)
     require(len(identities) == len(set(identities)) == 30, "CATALOG_GATE_DUPLICATE_IDENTITY")
+    return identities
+
+
+def write_attested_identities(output, cohort, rows, digest, identities):
+    require(len(identities) == 30 and len(set(identities)) == 30, "CATALOG_GATE_DUPLICATE_IDENTITY")
+    doc = dict(schemaVersion=1, corpusSha256=cohort.digest, planSha256=digest,
+               works=[dict(index=r["index"], catalog=r["catalog"], identityDigest=identity)
+                      for r, identity in zip(rows, identities, strict=True)])
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(doc, indent=2)+"\n")
 
 
 def selftest():
@@ -109,7 +119,14 @@ def selftest():
                        planSha256=digest, shard=shard, outcome="PASS", processesPassed=True,
                        invalidAttestations=0, works=found)
             (p / "verdict.json").write_text(json.dumps(doc))
-        verify_verdicts(root, cohort, rows, digest)
+        verified = verify_verdicts(root, cohort, rows, digest)
+        assert verified == [f"{i:064x}" for i in range(1,31)]
+        output = root / "identities.json"
+        write_attested_identities(output, cohort, rows, digest, verified)
+        emitted = json.loads(output.read_text())
+        assert emitted["planSha256"] == digest and emitted["corpusSha256"] == cohort.digest
+        assert [r["identityDigest"] for r in emitted["works"]] == verified
+        assert [r["catalog"] for r in emitted["works"]] == [r["catalog"] for r in rows]
         path = root / "mangaall-japanese-plan-shard-0" / "verdict.json"
         doc = json.loads(path.read_text())
         doc["works"][0]["identityDigest"] = doc["works"][1]["identityDigest"]
@@ -124,6 +141,7 @@ def selftest():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--selftest", action="store_true")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.selftest:
         selftest()
@@ -143,7 +161,9 @@ def main():
     with TemporaryDirectory() as tmp:
         subprocess.run(["gh", "run", "download", run_id, "--repo", repo,
                         "--pattern", "mangaall-japanese-plan-shard-*", "--dir", tmp], check=True)
-        verify_verdicts(Path(tmp), cohort, rows, digest)
+        identities = verify_verdicts(Path(tmp), cohort, rows, digest)
+        if args.output is not None:
+            write_attested_identities(args.output, cohort, rows, digest, identities)
     print(f"MANGAALL_JAPANESE_CATALOG_GATE|run={run_id}|attested=30|sameSourceTree=YES|outcome=PASS")
 
 

@@ -46,7 +46,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python3 .github/scripts/verify_mangaall_japanese_catalog_gate.py
+          python3 .github/scripts/verify_mangaall_japanese_catalog_gate.py \
+            --output .github/results/japanese-catalog-gate/attested-identities.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: contains(github.event.head_commit.message, 'RUN_JAPANESE30_CANONICAL_LIVE')
+        with:
+          name: japanese30-attested-identities
+          path: .github/results/japanese-catalog-gate/attested-identities.json
+          if-no-files-found: error
+          retention-days: 1
 
   build-once:
     needs: preflight
@@ -68,6 +76,10 @@ jobs:
           mkdir -p app/src/androidTest/assets
           cp .github/mangaall-japanese-manga-30-cohort-lock.json app/src/androidTest/assets/
           cp .github/mangaall-japanese-manga-30-catalog-plan.json app/src/androidTest/assets/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: japanese30-attested-identities
+          path: app/src/androidTest/assets/
       - name: Stage pinned, NONSHIPPING code11 ZIP and exact lock into test assets
         run: |
           set -euo pipefail
