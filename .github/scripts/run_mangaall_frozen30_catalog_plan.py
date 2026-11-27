@@ -14,7 +14,7 @@ from run_mangaall_frozen30_independent_catalog import (
 
 from mangaall_research_cohort import load_cohort, edition_credits_match
 SCOPES=("mangaupdates","shikimori")
-PROBE_SCOPES=("shikimori","mal","kitsu")
+PROBE_SCOPES=("mangaupdates","shikimori","mal","kitsu")
 # Exactly the unresolved indices from #45923232242. These diagnostic probes
 # cannot pass the canonical gate or replace the explicit owner plan.
 JAPANESE_UNRESOLVED=frozenset(range(1,31)) - {4,9,12,15,16,22,29}
