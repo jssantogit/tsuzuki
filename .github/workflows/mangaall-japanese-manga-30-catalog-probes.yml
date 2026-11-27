@@ -250,3 +250,5 @@ jobs:
 # Recheck both adaptations with publisher-attested native credit spellings and per-group match diagnostics.
 
 # Keep owner-specific retrieval hints separate and retain typed creator-group diagnostics.
+
+# Record closed detail verification failures without changing the acceptance policy.

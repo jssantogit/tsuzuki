@@ -390,6 +390,46 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
     }
 
     @Test
+    fun `detail rejections preserve closed causes without weakening identity or creator constraints`() = runTest {
+        for (provider in listOf("mangaupdates", "shikimori", "mal", "kitsu")) {
+            val row = item(provider, "42", "Work").copy(
+                format = CatalogItemFormat.MANGA,
+                authors = listOf("Writer", "Artist"),
+                titles = mapOf("native" to "Native"),
+                externalIds = mapOf(provider to "42"),
+            )
+            val cases = listOf(
+                row.copy(providerId = "43") to MangaAllCatalogDetailRejection.OWNER_MISMATCH,
+                row.copy(format = CatalogItemFormat.NOVEL) to MangaAllCatalogDetailRejection.FORMAT_MISMATCH,
+                row.copy(externalIds = mapOf(provider to "99")) to MangaAllCatalogDetailRejection.CROSSWALK_CONFLICT,
+                row.copy(title = "Other Work") to MangaAllCatalogDetailRejection.REQUESTED_TITLE_MISSING,
+                row.copy(titles = emptyMap()) to MangaAllCatalogDetailRejection.RETRIEVAL_TITLE_MISSING,
+            )
+            for ((detail, reason) in cases) {
+                val catalog = source(provider, search = { CatalogPage(listOf(row), false) }, detail = { detail })
+                val result = ResolveMangaAllIndependentCatalogIdentity(registry(catalog)).execute(
+                    "Work",
+                    CatalogItemFormat.MANGA,
+                    searchTitle = "Native",
+                    requiredCreatorNames = listOf("Writer", "Artist"),
+                )
+                result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+                result.identity shouldBe null
+                result.detailRejections shouldBe mapOf(reason to 1)
+            }
+            val valid = source(provider, search = { CatalogPage(listOf(row), false) }, detail = { row })
+            val result = ResolveMangaAllIndependentCatalogIdentity(registry(valid)).execute(
+                "Work",
+                CatalogItemFormat.MANGA,
+                searchTitle = "Native",
+                requiredCreatorNames = listOf("Writer", "Artist"),
+            )
+            result.status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+            result.detailRejections shouldBe emptyMap()
+        }
+    }
+
+    @Test
     fun `catalog published alias must also be corroborated by the owning detail`() = runTest {
         val searchItem = item("shikimori", "42", "Primary")
             .copy(titles = mapOf("alternate" to "Requested Alias"))
