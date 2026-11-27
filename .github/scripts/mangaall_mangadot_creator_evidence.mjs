@@ -227,3 +227,34 @@ export async function observeMangaDotCreators(candidate, host = globalThis.tsuzu
 export function mangaDotExactTitle(candidate, title) {
   return !!exactName(title) && exactName(candidate?.title) === exactName(title);
 }
+
+// A source display title can append a localized subtitle. Treat this solely
+// as a bounded detail-fetch hint: the exact requested name must be published
+// as an alias on the same verified HID before enrichment can affect lookup.
+function subtitleCandidate(candidate, title) {
+  const requested = exactName(title), found = exactName(candidate?.title);
+  const words = requested.match(/[\p{L}\p{N}]+/gu) || [];
+  if (words.length < 2 || !found.startsWith(requested + " ")) return false;
+  const suffix = found.slice(requested.length + 1);
+  const suffixWords = suffix.match(/[\p{L}\p{N}]+/gu) || [];
+  return suffix.length <= 96 && suffixWords.length >= 1 && suffixWords.length <= 6;
+}
+
+export async function enrichMangaDotLookupCandidates(items, title, host, includeCatalogReferences = false) {
+  const exact = items.filter(item => mangaDotExactTitle(item, title));
+  const alternatives = items.filter(item => !mangaDotExactTitle(item, title) && subtitleCandidate(item, title));
+  const seen = new Set();
+  let attempts = 0;
+  for (const item of [...exact, ...alternatives]) {
+    if (attempts >= 3) break;
+    if (seen.has(item.externalWorkId)) continue;
+    seen.add(item.externalWorkId);
+    attempts++;
+    const detail = await observeMangaDotCreators(item, host, includeCatalogReferences);
+    if (mangaDotExactTitle(item, title) ||
+        (detail.detailOutcome === "VERIFIED_WITH_ALIASES" &&
+         detail.aliases.some(alias => exactName(alias) === exactName(title)))) {
+      Object.assign(item, detail);
+    }
+  }
+}

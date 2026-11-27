@@ -160,15 +160,14 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False,
         creator_module = Path(__file__).with_name("mangaall_mangadot_creator_evidence.mjs")
         files["modules/sources/mangadot/modules/creator-evidence.js"] = creator_module.read_bytes()
         files[dot_name] = (
-            b'import { observeMangaDotCreators, mangaDotExactTitle } from "./creator-evidence.js";\n'
+            b'import { enrichMangaDotLookupCandidates } from "./creator-evidence.js";\n'
             + files[dot_name]
         )
         files[dot_name] = change_one(
             files[dot_name],
             b'  return { items, nextCursor: hasNext ? String(page + 1) : null };',
             b'  if (input?.editorialEvidenceVersion === 1) {\n'
-            b'    const exact = items.filter(item => mangaDotExactTitle(item, title)).slice(0, 3);\n'
-            b'    for (const item of exact) Object.assign(item, await observeMangaDotCreators(item, globalThis.tsuzuki, input?.catalogEvidenceVersion === 1));\n'
+            b'    await enrichMangaDotLookupCandidates(items, title, globalThis.tsuzuki, input?.catalogEvidenceVersion === 1);\n'
             b'  }\n'
             b'  return { items, nextCursor: hasNext ? String(page + 1) : null };',
             "MANGADOT_CREATOR_ENRICHMENT",
