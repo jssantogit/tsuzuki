@@ -1,5 +1,6 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
+import tachiyomi.domain.tsuzuki.catalog.interactor.mangaAllCatalogCreatorKey
 import tachiyomi.domain.tsuzuki.identity.foldLatinIdentityDiacritics
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import java.text.Normalizer
@@ -59,6 +60,7 @@ object ProviderWorkSourcePortfolio {
         independentlyVerifiedAuthors: Set<String>?,
         candidates: List<ProviderWorkCandidate>,
         independentlyVerifiedMangaUpdatesId: String? = null,
+        requiredCreatorGroups: List<Set<String>> = emptyList(),
     ): List<ProviderWorkSourceAssessment> {
         val normalizedQuery = normalizeTitle(queryTitle)
         require(normalizedQuery.isNotEmpty()) { "Portfolio query title cannot be empty" }
@@ -66,6 +68,12 @@ object ProviderWorkSourcePortfolio {
             ?.flatMap(::creatorKeys)
             ?.toSet()
             ?.takeIf { it.isNotEmpty() }
+
+        require(requiredCreatorGroups.size <= 8)
+        require(requiredCreatorGroups.all { it.isNotEmpty() && it.size <= 9 && it.none(String::isBlank) })
+        require(requiredCreatorGroups.flatten().distinct().size == requiredCreatorGroups.sumOf { it.size })
+        val canonicalKeys = independentlyVerifiedAuthors.orEmpty().map(::mangaAllCatalogCreatorKey).toSet()
+        val constraintsVerified = requiredCreatorGroups.all { group -> group.any(canonicalKeys::contains) }
 
         val observations = candidates.map { candidate ->
             val exactTitle = sequenceOf(candidate.title)
@@ -85,11 +93,19 @@ object ProviderWorkSourcePortfolio {
             val catalogConflict = catalogId != null && references.isNotEmpty() &&
                 references != listOf(catalogId)
             val catalogMatch = catalogId != null && references == listOf(catalogId)
+            val exactCreditKeys = candidate.authors.map(::mangaAllCatalogCreatorKey).toSet()
+            val matchedGroups = requiredCreatorGroups.count { group -> group.any(exactCreditKeys::contains) }
             val verification = when {
                 !exactTitle -> ProviderWorkVerification.TITLE_UNVERIFIED
-                expectedAuthors == null -> ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED
+                expectedAuthors == null || !constraintsVerified -> ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED
                 !detailVerified -> ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED
                 catalogConflict -> ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+                // For a reviewed adaptation, a shared original writer alone is
+                // not proof of the manga edition. Keep every required credit
+                // distinct, even when a provider returns a positive chapter count.
+                matchedGroups < requiredCreatorGroups.size &&
+                    matchedGroups == 0 && sourceAuthors.isNotEmpty() -> ProviderWorkVerification.AUTHOR_CONFLICT
+                matchedGroups < requiredCreatorGroups.size -> ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE
                 sourceAuthors.isEmpty() && catalogMatch -> ProviderWorkVerification.CATALOG_CORROBORATED
                 sourceAuthors.isEmpty() -> ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE
                 sourceAuthors.none { it in expectedAuthors } &&

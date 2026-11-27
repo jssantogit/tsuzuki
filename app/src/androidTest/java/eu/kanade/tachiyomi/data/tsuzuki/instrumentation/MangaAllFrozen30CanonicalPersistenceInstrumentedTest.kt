@@ -390,6 +390,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         fun refreshForBatch(
             batch: Int,
             references: List<ReviewedCreatorAliasReference> = emptyList(),
+            creatorGroups: List<Set<String>> = emptyList(),
         ): RefreshChapterEvidence {
             val collector = CollectProviderReadingEvidence(
                 canonicalTitleRepository = titles,
@@ -407,6 +408,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 nativeMangaDotPortfolioResearch = catalogScope == "explicit_plan",
                 researchTitleQueryBatch = batch,
                 researchCreatorReferences = references,
+                researchRequiredCreatorGroups = creatorGroups,
             )
             return RefreshChapterEvidence(
                 registry = metadataRegistry,
@@ -586,10 +588,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             }
             // These controls reject an incorrect adaptation; they never supply
             // missing credits or override independent catalog identity.
+            val creatorGroups = if (japanese) mangaAllCatalogCreatorGroups(required, creatorAliases) else emptyList()
             if (japanese) {
                 val observed = (owner.authors + owner.artists).map(::mangaAllCatalogCreatorKey).toSet()
-                val groups = mangaAllCatalogCreatorGroups(required, creatorAliases)
-                if (groups.any { group -> group.none(observed::contains) }) return "EDITION_CREDITS_UNVERIFIED"
+                if (creatorGroups.any { group -> group.none(observed::contains) }) return "EDITION_CREDITS_UNVERIFIED"
             }
             // The fresh independent owner must publish the complete native
             // title before reviewed citations can attach to its exact ID.
@@ -796,7 +798,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     it.baseNumber == 1 && it.part == null && it.alphaSuffix == null &&
                     it.decimalFraction == null && it.confirmation != CanonicalChapterConfirmation.CONFLICTED
             }
-            if (refreshForBatch(0, references).execute(titleId, forceRefresh = true).isFailure) {
+            if (refreshForBatch(0, references, creatorGroups).execute(titleId, forceRefresh = true).isFailure) {
                 return "REFRESH_FAILED"
             }
             if (catalogScope == "explicit_plan") {
@@ -808,7 +810,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     if (observed.singleOrNull()?.let { resolver.options(it.id).isNotEmpty() } == true) break
                     // Each refresh uses the same source/lane budget; only the
                     // bounded window of independently observed names changes.
-                    if (refreshForBatch(batch, references).execute(titleId, forceRefresh = true).isFailure) {
+                    if (refreshForBatch(batch, references, creatorGroups).execute(titleId, forceRefresh = true).isFailure) {
                         return "REFRESH_FAILED"
                     }
                 }

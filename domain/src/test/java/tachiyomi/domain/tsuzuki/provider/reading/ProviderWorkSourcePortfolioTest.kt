@@ -2,6 +2,7 @@ package tachiyomi.domain.tsuzuki.provider.reading
 
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.catalog.interactor.mangaAllCatalogCreatorGroups
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 
 class ProviderWorkSourcePortfolioTest {
@@ -17,6 +18,35 @@ class ProviderWorkSourcePortfolioTest {
         coverageMaxMilli = 97_000,
         coverageHasMore = false,
     )
+
+    @Test
+    fun `adaptations sharing an original writer require the independently verified illustrator in either source`() {
+        val groups = mangaAllCatalogCreatorGroups(
+            listOf("Original Writer", "Manga Artist"),
+            mapOf("Manga Artist" to listOf("Artist Alias")),
+        )
+        for (id in listOf("mangadot:42", "mangadex:00000000-0000-0000-0000-000000000042")) {
+            val work = original.copy(externalWorkId = id, title = "Adaptation")
+            fun assess(
+                authors: List<String>,
+                canonical: Set<String> = setOf("Original Writer", "Manga Artist"),
+            ) = ProviderWorkSourcePortfolio.assess(
+                ProviderId("app.tsuzuki.mangaall"),
+                "en",
+                work.title,
+                canonical,
+                listOf(work.copy(authors = authors)),
+                requiredCreatorGroups = groups,
+            ).single()
+            assess(listOf("Original Writer", "Manga Artist")).canCollectProvisionalChapters shouldBe true
+            assess(listOf("Original Writer", "Artist Alias")).canCollectProvisionalChapters shouldBe true
+            assess(listOf("Original Writer", "Different Illustrator")).workVerification shouldBe
+                ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE
+            assess(listOf("Original Writer")).canCollectProvisionalChapters shouldBe false
+            assess(listOf("Original Writer", "Manga Artist"), setOf("Original Writer")).workVerification shouldBe
+                ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED
+        }
+    }
 
     @Test
     fun `catalog work attestation is scoped to title source facet version and configuration`() {

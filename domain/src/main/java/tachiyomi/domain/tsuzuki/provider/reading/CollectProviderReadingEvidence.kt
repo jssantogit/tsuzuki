@@ -117,6 +117,7 @@ class CollectProviderReadingEvidence private constructor(
     private val nativeMangaDotPortfolioResearch: Boolean,
     private val researchTitleQueryBatch: Int,
     private val researchCreatorReferences: List<ReviewedCreatorAliasReference>,
+    private val researchRequiredCreatorGroups: List<Set<String>>,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
 
@@ -124,6 +125,7 @@ class CollectProviderReadingEvidence private constructor(
         require(researchTitleQueryBatch in 0..3)
         require(researchTitleQueryBatch == 0 || nativeMangaDotPortfolioResearch)
         require(researchCreatorReferences.isEmpty() || nativeMangaDotPortfolioResearch)
+        require(researchRequiredCreatorGroups.isEmpty() || nativeMangaDotPortfolioResearch)
     }
 
     @Inject
@@ -156,6 +158,7 @@ class CollectProviderReadingEvidence private constructor(
         nativeMangaDotPortfolioResearch = false,
         researchTitleQueryBatch = 0,
         researchCreatorReferences = emptyList(),
+        researchRequiredCreatorGroups = emptyList(),
         constructorMarker = Unit,
     )
 
@@ -176,6 +179,7 @@ class CollectProviderReadingEvidence private constructor(
         nativeMangaDotPortfolioResearch: Boolean = false,
         researchTitleQueryBatch: Int = 0,
         researchCreatorReferences: List<ReviewedCreatorAliasReference> = emptyList(),
+        researchRequiredCreatorGroups: List<Set<String>> = emptyList(),
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -193,6 +197,7 @@ class CollectProviderReadingEvidence private constructor(
         nativeMangaDotPortfolioResearch = nativeMangaDotPortfolioResearch,
         researchTitleQueryBatch = researchTitleQueryBatch,
         researchCreatorReferences = researchCreatorReferences,
+        researchRequiredCreatorGroups = researchRequiredCreatorGroups,
         constructorMarker = Unit,
     )
 
@@ -771,6 +776,7 @@ class CollectProviderReadingEvidence private constructor(
                                     canonicalCreators,
                                     exact,
                                     independentlyVerifiedMangaUpdatesId = independentCatalogId,
+                                    requiredCreatorGroups = researchRequiredCreatorGroups,
                                 )
                                 assessments.forEach {
                                     traceWorkSourceAssociation(
@@ -1353,6 +1359,7 @@ class CollectProviderReadingEvidence private constructor(
             canonicalCreators,
             contenders,
             independentlyVerifiedMangaUpdatesId,
+            requiredCreatorGroups = researchRequiredCreatorGroups,
         ).associateBy { it.ref.externalWorkId }
         val previews = mutableListOf<ProviderWorkCandidate>()
         var activePreview: ProviderBindingRef? = null
@@ -1406,6 +1413,7 @@ class CollectProviderReadingEvidence private constructor(
                     canonicalCreators,
                     listOf(candidate),
                     independentlyVerifiedMangaUpdatesId,
+                    requiredCreatorGroups = researchRequiredCreatorGroups,
                 ).single()
                 if (individual.workVerification != assessment.workVerification ||
                     individual.editionQualification != assessment.editionQualification
@@ -1506,6 +1514,7 @@ class CollectProviderReadingEvidence private constructor(
             independentlyVerifiedAuthors = canonicalCreators,
             candidates = trusted,
             independentlyVerifiedMangaUpdatesId = independentlyVerifiedMangaUpdatesId,
+            requiredCreatorGroups = researchRequiredCreatorGroups,
         )
         val retained = mutableListOf<ProviderWorkSourceAssessment>()
         for (assessment in assessed) {
@@ -1616,6 +1625,7 @@ class CollectProviderReadingEvidence private constructor(
                         queryTitle = title,
                         independentlyVerifiedAuthors = canonicalCreators,
                         candidates = trusted,
+                        requiredCreatorGroups = researchRequiredCreatorGroups,
                     ).any { it.ref != preferredRef && it.canCollectProvisionalChapters }
                 },
             )
