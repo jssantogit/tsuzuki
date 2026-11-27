@@ -1,42 +1,43 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
 /**
- * Closed provenance gate for Reader evidence inside the one MangaAll Provider.
- *
- * MangaDex, MangaDot and MangaFire are internal content sources, not Provider IDs.
- * A work, chapter and attested language must all point to the same source/facet
- * before a chapter is offered for reading. An unknown language is not an
- * invitation to silently serve the wrong translation.
- *
- * Other Providers keep their existing identity and Reader behavior.
+ * Trusted, host-owned identity contract for one internal content source.
+ * The source's adapter defines the key grammar; the shared gate enforces
+ * namespace, supported language and Reader capability for every source.
+ * A source-supplied lookup result cannot register or change its own contract.
  */
-object MangaAllReadingIdentity {
-    private const val PROVIDER_ID = "app.tsuzuki.mangaall"
-    private val supportedLanguages = mapOf(
-        "mangadex" to setOf("en", "pt-br"),
-        "mangadot" to setOf("en", "pt-br"),
-        "mangafire" to setOf("en"),
-    )
+internal data class MangaAllSourceIdentityContract(
+    val sourceId: String,
+    val languages: Set<String>,
+    val readerReady: Boolean,
+    val workKey: Regex = Regex("[\\s\\S]+"),
+    val chapterKey: Regex = Regex("[\\s\\S]+"),
+) {
+    init {
+        require(sourceId.matches(Regex("[a-z][a-z0-9-]{0,63}")))
+        require(languages.isNotEmpty() && languages.all { it.isNotBlank() && it == it.lowercase() })
+    }
+}
 
-    // Development-only MangaAll routes pages from all three internal sources.
-    // Production publication still requires group-removal enforcement, credits
-    // and physical verification of MangaDex@Home image delivery.
-    // A package-wide pages capability alone never establishes readability.
-    private val readerReadySources = setOf("mangafire", "mangadot", "mangadex")
+/** The same fail-closed rules apply to an arbitrary number of registered sources. */
+internal class MangaAllSourceIdentityPolicy(contracts: List<MangaAllSourceIdentityContract>) {
+    private val byId = contracts.associateBy { it.sourceId }
 
-    /** Content source for UI/diagnostics, distinct from the one Provider ID. */
-    fun sourceId(ref: ProviderBindingRef): String? {
-        if (ref.providerId.value != PROVIDER_ID) return null
-        val source = ref.externalWorkId.substringBefore(':', missingDelimiterValue = "")
-        val localId = ref.externalWorkId.substringAfter(':', missingDelimiterValue = "")
-        return source.takeIf { it in supportedLanguages && localId.isNotBlank() }
+    init {
+        require(byId.size == contracts.size) { "Duplicate MangaAll source identity contract" }
     }
 
-    /** A language facet is requested, not evidence that translated pages exist. */
+    fun sourceId(ref: ProviderBindingRef): String? {
+        if (ref.providerId.value != MANGAALL_PROVIDER_ID) return null
+        val source = ref.externalWorkId.substringBefore(':', missingDelimiterValue = "")
+        val localId = ref.externalWorkId.substringAfter(':', missingDelimiterValue = "")
+        return source.takeIf { it in byId && localId.isNotBlank() }
+    }
+
     fun supportsRequestedLanguage(ref: ProviderBindingRef): Boolean {
         val source = sourceId(ref) ?: return false
         val language = ref.facetId?.lowercase() ?: return false
-        return language in supportedLanguages[source].orEmpty()
+        return language in byId.getValue(source).languages
     }
 
     fun accepts(
@@ -44,35 +45,51 @@ object MangaAllReadingIdentity {
         providerChapterId: String,
         reportedLanguage: String?,
     ): Boolean {
-        if (ref.providerId.value != PROVIDER_ID) return true
-        val workSource = sourceId(ref) ?: return false
-        if (workSource !in readerReadySources) return false
-        val workLocalId = ref.externalWorkId.substringAfter(':', missingDelimiterValue = "")
-        val chapterSource = providerChapterId.substringBefore(':', missingDelimiterValue = "")
-        val chapterLocalId = providerChapterId.substringAfter(':', missingDelimiterValue = "")
-        if (
-            workLocalId.isBlank() ||
-            chapterLocalId.isBlank() ||
-            chapterSource != workSource
-        ) {
-            return false
-        }
+        if (ref.providerId.value != MANGAALL_PROVIDER_ID) return true
+        val source = sourceId(ref) ?: return false
+        val contract = byId.getValue(source)
         val language = ref.facetId?.lowercase() ?: return false
-        if (!supportsRequestedLanguage(ref)) return false
-        // MangaDot IDs encode the upstream image endpoint to prevent accidental
-        // uploads/chapters ambiguity and malformed IDs reaching the Reader.
-        if (
-            workSource == "mangadot" &&
-            !Regex("^(uploads|chapters):[1-9][0-9]{0,15}$").matches(chapterLocalId)
-        ) {
-            return false
-        }
-        // MangaDex chapter and work identities are canonical UUIDs. Keep
-        // malformed or cross-source IDs away from page delivery.
-        if (workSource == "mangadex") {
-            val uuid = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-            if (!uuid.matches(workLocalId) || !uuid.matches(chapterLocalId)) return false
-        }
-        return reportedLanguage?.lowercase() == language
+        if (!contract.readerReady || language !in contract.languages) return false
+        if (reportedLanguage?.lowercase() != language) return false
+        val workKey = ref.externalWorkId.substringAfter(':')
+        val chapterSource = providerChapterId.substringBefore(':', missingDelimiterValue = "")
+        val chapterKey = providerChapterId.substringAfter(':', missingDelimiterValue = "")
+        return chapterSource == source &&
+            chapterKey.isNotBlank() &&
+            contract.workKey.matches(workKey) &&
+            contract.chapterKey.matches(chapterKey)
     }
+}
+
+private const val MANGAALL_PROVIDER_ID = "app.tsuzuki.mangaall"
+
+/**
+ * Production defaults remain explicitly trusted. Adding a source requires
+ * a reviewed contract, not a special branch in the shared identity algorithm.
+ * The current Reader readiness flags do not authorize publication.
+ */
+object MangaAllReadingIdentity {
+    private val uuid = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+    private val policy = MangaAllSourceIdentityPolicy(
+        listOf(
+            MangaAllSourceIdentityContract("mangadex", setOf("en", "pt-br"), true, uuid, uuid),
+            MangaAllSourceIdentityContract(
+                "mangadot",
+                setOf("en", "pt-br"),
+                true,
+                chapterKey = Regex("^(uploads|chapters):[1-9][0-9]{0,15}$"),
+            ),
+            MangaAllSourceIdentityContract("mangafire", setOf("en"), true),
+        ),
+    )
+
+    fun sourceId(ref: ProviderBindingRef): String? = policy.sourceId(ref)
+
+    fun supportsRequestedLanguage(ref: ProviderBindingRef): Boolean = policy.supportsRequestedLanguage(ref)
+
+    fun accepts(
+        ref: ProviderBindingRef,
+        providerChapterId: String,
+        reportedLanguage: String?,
+    ): Boolean = policy.accepts(ref, providerChapterId, reportedLanguage)
 }
