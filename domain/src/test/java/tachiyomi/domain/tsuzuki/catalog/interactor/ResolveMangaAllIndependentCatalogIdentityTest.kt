@@ -466,6 +466,34 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
         }
     }
 
+    @Test
+    fun `native retrieval hints require independently published titles on all four catalogs`() = runTest {
+        for (provider in listOf("mangaupdates", "shikimori", "mal", "kitsu")) {
+            val native = "作品"
+            val row = item(provider, "42", "Work").copy(format = CatalogItemFormat.MANGA)
+            val detail = row.copy(titles = mapOf("native" to native), authors = listOf("Creator"))
+            val verified = source(provider, search = { query ->
+                query.query shouldBe native
+                CatalogPage(listOf(row), false)
+            }, detail = { detail })
+            val missing = source(provider, search = {
+                CatalogPage(listOf(row), false)
+            }, detail = { row })
+            val unrelated = source(provider, search = {
+                CatalogPage(listOf(row.copy(title = native)), false)
+            }, detail = { error("Retrieval hint cannot supply the frozen identity") })
+            val positive = ResolveMangaAllIndependentCatalogIdentity(registry(verified))
+                .execute("Work", CatalogItemFormat.MANGA, searchTitle = native)
+            positive.status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+            ResolveMangaAllIndependentCatalogIdentity(registry(missing))
+                .execute("Work", CatalogItemFormat.MANGA, searchTitle = native).status shouldBe
+                MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+            ResolveMangaAllIndependentCatalogIdentity(registry(unrelated))
+                .execute("Work", CatalogItemFormat.MANGA, searchTitle = native).status shouldBe
+                MangaAllCatalogIdentityStatus.CATALOG_NOT_FOUND
+        }
+    }
+
     private fun item(
         provider: String,
         id: String,

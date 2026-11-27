@@ -175,7 +175,9 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         }
         val bootstrap = ResolveMangaAllIndependentCatalogIdentity(registry)
         val searchHints = args.getString("catalogSearchHintsBase64")?.let { hints ->
-            require(catalogName == "mangaupdates")
+            // Preserve the original Korean research contract. The Japanese
+            // profile uses the same native-query capability on any owner.
+            require(catalogName == "mangaupdates" || works.all { parseWork(it).format == CatalogItemFormat.MANGA })
             Json.parseToJsonElement(Base64.decode(hints, Base64.NO_WRAP).toString(Charsets.UTF_8))
                 .jsonObject.mapValues { it.value.jsonPrimitive.content }
         }.orEmpty()

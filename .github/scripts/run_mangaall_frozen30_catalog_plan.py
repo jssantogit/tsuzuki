@@ -43,7 +43,10 @@ def plan(cohort=None):
                        and url.startswith("https://") for name,url in ref["aliases"].items())
         assert row["catalog"] in (SCOPES if cohort.key == "manhwa" else PROBE_SCOPES)
         hint=row.get("searchTitle")
-        assert hint is None or (row["catalog"]=="mangaupdates" and isinstance(hint,str) and 0<len(hint)<=256)
+        assert hint is None or (
+            (cohort.key == "manga" or row["catalog"] == "mangaupdates")
+            and isinstance(hint,str) and 0<len(hint.strip())<=256 and len(hint)<=256
+        )
     return rows,hashlib.sha256(raw).hexdigest()
 
 
