@@ -123,7 +123,7 @@ jobs:
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
           # Prefer already cached, pinned dependencies; do not suppress real failures.
-          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' --tests '*MangaAllCatalogCanonicalMetadataTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
             cat "$log"
             exit 0
           fi
@@ -132,7 +132,7 @@ jobs:
             exit 1
           fi
           for attempt in 1 2 3; do
-            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' --tests '*MangaAllCatalogCanonicalMetadataTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               exit 0
             fi
@@ -236,3 +236,5 @@ jobs:
 # Retry after auditing the instrumentation line-length violations in both corpus runners.
 
 # Retry after clarifying canonical owner scope condition.
+
+# Revalidate after exact import ordering, crosswalk conflict and Kitsu public staff corrections.

@@ -40,12 +40,12 @@ import tachiyomi.data.tsuzuki.CanonicalTitleRepositoryImpl
 import tachiyomi.data.tsuzuki.TitleNameObservationRepositoryImpl
 import tachiyomi.data.tsuzuki.chapter.ChapterEvidenceRepositoryImpl
 import tachiyomi.data.tsuzuki.integration.CanonicalMetadataSnapshotRepositoryImpl
+import tachiyomi.data.tsuzuki.kitsu.KitsuCatalogProvider
+import tachiyomi.data.tsuzuki.kitsu.client.KitsuHttpClient
 import tachiyomi.data.tsuzuki.provider.MangaAllSourceSelectionRepositoryImpl
 import tachiyomi.data.tsuzuki.provider.ProviderProvisionalCursorRepositoryImpl
 import tachiyomi.data.tsuzuki.provider.ProviderReadingBindingRepositoryImpl
 import tachiyomi.data.tsuzuki.provider.ProviderWorkSourceAssociationRepositoryImpl
-import tachiyomi.data.tsuzuki.kitsu.KitsuCatalogProvider
-import tachiyomi.data.tsuzuki.kitsu.client.KitsuHttpClient
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
 import tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentity
 import tachiyomi.domain.tsuzuki.catalog.interactor.toCanonicalReadingMetadata
