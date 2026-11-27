@@ -474,6 +474,11 @@ def selftest():
     assert collect_catalog_search_failures(failure + "\n" + failure, 0) == []
     assert collect_catalog_search_failures(failure, 1) == []
     assert collect_catalog_search_failures(failure.replace("TIMEOUT", "OTHER"), 0) == []
+    assert collect_catalog_search_failures(failure.replace("count=1", "count=0"), 0) == []
+    assert collect_catalog_search_failures(failure.replace("count=1", "count=33"), 0) == []
+    assert collect_catalog_search_failures(failure + "\n" + failure.replace("attempt=1", "attempt=2"), 0) == [
+        dict(index=1, attempt=1, reason="TIMEOUT", count=1),
+        dict(index=1, attempt=2, reason="TIMEOUT", count=1)]
 
     rejected = ("MANGAALL_CANONICAL_OPTION_REJECTION|index=1|source=mangadot"
                 "|reason=SOURCE_LANGUAGE_MISSING|identity=NONE|count=2")
