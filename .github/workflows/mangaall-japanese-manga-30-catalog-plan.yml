@@ -1,0 +1,216 @@
+name: MangaALL — Japanese manga 30 independent catalog and package gate (OPT-IN)
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/workflows/mangaall-japanese-manga-30-catalog-plan.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-japanese-manga-30-catalog-plan
+  cancel-in-progress: false
+
+jobs:
+  build-once:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Validate exact workflow-only opt-in and corpus
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-japanese-manga-30-catalog-plan.yml'
+          python3 -m py_compile .github/scripts/run_mangaall_frozen30_independent_catalog.py
+          python3 .github/scripts/run_mangaall_frozen30_independent_catalog.py --check-lock
+          python3 -m py_compile .github/scripts/run_mangaall_frozen30_catalog_plan.py
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --cohort manga --check-plan
+          python3 - <<'PY'
+          import runpy
+          classify = runpy.run_path(".github/scripts/run_mangaall_frozen30_independent_catalog.py")["classify"]
+          base = dict(schemaVersion=1, mode="DIRECT_LIVE_ANDROID_CATALOG_ONLY",
+                      catalogSource="mangaupdates", canonical="NOT_EXECUTED_HOST",
+                      status="RESOLVED", provider="mangaupdates", providerId="42",
+                      externalIds={}, catalogsQueried=1, catalogsFailed=0,
+                      format="MANHWA", creatorsAttested=True, authors=["Fixture"], artists=[])
+          assert classify(base)[0] == "CATALOG_IDENTITY_ATTESTED"
+          assert classify(dict(base, externalIds={"mangaupdates":"42"}))[0] == "CATALOG_IDENTITY_ATTESTED"
+          assert classify(dict(base, externalIds={"mangaupdates":"43"}))[0] == "OWNER_PROVENANCE_UNVERIFIED"
+          assert classify(dict(base, providerId="0"))[0] == "OWNER_PROVENANCE_UNVERIFIED"
+          assert classify(dict(base, status="CATALOG_AMBIGUOUS"))[0] == "CATALOG_AMBIGUOUS"
+          assert classify(dict(base, format="UNKNOWN"))[0] == "FORMAT_UNVERIFIED"
+          assert classify(dict(base, creatorsAttested=False))[0] == "CREATOR_PROVENANCE_UNVERIFIED"
+          shiki = dict(base, catalogSource="shikimori", provider="shikimori")
+          assert classify(shiki, "shikimori")[0] == "CATALOG_IDENTITY_ATTESTED"
+          assert classify(shiki)[0] == "INVALID_ATTESTATION"
+          assert classify(base, "shikimori")[0] == "INVALID_ATTESTATION"
+          assert classify(dict(shiki, provider="mangaupdates"), "shikimori")[0] == "OWNER_PROVENANCE_UNVERIFIED"
+          assert classify(dict(base, format="MANGA"), expected_format="MANGA")[0] == "CATALOG_IDENTITY_ATTESTED"
+          assert classify(base, expected_format="MANGA")[0] == "FORMAT_UNVERIFIED"
+          assert classify(dict(base, format="MANGA"))[0] == "FORMAT_UNVERIFIED"
+          import sys
+          sys.path.insert(0, ".github/scripts")
+          from mangaall_research_cohort import load_cohort, edition_credits_match
+          from run_mangaall_frozen30_canonical_persistence import selftest
+          old, new = load_cohort(), load_cohort("manga")
+          assert old.digest != new.digest and old.output != new.output
+          assert not set(old.works).intersection(new.works)
+          expected = new.required_credits[5]
+          assert edition_credits_match(dict(authors=["Tachibana Koushi"], artists=["Inui Sekihiko"]), expected)
+          assert not edition_credits_match(dict(authors=["Tachibana Koushi"], artists=["Ringo"]), expected)
+          assert not edition_credits_match(dict(authors=["Tachibana Koushi"], artists=[]), expected)
+          selftest()
+          print("MANGAALL_CATALOG|ownerContractRegression=PASS|cohorts=SEPARATE|editionGuard=PASS")
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: future-code11-source
+          persist-credentials: false
+      - name: Verify original-language package isolation and legacy compatibility
+        run: |
+          set -euo pipefail
+          test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
+          node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
+          node .github/scripts/test_mangaall_mangadot_search_policy.mjs
+          python3 - <<'PY'
+          import sys, io, zipfile, json
+          from pathlib import Path
+          sys.path.insert(0, ".github/scripts")
+          from mangaall_code11_dual_source_unsigned import candidate_bytes
+          root = Path("future-code11-source").resolve()
+          legacy = candidate_bytes(root, manhwa_only=True, mangadot_creators=True)
+          korean = candidate_bytes(root, original_language="ko", mangadot_creators=True)
+          japanese = candidate_bytes(root, original_language="ja", mangadot_creators=True)
+          assert legacy == korean and korean != japanese
+          for language, raw in (("ko", korean), ("ja", japanese)):
+              with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                  manifest = json.loads(archive.read("manifest.json"))
+                  dex = archive.read("modules/sources/mangadex/modules/mangadex.js").decode()
+                  dot = archive.read("modules/sources/mangadot/modules/mangadot.js").decode()
+                  assert manifest["version"]["code"] == 11
+                  assert "publication" not in manifest
+                  assert not any("mangafire" in name.lower() for name in archive.namelist())
+                  assert not any("mangafire" in origin.lower() for origin in manifest["permissions"]["network"]["origins"])
+                  assert f'["originalLanguage[]", "{language}"]' in dex
+                  assert f'originalLanguage !== "{language}"' in dex
+                  assert 'mangaDotRetrievalQuery(title)' in dot
+                  assert 'observeMangaDotCreators' in dot
+          try:
+              candidate_bytes(root, manhwa_only=True, original_language="ja")
+          except ValueError:
+              pass
+          else:
+              raise AssertionError("Conflicting cohort language accepted")
+          print("MANGAALL_RESEARCH_PACKAGE|ko=PASS|ja=PASS|legacyBytes=IDENTICAL|signed=NO")
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Revalidate exact catalog owner plan after shared Kotlin corrections
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          # Prefer already cached, pinned dependencies; do not suppress real failures.
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+            cat "$log"
+            exit 0
+          fi
+          if ! grep -Eiq 'no cached version|offline mode|not available for offline' "$log"; then
+            cat "$log"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*CreatorAliasProviderTest' :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+              cat "$log"
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log" || [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-japanese-manga-plan-apks
+          path: app/build/outputs/apk/
+          if-no-files-found: error
+          retention-days: 1
+
+  independent-catalog:
+    needs: build-once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mangaall-japanese-manga-plan-apks
+          path: app/build/outputs/apk/
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Resolve frozen explicit catalog owner scopes for shard ${{ matrix.shard }}
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --cohort manga --shard ${{ matrix.shard }}
+      - name: Upload only sanitized indexed catalog verdicts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-japanese-plan-shard-${{ matrix.shard }}
+          path: .github/results/mangaall-japanese-manga-30-catalog-plan/shard-${{ matrix.shard }}/
+          if-no-files-found: ignore
+          retention-days: 2
+
+  strict-catalog-verdict:
+    if: always()
+    needs: [build-once, independent-catalog]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          pattern: mangaall-japanese-plan-shard-*
+          path: .github/results/mangaall-japanese-manga-30-catalog-plan
+      - name: Require 30 distinct owner-scoped attested identities, no crosswalk inference
+        run: |
+          set -euo pipefail
+          root=.github/results/mangaall-japanese-manga-30-catalog-plan
+          for shard in 0 1 2; do
+            if [[ -d "$root/mangaall-japanese-plan-shard-$shard" ]]; then
+              mv "$root/mangaall-japanese-plan-shard-$shard" "$root/shard-$shard"
+            fi
+          done
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --cohort manga --aggregate
+          test '${{ needs.build-once.result }}' = 'success'
+          test '${{ needs.independent-catalog.result }}' = 'success'
