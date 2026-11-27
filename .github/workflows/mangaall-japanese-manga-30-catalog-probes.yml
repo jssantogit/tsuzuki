@@ -103,7 +103,10 @@ jobs:
                   assert f'["originalLanguage[]", "{language}"]' in dex
                   assert f'originalLanguage !== "{language}"' in dex
                   assert 'mangaDotRetrievalQuery(title)' in dot
-                  assert 'observeMangaDotCreators' in dot
+                  assert 'await enrichMangaDotLookupCandidates(items, title, globalThis.tsuzuki,' in dot
+                  creators = archive.read("modules/sources/mangadot/modules/creator-evidence.js")
+                  assert creators == Path(".github/scripts/mangaall_mangadot_creator_evidence.mjs").read_bytes()
+                  assert b'await observeMangaDotCreators(item, host, includeCatalogReferences)' in creators
           try:
               candidate_bytes(root, manhwa_only=True, original_language="ja")
           except ValueError:
@@ -250,3 +253,9 @@ jobs:
 # Recheck both adaptations with publisher-attested native credit spellings and per-group match diagnostics.
 
 # Keep owner-specific retrieval hints separate and retain typed creator-group diagnostics.
+
+# Record closed detail verification failures without changing the acceptance policy.
+
+# Re-run catalog comparison after matching the Kotlin formatter.
+
+# Re-probe the locked identity without an uncorroborated retrieval hint; keep both creator groups.

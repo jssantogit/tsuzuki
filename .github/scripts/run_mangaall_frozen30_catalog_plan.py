@@ -93,6 +93,19 @@ def detail_diagnostics(raw, group):
             yield match.group(0).replace(f"index={index}|", f"index={group[index]['index']}|", 1)
 
 
+def detail_rejections(raw, group):
+    pattern = (
+        r"MANGAALL_CATALOG_DETAIL_REJECTION\|index=(\d+)"
+        r"\|reason=(OWNER_UNAVAILABLE|DETAIL_UNAVAILABLE|OWNER_MISMATCH|FORMAT_MISMATCH|"
+        r"CROSSWALK_CONFLICT|REQUESTED_TITLE_MISSING|RETRIEVAL_TITLE_MISSING)"
+        r"\|count=([1-8])(?=\s|$)"
+    )
+    for match in re.finditer(pattern, raw):
+        index = int(match.group(1))
+        if 0 <= index < len(group):
+            yield match.group(0).replace(f"index={index}|", f"index={group[index]['index']}|", 1)
+
+
 def diagnostic_selftest():
     row = dict(index=3, catalog="shikimori", searchTitle="native", identityTitle="locked")
     assert probe_row(row, "shikimori") == row
@@ -103,6 +116,10 @@ def diagnostic_selftest():
     assert list(detail_diagnostics(line.replace("matchedGroups=2", "matchedGroups=3"), [row])) == []
     assert list(detail_diagnostics(line.replace("matchedGroups=2", "matchedGroups=2,2"), [row])) == []
     assert list(detail_diagnostics(line.replace("matched=1|matchedGroups=2", "matched=0|matchedGroups="), [row]))
+    rejected = "MANGAALL_CATALOG_DETAIL_REJECTION|index=0|reason=RETRIEVAL_TITLE_MISSING|count=1"
+    assert list(detail_rejections(rejected, [row])) == [rejected.replace("index=0", "index=3")]
+    assert list(detail_rejections(rejected.replace("count=1", "count=9"), [row])) == []
+    assert list(detail_rejections(rejected.replace("RETRIEVAL_TITLE_MISSING", "OTHER"), [row])) == []
 
 
 def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
@@ -167,7 +184,7 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
                     line=match.group(0).replace(f"index={local_index}|",f"index={group[local_index]['index']}|",1)
                     diagnostics.append(line)
                     print(line)
-            for line in detail_diagnostics(raw, group):
+            for line in list(detail_diagnostics(raw, group)) + list(detail_rejections(raw, group)):
                 if len(diagnostics)<200:
                     diagnostics.append(line)
                     print(line)

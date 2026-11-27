@@ -39,6 +39,17 @@ enum class MangaAllCatalogIdentityStatus {
     CATALOG_FORMAT_UNSUPPORTED,
 }
 
+/** Closed detail-rejection reason; never carries source IDs, titles or exception text. */
+enum class MangaAllCatalogDetailRejection {
+    OWNER_UNAVAILABLE,
+    DETAIL_UNAVAILABLE,
+    OWNER_MISMATCH,
+    FORMAT_MISMATCH,
+    CROSSWALK_CONFLICT,
+    REQUESTED_TITLE_MISSING,
+    RETRIEVAL_TITLE_MISSING,
+}
+
 data class MangaAllCatalogIdentityResult(
     val status: MangaAllCatalogIdentityStatus,
     val identity: CatalogItem? = null,
@@ -47,6 +58,7 @@ data class MangaAllCatalogIdentityResult(
     val catalogsFailed: Int = 0,
     /** True only when the independent metadata detail endpoint supplied actual author/artist credits. */
     val creatorsAttested: Boolean = false,
+    val detailRejections: Map<MangaAllCatalogDetailRejection, Int> = emptyMap(),
 ) {
     init {
         require((status == MangaAllCatalogIdentityStatus.RESOLVED) == (identity != null))
@@ -153,10 +165,14 @@ class ResolveMangaAllIndependentCatalogIdentity(
                 gate.withPermit { verifyDetail(candidate, query, retrievalQuery, format) }
             }
         }.awaitAll()
-        if (verified.any { it == null }) {
-            return@coroutineScope fields.copy(status = MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED)
+        val rejections = verified.mapNotNull { it.rejection }.groupingBy { it }.eachCount()
+        if (rejections.isNotEmpty()) {
+            return@coroutineScope fields.copy(
+                status = MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED,
+                detailRejections = rejections,
+            )
         }
-        val details = verified.filterNotNull()
+        val details = verified.map { requireNotNull(it.item) }
         val selected = if (requiredCreators.isEmpty()) {
             details.single()
         } else {
@@ -188,14 +204,20 @@ class ResolveMangaAllIndependentCatalogIdentity(
         )
     }
 
+    private data class VerifiedDetail(
+        val item: CatalogItem? = null,
+        val rejection: MangaAllCatalogDetailRejection? = null,
+    )
+
     private suspend fun verifyDetail(
         selected: CatalogItem,
         query: String,
         retrievalQuery: String,
         format: CatalogItemFormat?,
-    ): CatalogItem? {
+    ): VerifiedDetail {
+        fun reject(reason: MangaAllCatalogDetailRejection) = VerifiedDetail(rejection = reason)
         val owner = registry.metadataProviders().singleOrNull { it.integrationId.value == selected.provider }
-            ?: return null
+            ?: return reject(MangaAllCatalogDetailRejection.OWNER_UNAVAILABLE)
         val detail = try {
             withTimeoutOrNull(DETAIL_TIMEOUT_MILLIS) { owner.getDetails(selected.providerId) }
         } catch (error: CancellationException) {
@@ -205,21 +227,24 @@ class ResolveMangaAllIndependentCatalogIdentity(
         }
         val detailError = detail?.exceptionOrNull()
         if (detailError is CancellationException) throw detailError
-        return detail?.getOrNull()?.takeIf {
-            it.provider == selected.provider &&
-                it.providerId == selected.providerId &&
-                (format == null || format == CatalogItemFormat.UNKNOWN || it.format == format) &&
-                (selected.format == CatalogItemFormat.UNKNOWN || it.format == selected.format) &&
-                (it.externalIds[it.provider] == null || it.externalIds[it.provider] == it.providerId) &&
-                selected.externalIds.all { (provider, id) ->
-                    it.externalIds[provider] == null || it.externalIds[provider] == id
-                } &&
-                (listOf(it.title) + it.titles.values).any { name ->
-                    normalize(name) == normalize(query)
-                } &&
-                (listOf(it.title) + it.titles.values).any { name ->
-                    normalize(name) == normalize(retrievalQuery)
-                }
+        val item = detail?.getOrNull() ?: return reject(MangaAllCatalogDetailRejection.DETAIL_UNAVAILABLE)
+        val names = listOf(item.title) + item.titles.values
+        return when {
+            item.provider != selected.provider || item.providerId != selected.providerId ->
+                reject(MangaAllCatalogDetailRejection.OWNER_MISMATCH)
+            (format != null && format != CatalogItemFormat.UNKNOWN && item.format != format) ||
+                (selected.format != CatalogItemFormat.UNKNOWN && item.format != selected.format) ->
+                reject(MangaAllCatalogDetailRejection.FORMAT_MISMATCH)
+            (item.externalIds[item.provider] != null && item.externalIds[item.provider] != item.providerId) ||
+                selected.externalIds.any { (provider, id) ->
+                    item.externalIds[provider] != null && item.externalIds[provider] != id
+                } ->
+                reject(MangaAllCatalogDetailRejection.CROSSWALK_CONFLICT)
+            names.none { normalize(it) == normalize(query) } ->
+                reject(MangaAllCatalogDetailRejection.REQUESTED_TITLE_MISSING)
+            names.none { normalize(it) == normalize(retrievalQuery) } ->
+                reject(MangaAllCatalogDetailRejection.RETRIEVAL_TITLE_MISSING)
+            else -> VerifiedDetail(item = item)
         }
     }
 

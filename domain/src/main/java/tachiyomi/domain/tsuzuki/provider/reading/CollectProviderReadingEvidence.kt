@@ -2186,21 +2186,15 @@ class CollectProviderReadingEvidence private constructor(
             // the front of the lookup. Keep a bounded, source-balanced sample
             // while preserving the upstream candidate index in diagnostics.
             val sampled = if (providerId == "app.tsuzuki.mangaall") {
-                val perSource = mutableMapOf<String, Int>()
-                candidates.withIndex().filter { (_, work) ->
-                    val source = work.externalWorkId.substringBefore(':')
-                    if (source !in setOf("mangadex", "mangadot", "mangafire")) {
-                        false
-                    } else {
-                        val seen = perSource[source] ?: 0
-                        if (seen >= MAX_DIAGNOSTIC_CANDIDATES_PER_SOURCE) {
-                            false
-                        } else {
-                            perSource[source] = seen + 1
-                            true
-                        }
-                    }
-                }.take(MAX_DIAGNOSTIC_CANDIDATES)
+                balancedSourceCandidateSample(
+                    candidates = candidates,
+                    maxTotal = MAX_DIAGNOSTIC_CANDIDATES,
+                    maxPerSource = MAX_DIAGNOSTIC_CANDIDATES_PER_SOURCE,
+                ) { work ->
+                    MangaAllReadingIdentity.sourceId(
+                        ProviderBindingRef(target.registration.descriptor.id, target.facetId, work.externalWorkId),
+                    )
+                }
             } else {
                 candidates.withIndex().take(MAX_DIAGNOSTIC_CANDIDATES)
             }

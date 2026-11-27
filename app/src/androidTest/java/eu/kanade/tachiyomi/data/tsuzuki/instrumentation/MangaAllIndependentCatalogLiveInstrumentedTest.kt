@@ -255,6 +255,17 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
             } else {
                 report
             }
+            attested.detailRejections.forEach { (reason, count) ->
+                instrument.sendStatus(
+                    1,
+                    Bundle().apply {
+                        putString(
+                            "stream",
+                            "MANGAALL_CATALOG_DETAIL_REJECTION|index=$index|reason=${reason.name}|count=$count",
+                        )
+                    },
+                )
+            }
             val attestationJson = buildJsonObject {
                 put("schemaVersion", 1)
                 put("mode", "DIRECT_LIVE_ANDROID_CATALOG_ONLY")
