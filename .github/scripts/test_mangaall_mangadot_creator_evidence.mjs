@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { extractMangaDotCreators, observeMangaDotCreators, mangaDotExactTitle, assessMangaDotCatalogReference } from "./mangaall_mangadot_creator_evidence.mjs";
+import { extractMangaDotCreators, observeMangaDotCreators, mangaDotExactTitle, assessMangaDotCatalogReference, enrichMangaDotLookupCandidates } from "./mangaall_mangadot_creator_evidence.mjs";
 
 const url = "https://mangadot.net/manga/42";
 const series = { "@type": "ComicSeries", name: "Example’s Work", url,
@@ -161,3 +161,35 @@ const unrelatedMicrodata = {http:host.http,dom:{selectText:async(handle,selector
 assert.deepEqual(await observeMangaDotCreators({externalWorkId:"mangadot:42",title:series.name},unrelatedMicrodata),
   {detailOutcome:"VERIFIED_NO_ALIASES",authors:[]});
 console.log("MANGAALL_DOT_CREATOR|strictParser=PASS|opaqueHandle=PASS|canonical=NOT_TESTED");
+
+const requested = "Example's Work";
+const display = "Example's Work Localized Subtitle";
+const candidate = () => ({externalWorkId:"mangadot:42",title:display,aliases:[]});
+const detailHost = node => ({http:host.http,dom:{selectText:async()=>raw(node)}});
+const recovered = candidate();
+await enrichMangaDotLookupCandidates([recovered], requested,
+  detailHost({...series,name:display,alternateName:[requested]}));
+assert.deepEqual(recovered.aliases,[requested]);
+assert.deepEqual(recovered.authors,["Example Creator"]);
+for (const node of [
+  {...series,name:display},
+  {...series,name:display,alternateName:[requested+" Other"]},
+  {...series,name:display,alternateName:[requested],url:url+"0"},
+]) {
+  const rejected = candidate();
+  await enrichMangaDotLookupCandidates([rejected],requested,detailHost(node));
+  assert.deepEqual(rejected,candidate());
+}
+let inspected = 0;
+const countedHost = {http:{getResource:async()=>{inspected++; throw Error("fixture unavailable");}}};
+const candidates = Array.from({length:9},(_,i)=>({externalWorkId:"mangadot:"+String(i+1),title:display}));
+await enrichMangaDotLookupCandidates(candidates,requested,countedHost);
+assert.equal(inspected,3);
+inspected=0;
+await enrichMangaDotLookupCandidates([{externalWorkId:"mangadot:42",title:"Example's Workmanship"}],
+  requested,countedHost);
+assert.equal(inspected,0);
+await enrichMangaDotLookupCandidates([{externalWorkId:"mangadot:42",title:"Example Subtitle"}],
+  "Example",countedHost);
+assert.equal(inspected,0);
+console.log("MANGAALL_DOT_VERIFIED_SUBTITLE_ALIAS|bounded=PASS|identity=UNCHANGED");

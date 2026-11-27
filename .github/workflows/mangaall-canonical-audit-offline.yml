@@ -116,7 +116,7 @@ jobs:
             --tests '*CollectProviderReadingEvidenceTest' --tests '*CollectProviderReadingEvidenceEligibilityTest' \
             --tests '*RefreshProviderReadingChaptersTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' \
             --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' \
-            --tests '*ResolveProviderChapterReadingTest' --tests '*SelectMangaAllSourceTest' \
+            --tests '*ResolveProviderChapterReadingTest' --tests '*SelectMangaAllSourceTest' --tests '*MangaAllReadingIdentityTest' \
             --tests '*ProviderEvidenceMetadataCodecTest' \
             :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' \
             --tests '*ChapterEvidenceRepositoryImplTest' \
