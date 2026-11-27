@@ -382,6 +382,13 @@ interface ProviderReadingGateway {
     suspend fun supportsNativeChapterCoverage(binding: ProviderBindingRef, artifactVersionCode: Long): Boolean =
         false
 
+    /** Host-authorized source-scoped supplemental lookup lanes; default deny. */
+    suspend fun nativeCoverageSourceIds(
+        providerId: ProviderId,
+        facetId: String?,
+        artifactVersionCode: Long,
+    ): Set<String> = emptySet()
+
     suspend fun lookup(
         providerId: ProviderId,
         request: ProviderReadingLookupRequest,

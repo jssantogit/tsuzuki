@@ -206,7 +206,9 @@ class CollectProviderReadingEvidence private constructor(
         providerRegistry.awaitReady()
         val canonicalTitle = canonicalTitleRepository.getById(canonicalTitleId)
             ?: return ProviderReadingEvidenceCollection(complete = false)
-        val targets = readingTargets()
+        val targets = readingTargets().flatMap { target ->
+            supplementaryTargets(canonicalTitleId, target)
+        }
         val queryTitles = providerTitleLookupQueries(
             canonicalTitleId,
             canonicalTitle.displayTitle,
@@ -498,6 +500,19 @@ class CollectProviderReadingEvidence private constructor(
     ): ProviderReadingEvidenceCollection {
         return try {
             if (target.researchSource != null) {
+                val preferred = target.supplementaryPreferred
+                if (preferred != null) {
+                    val current = bindingRepository.get(canonicalTitleId, preferred.providerId, preferred.facetId)
+                    if (current?.ref != preferred || current.availability != ProviderBindingAvailability.AVAILABLE ||
+                        target.researchSource !in gateway.nativeCoverageSourceIds(
+                            preferred.providerId,
+                            preferred.facetId,
+                            target.registration.descriptor.version.code,
+                        )
+                    ) {
+                        return ProviderReadingEvidenceCollection(complete = false)
+                    }
+                }
                 return collectResearchSource(
                     canonicalTitleId = canonicalTitleId,
                     titles = titles,
@@ -631,6 +646,7 @@ class CollectProviderReadingEvidence private constructor(
                     // the saved edition, User progress or Reader authority.
                     val fallback = if (
                         result.value == 0 &&
+                        !target.hasSupplementaryTargets &&
                         target.registration.descriptor.id.value == "app.tsuzuki.mangaall" &&
                         MangaAllReadingIdentity.supportsRequestedLanguage(binding.ref) &&
                         canonicalCreators != null &&
@@ -2092,6 +2108,42 @@ class CollectProviderReadingEvidence private constructor(
         return ProviderCallResult.Success(LookupSnapshot(items.toList(), complete = true))
     }
 
+    /**
+     * Keep the preferred inventory in its own bounded target. Supplemental
+     * source lanes use the same global semaphore and cannot replace a binding.
+     * The Host must attest scoped native support before any lane is created.
+     */
+    private suspend fun supplementaryTargets(
+        canonicalTitleId: String,
+        target: ReadingTarget,
+    ): List<ReadingTarget> {
+        if (target.researchSource != null ||
+            target.registration.descriptor.id.value != "app.tsuzuki.mangaall" ||
+            workSourceAssociationRepository == null
+        ) {
+            return listOf(target)
+        }
+        return try {
+            val descriptor = target.registration.descriptor
+            val preferred = bindingRepository.get(canonicalTitleId, descriptor.id, target.facetId)
+                ?.takeIf { it.availability == ProviderBindingAvailability.AVAILABLE }?.ref
+                ?: return listOf(target)
+            val preferredSource = MangaAllReadingIdentity.sourceId(preferred) ?: return listOf(target)
+            val authorized = gateway.nativeCoverageSourceIds(descriptor.id, target.facetId, descriptor.version.code)
+                .intersect(MangaAllNativeChapterCoverage.sourceIds(descriptor.version.code, target.facetId))
+                .filterNot { it == preferredSource }
+                .sorted()
+            if (authorized.isEmpty()) return listOf(target)
+            listOf(target.copy(hasSupplementaryTargets = true)) + authorized.map { source ->
+                target.copy(researchSource = source, supplementaryPreferred = preferred)
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            listOf(target)
+        }
+    }
+
     private fun readingTargets(): List<ReadingTarget> = providerRegistry.providers()
         .asSequence()
         .filter { registration -> registration.lifecycleStatus == ProviderLifecycleStatus.ENABLED }
@@ -2666,6 +2718,8 @@ class CollectProviderReadingEvidence private constructor(
         val registration: ProviderRegistration,
         val facetId: String?,
         val researchSource: String? = null,
+        val supplementaryPreferred: ProviderBindingRef? = null,
+        val hasSupplementaryTargets: Boolean = false,
     )
 
     private companion object {

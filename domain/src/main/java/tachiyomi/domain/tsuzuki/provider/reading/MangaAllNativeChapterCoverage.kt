@@ -34,6 +34,9 @@ internal class NativeChapterCoveragePolicy(contracts: List<NativeSourceCoverageC
     fun supports(version: Long, binding: ProviderBindingRef): Boolean =
         bySource[binding.externalWorkId.substringBefore(':')]?.supports(version, binding) == true
 
+    fun sourceIds(version: Long, language: String?): Set<String> =
+        bySource.values.filter { version in it.versions && language in it.languages }.map { it.sourceId }.toSet()
+
     fun project(
         version: Long,
         binding: ProviderBindingRef,
@@ -104,6 +107,8 @@ object MangaAllNativeChapterCoverage {
     )
 
     fun supports(version: Long, binding: ProviderBindingRef): Boolean = policy.supports(version, binding)
+
+    fun sourceIds(version: Long, language: String?): Set<String> = policy.sourceIds(version, language)
 
     internal fun project(
         version: Long,

@@ -146,37 +146,49 @@ class ScriptProviderReadingGateway internal constructor(
         artifactVersionCode: Long,
     ): Boolean {
         if (!MangaAllNativeChapterCoverage.supports(artifactVersionCode, binding)) return false
-        if (packageSource !is StoredProviderScriptPackageSource) return false
-        val providerId = binding.providerId
+        return binding.externalWorkId.substringBefore(':') in
+            nativeCoverageSourceIds(binding.providerId, binding.facetId, artifactVersionCode)
+    }
+
+    override suspend fun nativeCoverageSourceIds(
+        providerId: ProviderId,
+        facetId: String?,
+        artifactVersionCode: Long,
+    ): Set<String> {
+        if (providerId.value != MANGAALL_PROVIDER_ID || packageSource !is StoredProviderScriptPackageSource) {
+            return emptySet()
+        }
+        val sources = MangaAllNativeChapterCoverage.sourceIds(artifactVersionCode, facetId)
+        if (sources.isEmpty()) return emptySet()
         registry.awaitReady()
-        val registration = registry.registration(providerId) ?: return false
+        val registration = registry.registration(providerId) ?: return emptySet()
         val capability = tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.ReadingChaptersV1
         if (registration.lifecycleStatus != ProviderLifecycleStatus.ENABLED ||
             registration.descriptor.runtime != ProviderRuntimeKind.SCRIPT ||
             registration.descriptor.version.code != artifactVersionCode ||
             capability !in registration.enabledCapabilities ||
-            registration.facets.none { it.facetId == binding.facetId }
+            registration.facets.none { it.facetId == facetId }
         ) {
-            return false
+            return emptySet()
         }
         return try {
-            val active = packageSource.get(providerId) ?: return false
+            val active = packageSource.get(providerId) ?: return emptySet()
             if (!matchesRegistration(registration, active, capability) ||
                 active.repositoryId != MANGAALL_TRUSTED_REPOSITORY ||
                 active.repositoryTrustAnchorSha256 != MANGAALL_TRUST_ANCHOR_SHA256 ||
                 active.installedArtifactSha256 != sha256Hex(active.bytes)
             ) {
-                return false
+                return emptySet()
             }
             val policy = ProviderHostInvocationPolicy.fromManifest(
                 manifest = active.parsed.manifest,
                 invocationId = invocationIdFactory(),
             ).forCapability(capability.id)
-            ProviderHostModule.MANGAALL_CHAPTER_SNAPSHOT in policy.allowedHostModules()
+            if (ProviderHostModule.MANGAALL_CHAPTER_SNAPSHOT in policy.allowedHostModules()) sources else emptySet()
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
-            false
+            emptySet()
         }
     }
 
