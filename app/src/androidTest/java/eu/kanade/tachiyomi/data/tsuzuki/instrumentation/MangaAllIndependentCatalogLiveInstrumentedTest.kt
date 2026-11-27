@@ -32,6 +32,7 @@ import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityResult
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
 import tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentity
 import tachiyomi.domain.tsuzuki.catalog.interactor.toCanonicalReadingMetadata
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogError
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
@@ -114,7 +115,15 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                         .matchEntire(it)?.value
                 }
                 val facts = if (error != null) {
-                    contract ?: "$diagnosticPrefix|reason=OTHER_FAILURE"
+                    val reason = when {
+                        catalogName == "mal" && !app.graph.trackerManager.myAnimeList.hasClientId() -> "CLIENT_ID_MISSING"
+                        error is CatalogError.HttpError -> "HTTP_${error.statusCode}"
+                        error is CatalogError.RateLimitExceeded -> "HTTP_429"
+                        error is CatalogError.NetworkError -> "NETWORK_FAILURE"
+                        error is CatalogError.SerializationError -> "SERIALIZATION_FAILURE"
+                        else -> "OTHER_FAILURE"
+                    }
+                    contract ?: "$diagnosticPrefix|reason=$reason"
                 } else {
                     val page = result.getOrThrow()
                     "$diagnosticPrefix|reason=OK|total=${page.totalCount ?: -1}|rows=${page.items.size}"

@@ -63,6 +63,7 @@ class MangaUpdatesIntegrationProvider private constructor(
         val limit = query.limit.coerceAtLeast(0)
         if (limit == 0) return@capture CatalogPage(emptyList(), false)
         val nativeType = when (query.format) {
+            CatalogItemFormat.MANGA -> "Manga"
             CatalogItemFormat.MANHWA -> "Manhwa"
             else -> null
         }

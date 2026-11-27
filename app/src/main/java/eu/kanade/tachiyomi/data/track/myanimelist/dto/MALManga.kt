@@ -27,6 +27,15 @@ data class MALManga(
     val endDate: String? = null,
     val authors: List<MALAuthorNode> = emptyList(),
     val genres: List<MALGenre> = emptyList(),
+    @SerialName("alternative_titles")
+    val alternativeTitles: MALAlternativeTitles? = null,
+)
+
+@Serializable
+data class MALAlternativeTitles(
+    val synonyms: List<String> = emptyList(),
+    val en: String? = null,
+    val ja: String? = null,
 )
 
 @Serializable
@@ -73,6 +82,9 @@ internal fun MALManga.toTrackSearch(trackerId: Long): TrackSearch {
             .filter { authorNode -> authorNode.role.contains("Story") }
             .mapNotNull { authorNode -> authorNode.node.getFullName() }
         genres = this@toTrackSearch.genres.map { it.name }
+        alternate_titles = this@toTrackSearch.alternativeTitles?.let {
+            (it.synonyms + listOfNotNull(it.en, it.ja)).filter(String::isNotBlank).distinct()
+        }.orEmpty()
     }
 }
 

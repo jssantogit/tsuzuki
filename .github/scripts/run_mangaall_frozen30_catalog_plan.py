@@ -87,7 +87,7 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
             diagnostic_pattern = (
                 r"MANGAALL_CATALOG_DIAGNOSTIC\|index=(\d+)\|offset=(\d+)\|"
                 r"(?:MU|SHIKI|MAL|KITSU)_SEARCH_CONTRACT"
-                r"\|reason=(FIRST_GEOMETRY|PAGE_GEOMETRY|ROW_COUNT|INVALID_OR_REPEATED_ID|OTHER_FAILURE|OK)"
+                r"\|reason=(FIRST_GEOMETRY|PAGE_GEOMETRY|ROW_COUNT|INVALID_OR_REPEATED_ID|OTHER_FAILURE|CLIENT_ID_MISSING|HTTP_[1-5][0-9]{2}|NETWORK_FAILURE|SERIALIZATION_FAILURE|OK)"
                 r"(?:\|page=-?\d+\|size=-?\d+\|total=-?\d+\|rows=\d+|\|total=-?\d+\|rows=\d+)?"
                 r"(?=\s|$)"
             )
@@ -110,10 +110,6 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
                     if status == "CATALOG_IDENTITY_ATTESTED" and not edition_credits_match(
                             record, cohort.required_credits.get(row["index"], ())):
                         status,identity="EDITION_CREDITS_UNVERIFIED",None
-                    # The existing MAL adapter only exposes the first upstream
-                    # search page; never certify complete identity from it.
-                    if probe == "mal" and status == "CATALOG_IDENTITY_ATTESTED":
-                        status,identity="SEARCH_COMPLETENESS_UNVERIFIED",None
                     results[row["index"]]=dict(index=row["index"],catalog=catalog,status=status,identityDigest=identity)
                 except (TypeError,ValueError,AttributeError):
                     invalid+=1

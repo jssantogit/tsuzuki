@@ -179,9 +179,13 @@ class ResolveMangaAllIndependentCatalogIdentity(
         // The native MangaUpdates Manhwa filter still reports more than
         // 100 candidates for some exact Korean work names. Bound the larger
         // budget explicitly; never treat exhaustion as complete.
-        val narrowedManhwa = source.integrationId.value == "mangaupdates" && format == CatalogItemFormat.MANHWA
-        val maxPages = if (narrowedManhwa) MAX_MANHWA_PAGES_PER_CATALOG else MAX_PAGES_PER_CATALOG
-        val timeout = if (narrowedManhwa) MANHWA_CATALOG_TIMEOUT_MILLIS else CATALOG_TIMEOUT_MILLIS
+        val narrowed = (source.integrationId.value == "mangaupdates" &&
+            format in setOf(CatalogItemFormat.MANHWA, CatalogItemFormat.MANGA)) ||
+            (source.integrationId.value == "shikimori" && format == CatalogItemFormat.MANGA)
+        val maxPages = if (narrowed) MAX_NARROWED_PAGES_PER_CATALOG else MAX_PAGES_PER_CATALOG
+        val timeout = if (narrowed) NARROWED_CATALOG_TIMEOUT_MILLIS else CATALOG_TIMEOUT_MILLIS
+        // Kitsu JSON:API caps manga pages at twenty records.
+        val pageSize = if (source.integrationId.value == "kitsu") 20 else PAGE_SIZE
         return withTimeoutOrNull(timeout) {
             val seen = mutableListOf<CatalogItem>()
             val seenIds = mutableSetOf<String>()
@@ -190,7 +194,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
             for (index in 0 until maxPages) {
                 val result = try {
                     source.search(
-                        CatalogQuery(query = title, format = format, offset = offset, limit = PAGE_SIZE),
+                        CatalogQuery(query = title, format = format, offset = offset, limit = pageSize),
                     )
                 } catch (error: CancellationException) {
                     throw error
@@ -201,7 +205,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
                 if (error is CancellationException) throw error
                 val page: CatalogPage = result.getOrNull()
                     ?: return@withTimeoutOrNull SourceSearchResult(failed = true)
-                if (page.items.size > PAGE_SIZE ||
+                if (page.items.size > pageSize ||
                     page.items.any { it.provider != source.integrationId.value || it.providerId.isBlank() }
                 ) {
                     return@withTimeoutOrNull SourceSearchResult(failed = true)
@@ -227,7 +231,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
                 // can never be fully observed in this invocation. Avoid
                 // wasting upstream requests, but preserve INCOMPLETE.
                 if (reportedTotal != null &&
-                    reportedTotal > seen.size + (maxPages - index - 1) * PAGE_SIZE
+                    reportedTotal > seen.size + (maxPages - index - 1) * pageSize
                 ) {
                     return@withTimeoutOrNull SourceSearchResult(seen)
                 }
@@ -250,8 +254,8 @@ class ResolveMangaAllIndependentCatalogIdentity(
     private companion object {
         const val PAGE_SIZE = 25
         const val MAX_PAGES_PER_CATALOG = 4
-        const val MAX_MANHWA_PAGES_PER_CATALOG = 12
-        const val MANHWA_CATALOG_TIMEOUT_MILLIS = 24_000L
+        const val MAX_NARROWED_PAGES_PER_CATALOG = 12
+        const val NARROWED_CATALOG_TIMEOUT_MILLIS = 24_000L
         const val MAX_CONCURRENT_CATALOGS = 3
         const val CATALOG_TIMEOUT_MILLIS = 15_000L
         const val DETAIL_TIMEOUT_MILLIS = 10_000L

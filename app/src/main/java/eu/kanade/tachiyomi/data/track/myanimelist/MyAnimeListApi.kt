@@ -32,8 +32,16 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import tachiyomi.domain.track.model.Track as DomainTrack
 
+data class MalSearchWindow(val items: List<TrackSearch>, val hasNext: Boolean, val totalCount: Int? = null)
+
 interface MalIntegrationApi {
     suspend fun search(query: String): List<TrackSearch>
+
+    suspend fun searchWindow(query: String, offset: Int, limit: Int): MalSearchWindow {
+        val all = search(query)
+        val items = all.drop(offset).take(limit)
+        return MalSearchWindow(items, offset + items.size < all.size, all.size)
+    }
 
     suspend fun getRanking(
         rankingType: String,
@@ -127,6 +135,32 @@ class MyAnimeListApi(
                     .data
                     .filter { !(it.node.mediaType.contains("novel")) }
                     .map { it.node.toTrackSearch(trackerId) }
+            }
+        }
+    }
+
+    // Do not reuse tracker search: it discards the paging cursor and novels,
+    // which shifts offsets and can falsely certify an incomplete catalog.
+    override suspend fun searchWindow(query: String, offset: Int, limit: Int): MalSearchWindow {
+        require(query.length in 1..64 && offset >= 0 && limit in 1..100)
+        return withIOContext {
+            val url = "$BASE_API_URL/manga".toUri().buildUpon()
+                .appendQueryParameter("q", query)
+                .appendQueryParameter("offset", offset.toString())
+                .appendQueryParameter("limit", limit.toString())
+                .appendQueryParameter("nsfw", "true")
+                .appendQueryParameter("fields", SEARCH_FIELDS)
+                .build()
+            with(json) {
+                val page = publicClient.newCall(GET(url.toString()))
+                    .awaitSuccess()
+                    .parseAs<MALSearchResult>()
+                val items = page.data.map { it.node.toTrackSearch(trackerId) }
+                check(items.size <= limit && items.all { it.remote_id > 0 })
+                check(items.distinctBy { it.remote_id }.size == items.size)
+                val hasNext = !page.paging.next.isNullOrBlank()
+                check(!hasNext || items.size == limit)
+                MalSearchWindow(items, hasNext)
             }
         }
     }
@@ -329,7 +363,7 @@ class MyAnimeListApi(
         private const val CLIENT_ID_HEADER = "X-MAL-CLIENT-ID"
 
         private const val SEARCH_FIELDS =
-            "id,title,synopsis,num_chapters,num_volumes,mean,num_scoring_users,main_picture,status,media_type,start_date,end_date,authors{first_name,last_name},genres"
+            "id,title,alternative_titles,synopsis,num_chapters,num_volumes,mean,num_scoring_users,main_picture,status,media_type,start_date,end_date,authors{first_name,last_name},genres"
 
         private const val USER_LIBRARY_FIELDS = "$SEARCH_FIELDS,list_status"
         private const val LIST_PAGINATION_AMOUNT = 250

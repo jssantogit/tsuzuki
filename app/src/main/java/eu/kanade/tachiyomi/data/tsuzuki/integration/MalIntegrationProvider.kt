@@ -59,18 +59,14 @@ class MalIntegrationProvider private constructor(
         }
 
         return captureResult {
-            val results = api.search(searchText)
             val offset = query.offset.coerceAtLeast(0)
-            val limit = query.limit.coerceAtLeast(0)
-            val pageItems = results
-                .drop(offset)
-                .take(limit)
-                .map { it.toCatalogItem() }
-
+            val limit = query.limit.coerceIn(0, 100)
+            if (limit == 0) return@captureResult CatalogPage(emptyList(), hasNextPage = false)
+            val page = api.searchWindow(searchText, offset, limit)
             CatalogPage(
-                items = pageItems,
-                hasNextPage = offset + pageItems.size < results.size,
-                totalCount = results.size,
+                items = page.items.map { it.toCatalogItem() },
+                hasNextPage = page.hasNext,
+                totalCount = page.totalCount,
             )
         }
     }
@@ -186,6 +182,7 @@ class MalIntegrationProvider private constructor(
             provider = integrationId.value,
             providerId = remote_id.toString(),
             title = title,
+            titles = alternate_titles.mapIndexed { index, name -> "alias:$index" to name }.toMap(),
             synopsis = summary.ifBlank { null },
             coverUrl = cover_url.ifBlank { null },
             status = publishing_status.toCatalogStatus(),
