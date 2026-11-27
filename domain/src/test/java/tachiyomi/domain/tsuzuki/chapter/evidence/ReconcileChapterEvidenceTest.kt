@@ -249,6 +249,58 @@ class ReconcileChapterEvidenceTest {
     }
 
     @Test
+    fun `provider volume contradictions remain unmapped and preserve independently supported chapter`() = runTest {
+        val fixture = fixture()
+        val healthy = ChapterEvidence(
+            id = "healthy",
+            canonicalTitleId = "title",
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "source-healthy",
+            externalChapterKey = "chapter-one",
+            rawLabel = "Vol. 1 Ch. 1",
+            rawNumber = 1.0,
+            volume = 1,
+            title = null,
+            observedAt = 10L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+        val competing = healthy.copy(
+            id = "competing",
+            producerId = "source-competing",
+        )
+        fixture.reconciler.execute("title", listOf(healthy, competing))
+        val chapter = fixture.chapterRepository.getByCanonicalTitleId("title").single()
+        val contradictions = listOf(
+            "Vol. 1 Ch. 1 - Chapter 2" to 1,
+            "Vol. 1 Ch. 1 - Volume 2" to 1,
+            "Vol. 2 Ch. 1" to 1,
+        )
+        for ((index, contradiction) in contradictions.withIndex()) {
+            val (label, structuredVolume) = contradiction
+            val bad = competing.copy(
+                rawLabel = label,
+                volume = structuredVolume,
+                observedAt = 20L + index,
+            )
+            fixture.reconciler.execute("title", listOf(bad))
+            fixture.chapterRepository.getByCanonicalTitleId("title") shouldBe listOf(chapter)
+            fixture.evidenceRepository.getByProducerExternalKey(
+                ProducerKind.PROVIDER,
+                healthy.producerId,
+                requireNotNull(healthy.externalChapterKey),
+            )?.mappedCanonicalChapterId shouldBe chapter.id
+            val persisted = fixture.evidenceRepository.getByProducerExternalKey(
+                ProducerKind.PROVIDER,
+                bad.producerId,
+                requireNotNull(bad.externalChapterKey),
+            )
+            persisted?.mappedCanonicalChapterId shouldBe null
+            persisted?.evidence?.rawLabel shouldBe label
+        }
+    }
+
+    @Test
     fun `MangaFire code13 partial correction detaches old scene mappings without erasing IDs`() = runTest {
         val fixture = fixture()
         val oldScenes = listOf(

@@ -20,6 +20,10 @@ on:
       - 'domain/src/test/java/tachiyomi/domain/tsuzuki/catalog/interactor/ResolveMangaAllIndependentCatalogIdentityTest.kt'
       - '.github/scripts/run_mangaall_frozen30_catalog_plan.py'
       - '.github/scripts/run_mangaall_frozen30_canonical_persistence.py'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/chapter/interactor/ParseCanonicalChapterVolume.kt'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/chapter/evidence/ReconcileChapterEvidence.kt'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/chapter/interactor/ParseCanonicalChapterVolumeTest.kt'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/chapter/evidence/ReconcileChapterEvidenceTest.kt'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/provider/reading/**'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/reader/**'
       - 'domain/src/test/java/tachiyomi/domain/tsuzuki/provider/reading/**'
@@ -117,7 +121,7 @@ jobs:
             --tests '*RefreshProviderReadingChaptersTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' \
             --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' \
             --tests '*ResolveProviderChapterReadingTest' --tests '*SelectMangaAllSourceTest' --tests '*MangaAllReadingIdentityTest' --tests '*BalancedSourceCandidateSampleTest' \
-            --tests '*ProviderEvidenceMetadataCodecTest' \
+            --tests '*ProviderEvidenceMetadataCodecTest' --tests '*ParseCanonicalChapterVolumeTest' --tests '*ReconcileChapterEvidenceTest' \
             :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' \
             --tests '*ChapterEvidenceRepositoryImplTest' \
             :app:testDebugUnitTest --tests '*ShikimoriApiTest' \

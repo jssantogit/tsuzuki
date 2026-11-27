@@ -4,6 +4,17 @@ import dev.zacsweers.metro.Inject
 import java.text.Normalizer
 import java.util.Locale
 
+internal enum class SourceChapterVolumeRejection {
+    CONFLICTING_CHAPTER_MARKERS,
+    MALFORMED_VOLUME_LABEL,
+    SOURCE_VOLUME_CONFLICT,
+}
+
+internal data class SourceChapterVolumeAssessment(
+    val observedVolume: Int? = null,
+    val rejection: SourceChapterVolumeRejection? = null,
+)
+
 /** Extracts bounded volume evidence from explicit, consistent source chapter labels. */
 @Inject
 class ParseCanonicalChapterVolume {
@@ -52,6 +63,24 @@ class ParseCanonicalChapterVolume {
     fun hasConflictingChapterMarkers(rawLabel: String?): Boolean {
         val numbers = chapterMarkers(normalize(rawLabel.orEmpty()))
         return numbers.size > 1 && (numbers.any { it == null } || numbers.distinct().size > 1)
+    }
+
+    /**
+     * The same intrinsic volume checks apply before mapping and before reading.
+     * A canonical volume mismatch is a separate contextual decision.
+     */
+    internal fun assessSourceVolume(rawLabel: String?, structuredVolume: Int?): SourceChapterVolumeAssessment {
+        if (hasConflictingChapterMarkers(rawLabel)) {
+            return SourceChapterVolumeAssessment(rejection = SourceChapterVolumeRejection.CONFLICTING_CHAPTER_MARKERS)
+        }
+        val labelVolume = execute(rawLabel)
+        if (hasExplicitVolumeMarker(rawLabel) && labelVolume == null) {
+            return SourceChapterVolumeAssessment(rejection = SourceChapterVolumeRejection.MALFORMED_VOLUME_LABEL)
+        }
+        if (structuredVolume != null && labelVolume != null && structuredVolume != labelVolume) {
+            return SourceChapterVolumeAssessment(rejection = SourceChapterVolumeRejection.SOURCE_VOLUME_CONFLICT)
+        }
+        return SourceChapterVolumeAssessment(observedVolume = structuredVolume ?: labelVolume)
     }
 
     private fun chapterMarkers(normalized: String): List<Int?> =

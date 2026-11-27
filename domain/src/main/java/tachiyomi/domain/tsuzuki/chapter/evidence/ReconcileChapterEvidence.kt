@@ -380,7 +380,8 @@ class ReconcileChapterEvidence internal constructor(
                     observation.rawNumber,
                     observation.volume,
                 )
-            val identityEvidenceUnsafe = numericHintConflicts || unsafeProvisionalEvidence
+            val contradictoryProviderVolume = hasContradictoryProviderVolume(observation)
+            val identityEvidenceUnsafe = numericHintConflicts || unsafeProvisionalEvidence || contradictoryProviderVolume
             val parsedIdentityIsReliable = observation.confidence >= RELIABLE_CONFIDENCE &&
                 parsed.confidence >= RELIABLE_CONFIDENCE &&
                 parsed.identity.isSpecific &&
@@ -689,6 +690,11 @@ class ReconcileChapterEvidence internal constructor(
         this[reason] = (this[reason] ?: 0) + 1
     }
 
+    private fun hasContradictoryProviderVolume(evidence: ChapterEvidence): Boolean =
+        evidence.producerKind == ProducerKind.PROVIDER &&
+            evidence.authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL &&
+            volumeParser.assessSourceVolume(evidence.rawLabel, evidence.volume).rejection != null
+
     private fun isReliableSupportFor(
         evidence: ChapterEvidence,
         chapter: CanonicalChapter,
@@ -708,6 +714,7 @@ class ReconcileChapterEvidence internal constructor(
             parsed.identity.isSpecific &&
             !hasConflictingIntegerChapterHint(parsed, evidence.rawNumber) &&
             !unsafeSourceEvidence &&
+            !hasContradictoryProviderVolume(evidence) &&
             parsed.identity == chapter.identity &&
             when {
                 evidence.volume == null -> !volumeIsAmbiguous
