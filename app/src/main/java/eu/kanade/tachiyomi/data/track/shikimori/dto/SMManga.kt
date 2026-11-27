@@ -3,13 +3,28 @@ package eu.kanade.tachiyomi.data.track.shikimori.dto
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import tachiyomi.domain.tsuzuki.integration.CatalogCreatorAliasEvidence
 import tachiyomi.domain.tsuzuki.integration.CreatorCreditRole
 
 @Serializable
 data class SMSearchResult(
     val data: SMMangaResults,
-)
+    val errors: List<JsonObject> = emptyList(),
+) {
+    fun completeMangas(): List<SMManga> {
+        check(errors.isEmpty()) { "SHIKI_GRAPHQL_PARTIAL_RESPONSE" }
+        return data.mangas
+    }
+
+    fun exactManga(id: Long): SMManga? {
+        require(id > 0)
+        val rows = completeMangas()
+        if (rows.isEmpty()) return null
+        check(rows.size == 1 && rows.single().id == id) { "SHIKI_DETAIL_IDENTITY_MISMATCH" }
+        return rows.single()
+    }
+}
 
 @Serializable
 data class SMMangaResults(
@@ -88,8 +103,10 @@ data class SMPerson(
 @Serializable
 data class SMCreatorResponse(
     val data: SMCreatorResults,
+    val errors: List<JsonObject> = emptyList(),
 ) {
     fun verifiedAliases(workId: Long): List<CatalogCreatorAliasEvidence> {
+        if (errors.isNotEmpty()) return emptyList()
         val work = data.mangas.singleOrNull()?.takeIf { it.id == workId.toString() } ?: return emptyList()
         val credits = work.personRoles.orEmpty()
         if (credits.size > 32) return emptyList()

@@ -207,7 +207,12 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 MangaAllCatalogIdentityResult(status = MangaAllCatalogIdentityStatus.CATALOG_FORMAT_UNSUPPORTED)
             } else {
                 try {
-                    withTimeout(35_000L) {
+                    // One constrained lookup may verify eight candidates in
+                    // three bounded detail waves after a 24-second search.
+                    // Do not turn a valid complete search into an artificial
+                    // timeout at the old single-candidate deadline.
+                    val timeout = if (work.title in requiredCredits) 60_000L else 35_000L
+                    withTimeout(timeout) {
                         bootstrap.execute(
                             work.title,
                             work.format,

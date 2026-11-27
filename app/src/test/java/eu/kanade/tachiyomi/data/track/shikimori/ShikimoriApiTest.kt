@@ -2,6 +2,9 @@ package eu.kanade.tachiyomi.data.track.shikimori
 
 import eu.kanade.tachiyomi.data.track.shikimori.dto.SMCreatorResponse
 import eu.kanade.tachiyomi.data.track.shikimori.dto.SMManga
+import eu.kanade.tachiyomi.data.track.shikimori.dto.SMMangaResults
+import eu.kanade.tachiyomi.data.track.shikimori.dto.SMSearchResult
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -86,6 +89,34 @@ class ShikimoriApiTest {
         aliases.single().creatorExternalId shouldBe "7"
         aliases.single().aliases shouldBe listOf("문백경")
         response.verifiedAliases(43) shouldBe emptyList()
+    }
+
+    @Test
+    fun `GraphQL partial data never certifies search completeness or a detail identity`() {
+        val row = SMManga(42, "Work", 0, null, "", null, null, null, null, "manga", null)
+        val response = SMSearchResult(SMMangaResults(listOf(row)))
+        response.completeMangas() shouldBe listOf(row)
+        response.exactManga(42) shouldBe row
+        SMSearchResult(SMMangaResults(emptyList())).exactManga(42) shouldBe null
+        shouldThrow<IllegalStateException> { response.exactManga(43) }
+        shouldThrow<IllegalStateException> {
+            response.copy(data = SMMangaResults(listOf(row, row.copy(id = 43)))).exactManga(42)
+        }
+        val partial = response.copy(errors = listOf(kotlinx.serialization.json.buildJsonObject {}))
+        shouldThrow<IllegalStateException> { partial.completeMangas() }
+        shouldThrow<IllegalStateException> { partial.exactManga(42) }
+    }
+
+    @Test
+    fun `partial staff response supplies no verified creator aliases`() {
+        val response = Json.decodeFromString<SMCreatorResponse>(
+            """
+            {"data":{"mangas":[{"id":"42","personRoles":[
+                {"person":{"id":"7","name":"Creator","japanese":"作家"},"rolesEn":["Story"]}
+            ]}]},"errors":[{"message":"partial staff"}]}
+            """.trimIndent(),
+        )
+        response.verifiedAliases(42) shouldBe emptyList()
     }
 
     private fun FormBody.formValue(name: String): String =

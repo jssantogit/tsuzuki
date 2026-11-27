@@ -169,7 +169,7 @@ class ShikimoriApi(
                 )
                     .awaitSuccess()
                     .parseAs<SMSearchResult>()
-                    .data.mangas
+                    .completeMangas()
                     .map { it.toTrack(trackerId) }
             }
         }
@@ -268,7 +268,7 @@ class ShikimoriApi(
                 )
                     .awaitSuccess()
                     .parseAs<SMSearchResult>()
-                    .data.mangas
+                    .completeMangas()
                     .map { it.toTrack(trackerId) }
             }
             ShikimoriCollectionPage(
@@ -329,8 +329,7 @@ class ShikimoriApi(
                 )
                     .awaitSuccess()
                     .parseAs<SMSearchResult>()
-                    .data.mangas
-                    .firstOrNull()
+                    .exactManga(id.toLong())
                     ?.toTrack(trackerId)
             }
         }
