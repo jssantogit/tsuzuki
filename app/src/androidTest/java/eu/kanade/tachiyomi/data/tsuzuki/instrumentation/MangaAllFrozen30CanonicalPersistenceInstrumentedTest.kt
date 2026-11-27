@@ -48,6 +48,7 @@ import tachiyomi.data.tsuzuki.provider.ProviderReadingBindingRepositoryImpl
 import tachiyomi.data.tsuzuki.provider.ProviderWorkSourceAssociationRepositoryImpl
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
 import tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentity
+import tachiyomi.domain.tsuzuki.catalog.interactor.mangaAllCatalogCreatorKey
 import tachiyomi.domain.tsuzuki.catalog.interactor.toCanonicalReadingMetadata
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
@@ -542,15 +543,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             // These controls reject an incorrect adaptation; they never supply
             // missing credits or override independent catalog identity.
             if (japanese) {
-                fun creatorKey(name: String): List<String> = Normalizer.normalize(name, Normalizer.Form.NFKD)
-                    .replace(Regex("""\p{M}+"""), "")
-                    .lowercase()
-                    .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
-                    .trim()
-                    .split(' ')
-                    .sorted()
-                val observed = (owner.authors + owner.artists).map(::creatorKey).toSet()
-                if (required.any { creatorKey(it) !in observed }) return "EDITION_CREDITS_UNVERIFIED"
+                val observed = (owner.authors + owner.artists).map(::mangaAllCatalogCreatorKey).toSet()
+                if (required.any { mangaAllCatalogCreatorKey(it) !in observed }) return "EDITION_CREDITS_UNVERIFIED"
             }
             // The fresh independent owner must publish the complete native
             // title before reviewed citations can attach to its exact ID.

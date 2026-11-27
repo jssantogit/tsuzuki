@@ -46,9 +46,16 @@ def load_cohort(key="manhwa"):
                   })
 
 def creator_key(name):
-    value = unicodedata.normalize("NFKD", name).casefold()
-    # Exact tokens, with family/given name order tolerated; no fuzzy matching.
-    normalized = "".join(c if c.isalnum() else " " if not unicodedata.combining(c) else "" for c in value)
+    value = unicodedata.normalize("NFKC", name)
+    # Match the Android contract: fold Latin accents, never Japanese voicing
+    # marks or other non-Latin distinctions. No fuzzy or surname-only match.
+    value = "".join(
+        "".join(mark for mark in unicodedata.normalize("NFD", c)
+                if not unicodedata.category(mark).startswith("M"))
+        if "LATIN" in unicodedata.name(c, "") else c
+        for c in value
+    ).lower()
+    normalized = "".join(c if c.isalnum() or unicodedata.category(c).startswith("M") else " " for c in value)
     return tuple(sorted(normalized.split()))
 
 def edition_credits_match(record, expected):

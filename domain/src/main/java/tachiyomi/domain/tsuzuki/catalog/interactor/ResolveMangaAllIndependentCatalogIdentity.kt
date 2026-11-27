@@ -221,8 +221,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
         }
     }
 
-    private fun creatorKey(name: String): String =
-        normalize(name).split(' ').filter(String::isNotBlank).sorted().joinToString(" ")
+    private fun creatorKey(name: String): String = mangaAllCatalogCreatorKey(name)
 
     private fun hasConflictingIdentity(seed: CatalogItem, observed: List<CatalogItem>): Boolean {
         fun keys(item: CatalogItem): Set<Pair<String, String>> = buildSet {
@@ -326,13 +325,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
         } ?: SourceSearchResult(failed = true)
     }
 
-    private fun normalize(value: String): String =
-        Normalizer.normalize(value, Normalizer.Form.NFKD)
-            .replace(COMBINING_MARKS, "")
-            .lowercase()
-            .replace(NON_ALPHANUMERIC, " ")
-            .trim()
-            .replace(WHITESPACE, " ")
+    private fun normalize(value: String): String = normalizeMangaAllCatalogTitle(value)
 
     private companion object {
         const val PAGE_SIZE = 25
@@ -343,8 +336,28 @@ class ResolveMangaAllIndependentCatalogIdentity(
         const val MAX_CREATOR_CANDIDATES = 8
         const val CATALOG_TIMEOUT_MILLIS = 15_000L
         const val DETAIL_TIMEOUT_MILLIS = 10_000L
-        val COMBINING_MARKS = Regex("""\p{M}+""")
-        val NON_ALPHANUMERIC = Regex("""[^\p{L}\p{N}]+""")
-        val WHITESPACE = Regex("""\s+""")
     }
 }
+
+private val CATALOG_COMBINING_MARKS = Regex("""\p{M}+""")
+private val CATALOG_NON_ALPHANUMERIC = Regex("""[^\p{L}\p{N}\p{M}]+""")
+private val CATALOG_WHITESPACE = Regex("""\s+""")
+
+/** Fold Latin accents, not meaningful marks in other writing systems. */
+private fun normalizeMangaAllCatalogTitle(value: String): String {
+    val compatible = Normalizer.normalize(value, Normalizer.Form.NFKC)
+    val folded = buildString {
+        for (char in compatible) {
+            if (Character.UnicodeScript.of(char.code) == Character.UnicodeScript.LATIN) {
+                append(Normalizer.normalize(char.toString(), Normalizer.Form.NFD).replace(CATALOG_COMBINING_MARKS, ""))
+            } else {
+                append(char)
+            }
+        }
+    }
+    return folded.lowercase().replace(CATALOG_NON_ALPHANUMERIC, " ").trim().replace(CATALOG_WHITESPACE, " ")
+}
+
+/** Compare complete published names, permitting given/family name order. */
+fun mangaAllCatalogCreatorKey(name: String): String =
+    normalizeMangaAllCatalogTitle(name).split(' ').filter(String::isNotBlank).sorted().joinToString(" ")

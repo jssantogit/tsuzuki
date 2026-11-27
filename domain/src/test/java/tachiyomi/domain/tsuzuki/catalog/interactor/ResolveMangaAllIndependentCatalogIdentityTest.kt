@@ -142,6 +142,22 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
     }
 
     @Test
+    fun `Japanese voicing marks remain distinct while width and Latin accents normalize`() = runTest {
+        val catalog = source("mal", search = {
+            CatalogPage(listOf(item("mal", "42", "かみ")), false)
+        }, detail = { error("Distinct kana cannot authorize details") })
+        ResolveMangaAllIndependentCatalogIdentity(registry(catalog))
+            .execute("がみ").status shouldBe MangaAllCatalogIdentityStatus.CATALOG_NOT_FOUND
+        val voiced = source("mal", search = {
+            CatalogPage(listOf(item("mal", "43", "ガク")), false)
+        }, detail = { id -> item("mal", id, "ガク") })
+        ResolveMangaAllIndependentCatalogIdentity(registry(voiced))
+            .execute("ｶﾞｸ").status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+        (mangaAllCatalogCreatorKey("パク") == mangaAllCatalogCreatorKey("ハク")) shouldBe false
+        mangaAllCatalogCreatorKey("Ryōko Kui") shouldBe mangaAllCatalogCreatorKey("Kui Ryoko")
+    }
+
+    @Test
     fun `one unavailable catalog makes a lone match incomplete and unsafe to promote`() = runTest {
         val mal = source("mal", search = {
             CatalogPage(listOf(item("mal", "42", "Work")), false)
