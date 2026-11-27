@@ -116,7 +116,8 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 }
                 val facts = if (error != null) {
                     val reason = when {
-                        catalogName == "mal" && !app.graph.trackerManager.myAnimeList.hasClientId() -> "CLIENT_ID_MISSING"
+                        catalogName == "mal" && !app.graph.trackerManager.myAnimeList.hasClientId() ->
+                            "CLIENT_ID_MISSING"
                         error is CatalogError.HttpError -> "HTTP_${error.statusCode}"
                         error is CatalogError.RateLimitExceeded -> "HTTP_429"
                         error is CatalogError.NetworkError -> "NETWORK_FAILURE"

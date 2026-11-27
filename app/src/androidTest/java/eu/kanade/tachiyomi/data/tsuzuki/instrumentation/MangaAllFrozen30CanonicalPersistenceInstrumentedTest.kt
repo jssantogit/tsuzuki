@@ -175,7 +175,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val lock = instrument.context.assets.open(lockName)
             .bufferedReader().use { Json.parseToJsonElement(it.readText()).jsonObject }
         val works = requireNotNull(lock["works"]).jsonArray.map { it.jsonPrimitive.content }
-        assertEquals(if (japanese) "MANGA_30_FIXED_20261126" else "MANHWA_30_FIXED_20261123", lock["cohort"]?.jsonPrimitive?.content)
+        assertEquals(
+            if (japanese) "MANGA_30_FIXED_20261126" else "MANHWA_30_FIXED_20261123",
+            lock["cohort"]?.jsonPrimitive?.content,
+        )
         assertEquals(cohort, lock["format"]?.jsonPrimitive?.content)
         if (japanese) assertEquals("ja", lock["originalLanguage"]?.jsonPrimitive?.content)
         assertEquals(30, works.size)
