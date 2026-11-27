@@ -220,3 +220,5 @@ jobs:
 
 # Preflight only until the explicit independent catalog plan is attested 30/30.
 # The live marker is intentionally absent from this commit message.
+
+# Run the exact frozen 30-work canonical gate after the successful strict catalog receipt.
