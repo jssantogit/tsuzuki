@@ -255,3 +255,5 @@ jobs:
 # Keep owner-specific retrieval hints separate and retain typed creator-group diagnostics.
 
 # Record closed detail verification failures without changing the acceptance policy.
+
+# Re-run catalog comparison after matching the Kotlin formatter.

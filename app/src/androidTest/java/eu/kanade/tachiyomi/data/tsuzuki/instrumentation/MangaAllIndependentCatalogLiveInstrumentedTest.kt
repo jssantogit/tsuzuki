@@ -259,7 +259,10 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 instrument.sendStatus(
                     1,
                     Bundle().apply {
-                        putString("stream", "MANGAALL_CATALOG_DETAIL_REJECTION|index=$index|reason=${reason.name}|count=$count")
+                        putString(
+                            "stream",
+                            "MANGAALL_CATALOG_DETAIL_REJECTION|index=$index|reason=${reason.name}|count=$count",
+                        )
                     },
                 )
             }
