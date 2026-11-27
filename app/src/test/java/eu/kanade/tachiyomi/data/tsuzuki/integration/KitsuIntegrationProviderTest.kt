@@ -308,7 +308,12 @@ class KitsuIntegrationProviderTest {
         val verified = KitsuPublicMangaCredits("42", "MANGA", staff)
         suspend fun detailWith(credits: KitsuPublicMangaCredits?): CatalogItem {
             val provider = KitsuIntegrationProvider.forTest(
-                delegate = KitsuCatalogProvider(FakeKitsuClient(detailResult = Result.success(detail))),
+                delegate = KitsuCatalogProvider(
+                    FakeKitsuClient(
+                        searchResult = Result.success(KitsuMangaResponse()),
+                        detailResult = Result.success(detail),
+                    ),
+                ),
                 userLibraryApi = object : KitsuUserLibraryApi {
                     override suspend fun getUserMangaList(): List<KitsuUserListEntry> = emptyList()
                 },

@@ -57,6 +57,7 @@ jobs:
           sys.path.insert(0, ".github/scripts")
           from mangaall_research_cohort import load_cohort, edition_credits_match
           from run_mangaall_frozen30_canonical_persistence import selftest
+          from verify_mangaall_japanese_catalog_gate import selftest as gate_selftest
           old, new = load_cohort(), load_cohort("manga")
           assert old.digest != new.digest and old.output != new.output
           assert not set(old.works).intersection(new.works)
@@ -65,6 +66,7 @@ jobs:
           assert not edition_credits_match(dict(authors=["Tachibana Koushi"], artists=["Ringo"]), expected)
           assert not edition_credits_match(dict(authors=["Tachibana Koushi"], artists=[]), expected)
           selftest()
+          gate_selftest()
           print("MANGAALL_CATALOG|ownerContractRegression=PASS|cohorts=SEPARATE|editionGuard=PASS")
           PY
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -238,3 +240,5 @@ jobs:
 # Retry after clarifying canonical owner scope condition.
 
 # Revalidate after exact import ordering, crosswalk conflict and Kitsu public staff corrections.
+
+# Run the grouped contract, pagination, creator-disambiguation and Kitsu fixture corrections.

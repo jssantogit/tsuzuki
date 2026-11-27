@@ -165,9 +165,11 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         }.orEmpty()
         require(requiredCredits.size <= works.size)
         require(requiredCredits.keys.all { title -> works.any { parseWork(it).title == title } })
-        require(requiredCredits.values.all { names ->
-            names.size in 1..8 && names.all { it.isNotBlank() && it.length <= 128 }
-        })
+        require(
+            requiredCredits.values.all { names ->
+                names.size in 1..8 && names.all { it.isNotBlank() && it.length <= 128 }
+            },
+        )
         val selected = works.withIndex().filter { it.index % shardCount == shardIndex }
         var conclusive = 0
         for ((index, line) in selected) {
