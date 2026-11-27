@@ -230,3 +230,5 @@ jobs:
           PY
           test '${{ needs.build-once.result }}' = 'success'
           test '${{ needs.compare.result }}' = 'success'
+
+# Re-run native catalog contract regressions after exact Spotless formatting correction.
