@@ -55,7 +55,8 @@ def shard_run(works, rows, plan_digest, shard, cohort=None, probe=None):
     selected=rows[shard*10:(shard+1)*10]
     if probe:
         assert cohort.key == "manga" and probe in PROBE_SCOPES
-        selected=[dict(index=r["index"],catalog=probe) for r in selected if r["index"] in JAPANESE_UNRESOLVED]
+        selected=[dict(index=r["index"],catalog=probe,**({"searchTitle":r["searchTitle"]} if "searchTitle" in r else {}))
+                  for r in selected if r["index"] in JAPANESE_UNRESOLVED]
     assert adb("shell","getprop","ro.kernel.qemu").stdout.strip()=="1"
     app=[p for p in Path("app/build/outputs/apk/debug").rglob("*.apk") if p.name=="app-debug.apk" or "universal" in p.name]
     tests=list(Path("app/build/outputs/apk/androidTest/debug").rglob("*.apk"))

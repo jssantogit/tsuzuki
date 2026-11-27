@@ -244,3 +244,5 @@ jobs:
 # Run the grouped contract, pagination, creator-disambiguation and Kitsu fixture corrections.
 
 # Focus live on the two unresolved adaptations; keep all four adapter regressions.
+
+# Compare verified native-title retrieval on both unresolved adaptations while reading diagnostics run.

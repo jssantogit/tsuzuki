@@ -131,6 +131,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val cohort = args.getString("mangaAllCanonicalCohort") ?: "manhwa"
         require(cohort in setOf("manhwa", "manga"))
         val japanese = cohort == "manga"
+        val diagnosticMode = args.getString("mangaAllJapaneseReadingDiagnostic") ?: "0"
+        require(diagnosticMode in setOf("0", "1"))
+        val japaneseDiagnostic = diagnosticMode == "1"
+        require(!japaneseDiagnostic || (japanese && catalogScope == "explicit_plan"))
         val expectedFormat = if (japanese) CatalogItemFormat.MANGA else CatalogItemFormat.MANHWA
         val corpusSha = if (japanese) JAPANESE_CORPUS_SHA else CORPUS_SHA
         require(!japanese || catalogScope == "explicit_plan")
@@ -159,7 +163,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             (pendingMode == "0" || it in pending14) &&
                 (!creditAudit || it != 16) &&
                 (auditScope != "REMAINING6" || it in remainingSix) &&
-                (remainingMode != "1" || it in remainingSix)
+                (remainingMode != "1" || it in remainingSix) &&
+                (!japaneseDiagnostic || it !in setOf(3, 5))
         }
         val context = instrument.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)
@@ -212,7 +217,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             catalogScope
         }
 
-        val attestedIdentities = if (japanese) {
+        val attestedIdentities = if (japanese && !japaneseDiagnostic) {
             val doc = instrument.context.assets.open("attested-identities.json")
                 .bufferedReader().use { Json.parseToJsonElement(it.readText()).jsonObject }
             assertEquals("1", doc.getValue("schemaVersion").jsonPrimitive.content)
@@ -236,7 +241,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         }
 
         fun matchesAttestedOwner(index: Int, provider: String, externalId: String): Boolean =
-            !japanese || hash("$provider:$externalId") == attestedIdentities[index - 1]
+            !japanese || japaneseDiagnostic || hash("$provider:$externalId") == attestedIdentities[index - 1]
 
         fun nativeTitle(index: Int): String? = plan.getOrNull(index - 1)
             ?.get("searchTitle")?.jsonPrimitive?.content
@@ -445,7 +450,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 else -> false
             }
         }
-        val receiptNamespace = if (japanese) "mangaall-japanese-manga-30" else "mangaall-frozen30"
+        val receiptNamespace = when {
+            japaneseDiagnostic -> "mangaall-japanese-manga-28-diagnostic"
+            japanese -> "mangaall-japanese-manga-30"
+            else -> "mangaall-frozen30"
+        }
         val receipts = File(context.filesDir, "$receiptNamespace-canonical-receipts-$catalogScope").apply { mkdirs() }
 
         suspend fun fingerprint(titleId: String, catalogName: String, index: Int): String? {
