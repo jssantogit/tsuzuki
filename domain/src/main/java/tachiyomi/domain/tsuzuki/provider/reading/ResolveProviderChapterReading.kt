@@ -145,6 +145,22 @@ enum class ProviderReadingIdentityRejectionReason {
     MIXED_REJECTIONS,
 }
 
+/** Closed, per-source explanation of a mapped row excluded from Reader options. */
+enum class ProviderReadingOptionRejectionReason {
+    CHAPTER_IDENTITY_REJECTED,
+    MISSING_CHAPTER_KEY,
+    SOURCE_NOT_AUTHORIZED,
+    CATALOG_PROOF_MISMATCH,
+    SOURCE_LANGUAGE_MISSING,
+    SOURCE_LANGUAGE_MISMATCH,
+    SOURCE_KEY_OR_FACET_REJECTED,
+}
+
+data class ProviderReadingOptionRejection(
+    val reason: ProviderReadingOptionRejectionReason,
+    val chapterIdentityReason: ProviderReadingIdentityRejectionReason? = null,
+)
+
 class ResolveProviderChapterReading(
     private val canonicalChapterRepository: CanonicalChapterRepository,
     private val evidenceRepository: ChapterEvidenceRepository,
@@ -182,7 +198,26 @@ class ResolveProviderChapterReading(
         null,
     )
 
-    suspend fun options(canonicalChapterId: String): List<ProviderChapterReadingOption> {
+    suspend fun options(canonicalChapterId: String): List<ProviderChapterReadingOption> =
+        evaluateOptions(canonicalChapterId)
+
+    /** Audit the same option pipeline even when another MangaALL source is eligible. */
+    suspend fun auditMangaAllOptionRejections(
+        canonicalChapterId: String,
+    ): Map<String, Map<ProviderReadingOptionRejection, Int>> {
+        val counts = mutableMapOf<String, MutableMap<ProviderReadingOptionRejection, Int>>()
+        evaluateOptions(canonicalChapterId) { ref, rejection ->
+            val source = ref?.let(MangaAllReadingIdentity::sourceId) ?: return@evaluateOptions
+            val byReason = counts.getOrPut(source) { mutableMapOf() }
+            byReason[rejection] = (byReason[rejection] ?: 0) + 1
+        }
+        return counts
+    }
+
+    private suspend fun evaluateOptions(
+        canonicalChapterId: String,
+        audit: ((ProviderBindingRef?, ProviderReadingOptionRejection) -> Unit)? = null,
+    ): List<ProviderChapterReadingOption> {
         val chapter = canonicalChapterRepository.getById(canonicalChapterId) ?: return emptyList()
         providerRegistry.awaitReady()
         val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
@@ -200,8 +235,8 @@ class ResolveProviderChapterReading(
             .filter { it.editionQualification == ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT }
             .map { it.ref.evidenceProducerId() }
             .toSet()
-        val bindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
-            .asSequence()
+        val allBindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
+        val bindings = allBindings.asSequence()
             .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
             .filter { it.ref.evidenceProducerId() !in excludedWorkProducers }
             .filter { binding ->
@@ -242,7 +277,26 @@ class ResolveProviderChapterReading(
                 }
             }
         }
-        if (sources.isEmpty()) return emptyList()
+        if (sources.isEmpty() && audit == null) return emptyList()
+        val knownRefs = if (audit == null) {
+            emptyMap()
+        } else {
+            buildMap {
+                allBindings.forEach { put(it.ref.evidenceProducerId(), it.ref) }
+                associations.forEach { putIfAbsent(it.ref.evidenceProducerId(), it.ref) }
+            }
+        }
+        fun reject(
+            persisted: PersistedChapterEvidence,
+            reason: ProviderReadingOptionRejectionReason,
+            identityReason: ProviderReadingIdentityRejectionReason? = null,
+        ): ProviderChapterReadingOption? {
+            audit?.invoke(
+                knownRefs[persisted.evidence.producerId],
+                ProviderReadingOptionRejection(reason, identityReason),
+            )
+            return null
+        }
 
         return evidenceRepository.getByCanonicalTitleId(chapter.canonicalTitleId)
             .asSequence()
@@ -251,27 +305,35 @@ class ResolveProviderChapterReading(
                     persisted.evidence.producerKind == ProducerKind.PROVIDER &&
                     persisted.evidence.authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
             }
-            .filter { persisted ->
-                // The same typed validation powers Reader and the no-match
-                // diagnostic. Keep acceptance and rejection attribution aligned.
-                identityRejectionReason(chapter, persisted.evidence) == null
-            }
             .mapNotNull { persisted ->
-                val providerChapterId = persisted.evidence.externalChapterKey ?: return@mapNotNull null
-                val (bindingId, ref) = sources[persisted.evidence.producerId] ?: return@mapNotNull null
+                // The same typed validation powers Reader and both diagnostics.
+                val identityReason = identityRejectionReason(chapter, persisted.evidence)
+                if (identityReason != null) {
+                    return@mapNotNull reject(
+                        persisted,
+                        ProviderReadingOptionRejectionReason.CHAPTER_IDENTITY_REJECTED,
+                        identityReason,
+                    )
+                }
+                val providerChapterId = persisted.evidence.externalChapterKey
+                    ?: return@mapNotNull reject(persisted, ProviderReadingOptionRejectionReason.MISSING_CHAPTER_KEY)
+                val (bindingId, ref) = sources[persisted.evidence.producerId]
+                    ?: return@mapNotNull reject(persisted, ProviderReadingOptionRejectionReason.SOURCE_NOT_AUTHORIZED)
                 val catalogProof = catalogSources[persisted.evidence.producerId]
                 if (catalogProof != null &&
                     persisted.evidence.providerMetadata?.catalogWorkFingerprint != catalogProof
                 ) {
-                    return@mapNotNull null
+                    return@mapNotNull reject(persisted, ProviderReadingOptionRejectionReason.CATALOG_PROOF_MISMATCH)
                 }
-                if (!MangaAllReadingIdentity.accepts(
-                        ref,
-                        providerChapterId,
-                        persisted.evidence.providerMetadata?.language,
-                    )
-                ) {
-                    return@mapNotNull null
+                val reportedLanguage = persisted.evidence.providerMetadata?.language
+                if (!MangaAllReadingIdentity.accepts(ref, providerChapterId, reportedLanguage)) {
+                    val reason = when {
+                        reportedLanguage == null -> ProviderReadingOptionRejectionReason.SOURCE_LANGUAGE_MISSING
+                        !reportedLanguage.equals(ref.facetId, ignoreCase = true) ->
+                            ProviderReadingOptionRejectionReason.SOURCE_LANGUAGE_MISMATCH
+                        else -> ProviderReadingOptionRejectionReason.SOURCE_KEY_OR_FACET_REJECTED
+                    }
+                    return@mapNotNull reject(persisted, reason)
                 }
                 ProviderChapterReadingOption(
                     canonicalChapterId = canonicalChapterId,

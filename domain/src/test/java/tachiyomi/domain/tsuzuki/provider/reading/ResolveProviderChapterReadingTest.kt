@@ -1428,6 +1428,43 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `source audit explains rejection when another source is readable`(): Unit = runBlocking {
+        val mangaAllId = ProviderId("app.tsuzuki.mangaall")
+        val dex = binding.copy(
+            id = "dex",
+            ref = ProviderBindingRef(mangaAllId, "en", "mangadex:12345678-1234-1234-1234-123456789abc"),
+        )
+        val dot = binding.copy(
+            id = "dot",
+            ref = ProviderBindingRef(mangaAllId, "en", "mangadot:123"),
+        )
+        fun observed(target: ProviderReadingBinding, key: String, language: String?) =
+            evidence(target, key, chapter.id).let {
+                it.copy(evidence = it.evidence.copy(providerMetadata = ProviderEvidenceMetadata(language = language)))
+            }
+        val reader = resolver(
+            bindings = listOf(dex, dot),
+            evidence = listOf(
+                observed(dex, "mangadex:abcdef12-1234-1234-1234-123456789abc", "en"),
+                observed(dot, "mangadot:uploads:17", null),
+                observed(dot, "mangadot:chapters:18", "pt-br"),
+                observed(dot, "mangadot:invalid:19", "en"),
+            ),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(readingRegistration(provider = mangaAllId)) },
+            ),
+        )
+        reader.options(chapter.id).map { it.contentSourceId } shouldBe listOf("mangadex")
+        reader.auditMangaAllOptionRejections(chapter.id) shouldBe mapOf(
+            "mangadot" to mapOf(
+                ProviderReadingOptionRejection(ProviderReadingOptionRejectionReason.SOURCE_LANGUAGE_MISSING) to 1,
+                ProviderReadingOptionRejection(ProviderReadingOptionRejectionReason.SOURCE_LANGUAGE_MISMATCH) to 1,
+                ProviderReadingOptionRejection(ProviderReadingOptionRejectionReason.SOURCE_KEY_OR_FACET_REJECTED) to 1,
+            ),
+        )
+    }
+
+    @Test
     fun `MangaAll keeps source identities separate and hides unreadable metadata-only chapters`(): Unit = runBlocking {
         val mangaAllId = ProviderId("app.tsuzuki.mangaall")
         val fire = binding.copy(

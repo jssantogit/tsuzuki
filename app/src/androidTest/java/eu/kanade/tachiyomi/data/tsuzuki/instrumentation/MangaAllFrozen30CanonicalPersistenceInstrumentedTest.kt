@@ -878,6 +878,22 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 )
             }
             if (one == null) return "CANONICAL_CHAPTER_ONE_MISSING_OR_AMBIGUOUS"
+            // Count only closed reasons; do not emit chapter text, work IDs or URLs.
+            for ((source, rejected) in resolver.auditMangaAllOptionRejections(one.id)) {
+                for ((rejection, count) in rejected) {
+                    val identity = rejection.chapterIdentityReason?.name ?: "NONE"
+                    instrument.sendStatus(
+                        1,
+                        Bundle().apply {
+                            putString(
+                                "stream",
+                                "MANGAALL_CANONICAL_OPTION_REJECTION|index=$index|source=$source" +
+                                    "|reason=${rejection.reason.name}|identity=$identity|count=$count",
+                            )
+                        },
+                    )
+                }
+            }
             // Multiple releases of one exact HID are separate explicit picker
             // choices. Rival work HIDs within a source are still not equivalent.
             val bySource = options.groupBy { it.contentSourceId }
