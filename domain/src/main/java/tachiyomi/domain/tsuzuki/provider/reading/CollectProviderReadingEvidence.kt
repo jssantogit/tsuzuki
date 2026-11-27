@@ -1055,7 +1055,10 @@ class CollectProviderReadingEvidence private constructor(
                         if (result.value.complete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
                         elapsedMillis = (System.nanoTime() - queryStarted) / 1_000_000L,
                         candidateCount = result.value.items.size,
-                        errorCode = result.value.partialErrorCode,
+                        errorCode = result.value.partialError?.code,
+                        sourceFailureCode = result.value.partialError?.sourceFailureCode,
+                        malformedStage = result.value.partialError?.malformedStage,
+                        httpStatus = result.value.partialError?.httpStatus,
                     )
                     result.value
                 }
@@ -1700,7 +1703,10 @@ class CollectProviderReadingEvidence private constructor(
                 if (lookup.complete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
                 elapsedMillis = (System.nanoTime() - started) / 1_000_000L,
                 candidateCount = lookup.items.size,
-                errorCode = lookup.partialErrorCode,
+                errorCode = lookup.partialError?.code,
+                sourceFailureCode = lookup.partialError?.sourceFailureCode,
+                malformedStage = lookup.partialError?.malformedStage,
+                httpStatus = lookup.partialError?.httpStatus,
             )
             val matches = exactFacetMatches(title, target.facetId, lookup.items, retainConflictingObservations = true)
             traceLookupCandidates(
@@ -2073,7 +2079,7 @@ class CollectProviderReadingEvidence private constructor(
                         result.error.code in RECOVERABLE_LOOKUP_ERRORS
                     ) {
                         return ProviderCallResult.Success(
-                            LookupSnapshot(items.toList(), complete = false, partialErrorCode = result.error.code),
+                            LookupSnapshot(items.toList(), complete = false, partialError = result.error),
                         )
                     }
                     return result
@@ -2720,7 +2726,7 @@ class CollectProviderReadingEvidence private constructor(
         val items: List<ProviderWorkCandidate>,
         val complete: Boolean,
         // Closed transport failure type for partial diagnostics; no upstream text.
-        val partialErrorCode: ProviderErrorCode? = null,
+        val partialError: ProviderError? = null,
         // Exact bounded continuation; never an authoritative snapshot.
         val continuation: ProviderCursor? = null,
     )

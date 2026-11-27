@@ -4641,6 +4641,60 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `partial lookup preserves typed source failure without authorizing a binding`() = runTest {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    if (request.cursor == null) {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(ProviderWorkCandidate("mangadot:317", "Dandadan")),
+                                nextCursor = ProviderCursor("next"),
+                            ),
+                        )
+                    } else {
+                        ProviderCallResult.Failure(
+                            ProviderError(
+                                code = ProviderErrorCode.SOURCE_READ_ERROR,
+                                retryable = true,
+                                sourceFailureCode = ProviderLookupFailureCode.HTTP_ERROR,
+                                httpStatus = 429,
+                            ),
+                        )
+                    }
+                },
+                chaptersHandler = { error("Incomplete lookup must not authorize chapters") },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        result.snapshots shouldBe emptyList()
+        result.partialEvidence shouldBe emptyList()
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        val lookup = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT &&
+                it.outcome != DiagnosticOutcome.STARTED
+        }
+        lookup.outcome shouldBe DiagnosticOutcome.PARTIAL
+        lookup.attributes["provider_error_code"] shouldBe DiagnosticAttributeValue.Text("SOURCE_READ_ERROR")
+        lookup.attributes["error_category"] shouldBe DiagnosticAttributeValue.Code(DiagnosticErrorCategory.HTTP)
+        lookup.attributes["http_status"] shouldBe DiagnosticAttributeValue.Number(429)
+        (StructuredDiagnosticSanitizer.sanitize(lookup) != null) shouldBe true
+    }
+
+    @Test
     fun `MangaAll never salvages malformed later pages or first-page transport failures`() = runBlocking<Unit> {
         for (failureCode in listOf(ProviderErrorCode.MALFORMED_RESULT, ProviderErrorCode.TIMEOUT)) {
             var requests = 0
