@@ -49,6 +49,19 @@ class ParseCanonicalChapterVolumeTest {
     }
 
     @Test
+    fun `source volume assessment shares closed intrinsic rejection reasons`() {
+        parse.assessSourceVolume("Vol. 1 Ch. 1", 1) shouldBe SourceChapterVolumeAssessment(observedVolume = 1)
+        parse.assessSourceVolume("Ch. 1", null) shouldBe SourceChapterVolumeAssessment()
+        parse.assessSourceVolume("Ch. 1", 2) shouldBe SourceChapterVolumeAssessment(observedVolume = 2)
+        parse.assessSourceVolume("Vol. 1 Ch. 1 - Chapter 2", 1).rejection shouldBe
+            SourceChapterVolumeRejection.CONFLICTING_CHAPTER_MARKERS
+        parse.assessSourceVolume("Vol. 1 Ch. 1 - Volume 2", 1).rejection shouldBe
+            SourceChapterVolumeRejection.MALFORMED_VOLUME_LABEL
+        parse.assessSourceVolume("Vol. 2 Ch. 1", 1).rejection shouldBe
+            SourceChapterVolumeRejection.SOURCE_VOLUME_CONFLICT
+    }
+
+    @Test
     fun `ambiguous or out of range volume labels are not guessed`() {
         parse.execute("Vol. 1 Ch. 37 Vol. 2 Ch. 37").shouldBeNull()
         parse.execute("Vol. 1-2 Ch. 37").shouldBeNull()

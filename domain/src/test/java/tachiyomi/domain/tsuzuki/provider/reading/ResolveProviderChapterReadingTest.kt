@@ -1428,6 +1428,64 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader rechecks every successful delivery against current source authority`(): Unit = runBlocking {
+        val ref = ProviderBindingRef(providerId, "en", "independent-work")
+        val source = ProviderWorkSourceAssociation(
+            canonicalTitleId = chapter.canonicalTitleId,
+            ref = ref,
+            workVerification = ProviderWorkVerification.AUTHOR_CORROBORATED,
+            editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+            observedAt = 100L,
+        )
+        val persisted = PersistedChapterEvidence(
+            providerEvidence(ref.evidenceProducerId(), "chapter-1"),
+            mappedCanonicalChapterId = chapter.id,
+        )
+        val delivered = ProviderCallResult.Success(
+            ProviderReadingDelivery.PageList(
+                listOf(
+                    ProviderPageRequest(
+                        url = "https://cdn.example/page.jpg",
+                        allowedOrigins = setOf("https://cdn.example"),
+                    ),
+                ),
+            ),
+        )
+        for (scenario in listOf("creator-conflict", "edition-variant", "detached", "credit-only")) {
+            val associations = mutableListOf(source)
+            val rows = mutableListOf(persisted)
+            val reader = resolver(
+                bindings = emptyList(),
+                sourceAssociations = associations,
+                evidence = rows,
+                gateway = gateway {
+                    when (scenario) {
+                        "creator-conflict" -> associations[0] = source.copy(
+                            workVerification = ProviderWorkVerification.AUTHOR_CONFLICT,
+                        )
+                        "edition-variant" -> associations[0] = source.copy(
+                            editionQualification = ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT,
+                        )
+                        "detached" -> rows[0] = persisted.copy(mappedCanonicalChapterId = null)
+                        "credit-only" -> rows[0] = persisted.copy(
+                            evidence = persisted.evidence.copy(
+                                providerMetadata = ProviderEvidenceMetadata(scanlationGroup = "Corrected credit"),
+                            ),
+                        )
+                    }
+                    delivered
+                },
+            )
+            val option = reader.options(chapter.id).single()
+            reader.delivery(option) shouldBe if (scenario == "credit-only") {
+                delivered
+            } else {
+                ProviderCallResult.Failure(ProviderError(ProviderErrorCode.UNAVAILABLE, retryable = false))
+            }
+        }
+    }
+
+    @Test
     fun `source audit explains rejection when another source is readable`(): Unit = runBlocking {
         val mangaAllId = ProviderId("app.tsuzuki.mangaall")
         val dex = binding.copy(

@@ -7,6 +7,7 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
+import tachiyomi.domain.tsuzuki.chapter.interactor.SourceChapterVolumeRejection
 import tachiyomi.domain.tsuzuki.chapter.interactor.hasConflictingIntegerChapterHint
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
@@ -391,19 +392,18 @@ class ResolveProviderChapterReading(
         if (hasConflictingIntegerChapterHint(parsed, evidence.rawNumber)) {
             return ProviderReadingIdentityRejectionReason.CONFLICTING_NUMBER_HINT
         }
-        if (volumeParser.hasConflictingChapterMarkers(evidence.rawLabel)) {
-            return ProviderReadingIdentityRejectionReason.CONFLICTING_CHAPTER_MARKERS
+        val sourceVolume = volumeParser.assessSourceVolume(evidence.rawLabel, evidence.volume)
+        when (sourceVolume.rejection) {
+            SourceChapterVolumeRejection.CONFLICTING_CHAPTER_MARKERS ->
+                return ProviderReadingIdentityRejectionReason.CONFLICTING_CHAPTER_MARKERS
+            SourceChapterVolumeRejection.MALFORMED_VOLUME_LABEL ->
+                return ProviderReadingIdentityRejectionReason.MALFORMED_VOLUME_LABEL
+            SourceChapterVolumeRejection.SOURCE_VOLUME_CONFLICT ->
+                return ProviderReadingIdentityRejectionReason.SOURCE_VOLUME_CONFLICT
+            null -> Unit
         }
 
-        val explicitLabelVolume = volumeParser.execute(evidence.rawLabel)
-        if (volumeParser.hasExplicitVolumeMarker(evidence.rawLabel) && explicitLabelVolume == null) {
-            return ProviderReadingIdentityRejectionReason.MALFORMED_VOLUME_LABEL
-        }
-        if (evidence.volume != null && explicitLabelVolume != null && evidence.volume != explicitLabelVolume) {
-            return ProviderReadingIdentityRejectionReason.SOURCE_VOLUME_CONFLICT
-        }
-
-        val observedVolume = evidence.volume ?: explicitLabelVolume
+        val observedVolume = sourceVolume.observedVolume
         if (observedVolume == null || observedVolume == chapter.volume) return null
         // Volume absence in the catalog is not a reason to discard every
         // numbered chapter: global Ch. N cannot precede the source's
@@ -728,8 +728,13 @@ class ResolveProviderChapterReading(
         if (current.catalogWorkFingerprint != null) {
             val titleId = canonicalChapterRepository.getById(current.canonicalChapterId)?.canonicalTitleId
                 ?: return unavailable()
-            if (catalogResearch?.permitsDelivery(titleId, current) != true ||
-                options(current.canonicalChapterId).none {
+            if (catalogResearch?.permitsDelivery(titleId, current) != true) return unavailable()
+        }
+        // A successful transport response is not a current identity grant.
+        // Every source must survive the same post-fetch mapping/authority check.
+        // Keep typed transport failures for ordinary sources unchanged.
+        if (result is ProviderCallResult.Success || current.catalogWorkFingerprint != null) {
+            if (options(current.canonicalChapterId).none {
                     it.copy(scanlationGroup = null) == current.copy(scanlationGroup = null)
                 }
             ) {

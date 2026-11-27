@@ -108,6 +108,12 @@ class MangaAllFutureGatewaySnapshotGateTest {
             invocationIdFactory = { "future-gateway-test" },
         )
         val binding = ProviderBindingRef(providerId, "en", "mangadot:131")
+        // An unsigned fixture may exercise the low-level Host module, but
+        // must never authorize the normal installed-package portfolio.
+        gateway.supportsNativeChapterCoverage(binding, 11L) shouldBe false
+        gateway.supportsNativeChapterCoverage(binding, 10L) shouldBe false
+        gateway.supportsNativeChapterCoverage(binding.copy(facetId = "fr"), 11L) shouldBe false
+        observed shouldBe emptyList()
         gateway.lookup(providerId, ProviderReadingLookupRequest(listOf("Bleach")))
         gateway.chapters(providerId, ProviderReadingChaptersRequest(binding))
         gateway.chapters(

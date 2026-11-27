@@ -20,6 +20,12 @@ on:
       - 'domain/src/test/java/tachiyomi/domain/tsuzuki/catalog/interactor/ResolveMangaAllIndependentCatalogIdentityTest.kt'
       - '.github/scripts/run_mangaall_frozen30_catalog_plan.py'
       - '.github/scripts/run_mangaall_frozen30_canonical_persistence.py'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGateway.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllFutureGatewaySnapshotGateTest.kt'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/chapter/interactor/ParseCanonicalChapterVolume.kt'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/chapter/evidence/ReconcileChapterEvidence.kt'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/chapter/interactor/ParseCanonicalChapterVolumeTest.kt'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/chapter/evidence/ReconcileChapterEvidenceTest.kt'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/provider/reading/**'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/reader/**'
       - 'domain/src/test/java/tachiyomi/domain/tsuzuki/provider/reading/**'
@@ -112,12 +118,12 @@ jobs:
         run: |
           ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck \
             :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' \
-            --tests '*ProviderWorkSourcePortfolioTest' --tests '*MangaAllMangaDotNativeCoverageTest' \
+            --tests '*ProviderWorkSourcePortfolioTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*MangaAllNativeChapterCoverageTest' \
             --tests '*CollectProviderReadingEvidenceTest' --tests '*CollectProviderReadingEvidenceEligibilityTest' \
             --tests '*RefreshProviderReadingChaptersTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' \
             --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' \
             --tests '*ResolveProviderChapterReadingTest' --tests '*SelectMangaAllSourceTest' --tests '*MangaAllReadingIdentityTest' --tests '*BalancedSourceCandidateSampleTest' \
-            --tests '*ProviderEvidenceMetadataCodecTest' \
+            --tests '*ProviderEvidenceMetadataCodecTest' --tests '*ParseCanonicalChapterVolumeTest' --tests '*ReconcileChapterEvidenceTest' \
             :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' \
             --tests '*ChapterEvidenceRepositoryImplTest' \
             :app:testDebugUnitTest --tests '*ShikimoriApiTest' \

@@ -28,6 +28,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllNativeChapterCoverage
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterObservation
@@ -138,6 +139,57 @@ class ScriptProviderReadingGateway internal constructor(
         encodeDefaults = true
         explicitNulls = false
         ignoreUnknownKeys = false
+    }
+
+    override suspend fun supportsNativeChapterCoverage(
+        binding: ProviderBindingRef,
+        artifactVersionCode: Long,
+    ): Boolean {
+        if (!MangaAllNativeChapterCoverage.supports(artifactVersionCode, binding)) return false
+        return binding.externalWorkId.substringBefore(':') in
+            nativeCoverageSourceIds(binding.providerId, binding.facetId, artifactVersionCode)
+    }
+
+    override suspend fun nativeCoverageSourceIds(
+        providerId: ProviderId,
+        facetId: String?,
+        artifactVersionCode: Long,
+    ): Set<String> {
+        if (providerId.value != MANGAALL_PROVIDER_ID || packageSource !is StoredProviderScriptPackageSource) {
+            return emptySet()
+        }
+        val sources = MangaAllNativeChapterCoverage.sourceIds(artifactVersionCode, facetId)
+        if (sources.isEmpty()) return emptySet()
+        registry.awaitReady()
+        val registration = registry.registration(providerId) ?: return emptySet()
+        val capability = tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.ReadingChaptersV1
+        if (registration.lifecycleStatus != ProviderLifecycleStatus.ENABLED ||
+            registration.descriptor.runtime != ProviderRuntimeKind.SCRIPT ||
+            registration.descriptor.version.code != artifactVersionCode ||
+            capability !in registration.enabledCapabilities ||
+            registration.facets.none { it.facetId == facetId }
+        ) {
+            return emptySet()
+        }
+        return try {
+            val active = packageSource.get(providerId) ?: return emptySet()
+            if (!matchesRegistration(registration, active, capability) ||
+                active.repositoryId != MANGAALL_TRUSTED_REPOSITORY ||
+                active.repositoryTrustAnchorSha256 != MANGAALL_TRUST_ANCHOR_SHA256 ||
+                active.installedArtifactSha256 != sha256Hex(active.bytes)
+            ) {
+                return emptySet()
+            }
+            val policy = ProviderHostInvocationPolicy.fromManifest(
+                manifest = active.parsed.manifest,
+                invocationId = invocationIdFactory(),
+            ).forCapability(capability.id)
+            if (ProviderHostModule.MANGAALL_CHAPTER_SNAPSHOT in policy.allowedHostModules()) sources else emptySet()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            emptySet()
+        }
     }
 
     override suspend fun lookup(

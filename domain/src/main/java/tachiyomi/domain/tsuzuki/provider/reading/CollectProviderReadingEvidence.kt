@@ -206,7 +206,9 @@ class CollectProviderReadingEvidence private constructor(
         providerRegistry.awaitReady()
         val canonicalTitle = canonicalTitleRepository.getById(canonicalTitleId)
             ?: return ProviderReadingEvidenceCollection(complete = false)
-        val targets = readingTargets()
+        val targets = readingTargets().flatMap { target ->
+            supplementaryTargets(canonicalTitleId, target)
+        }
         val queryTitles = providerTitleLookupQueries(
             canonicalTitleId,
             canonicalTitle.displayTitle,
@@ -373,7 +375,7 @@ class CollectProviderReadingEvidence private constructor(
                         // Preserve valid pages only for a genuine timeout. A malformed result,
                         // identity error or resource violation must not salvage untrusted pages.
                         val stillEnabled = providerRegistry.registration(target.registration.descriptor.id) ==
-                            target.registration
+                            target.registration && supplementaryTargetStillAuthorized(canonicalTitleId, target)
                         (
                             finished ?: ProviderReadingEvidenceCollection(
                                 // READ is entered only after a verified binding was selected
@@ -498,6 +500,9 @@ class CollectProviderReadingEvidence private constructor(
     ): ProviderReadingEvidenceCollection {
         return try {
             if (target.researchSource != null) {
+                if (!supplementaryTargetStillAuthorized(canonicalTitleId, target)) {
+                    return ProviderReadingEvidenceCollection(complete = false)
+                }
                 return collectResearchSource(
                     canonicalTitleId = canonicalTitleId,
                     titles = titles,
@@ -535,6 +540,7 @@ class CollectProviderReadingEvidence private constructor(
                             sources = discovery.value.workSources,
                             onPageCollected = onPageCollected,
                             onProvisionalCursorReady = onProvisionalCursorReady,
+                            nativePreviews = discovery.value.nativePreviews,
                         )
                     } else {
                         ProviderReadingEvidenceCollection(complete = !discovery.value.unresolved)
@@ -630,8 +636,9 @@ class CollectProviderReadingEvidence private constructor(
                     // the saved edition, User progress or Reader authority.
                     val fallback = if (
                         result.value == 0 &&
+                        !target.hasSupplementaryTargets &&
                         target.registration.descriptor.id.value == "app.tsuzuki.mangaall" &&
-                        target.facetId == "en" &&
+                        MangaAllReadingIdentity.supportsRequestedLanguage(binding.ref) &&
                         canonicalCreators != null &&
                         workSourceAssociationRepository != null
                     ) {
@@ -1005,6 +1012,7 @@ class CollectProviderReadingEvidence private constructor(
         var unresolved = false
         var incompleteResearchLookup = false
         val collectedWorkSources = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssessment>()
+        val nativePreviews = mutableMapOf<ProviderBindingRef, NativeChapterPreview>()
         for ((queryIndex, title) in titles.withIndex()) {
             val queryStarted = System.nanoTime()
             traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
@@ -1058,8 +1066,14 @@ class CollectProviderReadingEvidence private constructor(
             // Source association is deliberately a shadow work-level portfolio.
             // Multiple corroborated HIDs never become one preferred edition or
             // Reader authority merely because their authors/title match.
-            observeSourcePortfolio(canonicalTitleId, title, target, canonicalCreators, matches)
-                .forEach { assessment -> collectedWorkSources[assessment.ref] = assessment }
+            observeSourcePortfolio(
+                canonicalTitleId,
+                title,
+                target,
+                canonicalCreators,
+                exactFacetMatches(title, target.facetId, candidates, retainConflictingObservations = true),
+                nativePreviews,
+            ).forEach { assessment -> collectedWorkSources[assessment.ref] = assessment }
             if (!lookup.complete || incompleteResearchLookup) {
                 // MangaAll can have more upstream source pages than the Host's
                 // bounded lookup permits. Retain verified work evidence, but
@@ -1096,7 +1110,11 @@ class CollectProviderReadingEvidence private constructor(
                     continue
                 }
                 return ProviderCallResult.Success(
-                    BindingDiscovery(unresolved = true, workSources = confirmedSources),
+                    BindingDiscovery(
+                        unresolved = true,
+                        workSources = confirmedSources,
+                        nativePreviews = nativePreviews,
+                    ),
                 )
             }
             val sourcePrimaryMatches = matches.filter { normalize(it.title) == normalizedTitle }
@@ -1276,6 +1294,7 @@ class CollectProviderReadingEvidence private constructor(
                         BindingDiscovery(
                             unresolved = true,
                             workSources = confirmedSources.take(MAX_COVERAGE_CONTENDERS),
+                            nativePreviews = nativePreviews,
                         ),
                     )
                 }
@@ -1312,6 +1331,7 @@ class CollectProviderReadingEvidence private constructor(
         return ProviderCallResult.Success(
             BindingDiscovery(
                 unresolved = unresolved,
+                nativePreviews = nativePreviews,
                 workSources = if (incompleteResearchLookup) {
                     collectedWorkSources.values
                         .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
@@ -1330,12 +1350,11 @@ class CollectProviderReadingEvidence private constructor(
     )
 
     /**
-     * Nonshipping opt-in on the disposable code11 research collector only.
-     * Source-supplied coverage is insufficient: fetch the exact HID/facet
-     * through the actual gateway, validate native page rows, and keep the
-     * result provisional. The ordinary injected app collector stays closed.
+     * Native coverage requires either the isolated research contract or an
+     * explicit grant from the installed-package Host. Neither source lookup
+     * metadata nor a package version by itself grants this normal-app path.
      */
-    private suspend fun observeNativeMangaDotPreviews(
+    private suspend fun observeNativeSourcePreviews(
         canonicalTitleId: String,
         target: ReadingTarget,
         queryTitle: String,
@@ -1345,13 +1364,26 @@ class CollectProviderReadingEvidence private constructor(
         independentlyVerifiedMangaUpdatesId: String?,
     ): List<ProviderWorkCandidate> {
         val descriptor = target.registration.descriptor
-        if (!nativeMangaDotPortfolioResearch || descriptor.id.value != "app.tsuzuki.mangaall" ||
-            descriptor.version.code != 11L || canonicalCreators.isNullOrEmpty()
-        ) {
-            return emptyList()
+        if (canonicalCreators.isNullOrEmpty()) return emptyList()
+        val scoped = candidates.filter {
+            MangaAllNativeChapterCoverage.supports(
+                descriptor.version.code,
+                ProviderBindingRef(descriptor.id, target.facetId, it.externalWorkId),
+            )
         }
-        val contenders = candidates.filter { it.externalWorkId.startsWith("mangadot:") }
-        if (contenders.map { it.externalWorkId }.distinct().size > MAX_COVERAGE_CONTENDERS) return emptyList()
+        if (scoped.map { it.externalWorkId }.distinct().size > MAX_COVERAGE_CONTENDERS) return emptyList()
+        val contenders = if (nativeMangaDotPortfolioResearch) {
+            scoped
+        } else {
+            val allowed = scoped.map { it.externalWorkId }.distinct().filter { id ->
+                gateway.supportsNativeChapterCoverage(
+                    ProviderBindingRef(descriptor.id, target.facetId, id),
+                    descriptor.version.code,
+                )
+            }.toSet()
+            scoped.filter { it.externalWorkId in allowed }
+        }
+        if (contenders.isEmpty()) return emptyList()
         val assessments = ProviderWorkSourcePortfolio.assess(
             descriptor.id,
             target.facetId,
@@ -1449,18 +1481,30 @@ class CollectProviderReadingEvidence private constructor(
                     initial
                 }
                 val page = (result as? ProviderCallResult.Success)?.value ?: continue
-                val preview = MangaAllMangaDotNativeCoverage.fromObservedPage(
-                    descriptor.version.code,
-                    assessment.ref,
-                    candidate,
-                    page,
-                    independentlyVerifiedMangaUpdatesId = catalogIdentity,
-                )
+                val preview = if (catalogIdentity != null) {
+                    MangaAllMangaDotNativeCoverage.fromObservedPage(
+                        descriptor.version.code,
+                        assessment.ref,
+                        candidate,
+                        page,
+                        independentlyVerifiedMangaUpdatesId = catalogIdentity,
+                    )
+                } else {
+                    MangaAllNativeChapterCoverage.project(descriptor.version.code, assessment.ref, candidate, page)
+                }
                 if (preview == null) {
                     traceChapterRequest(canonicalTitleId, target, assessment.ref, 1, DiagnosticOutcome.REJECTED)
                     continue
                 }
-                if (!catalogIsCurrent(catalogIdentity)) continue
+                if (!catalogIsCurrent(catalogIdentity) ||
+                    !supplementaryTargetStillAuthorized(canonicalTitleId, target) ||
+                    (
+                        !nativeMangaDotPortfolioResearch &&
+                            !gateway.supportsNativeChapterCoverage(assessment.ref, descriptor.version.code)
+                        )
+                ) {
+                    continue
+                }
                 if (restart && saved != null) {
                     // Clearing an unusable operational hint never advances past
                     // unwritten evidence. CAS protects a concurrently newer cursor.
@@ -1489,15 +1533,14 @@ class CollectProviderReadingEvidence private constructor(
         independentlyVerifiedMangaUpdatesId: String? = null,
     ): List<ProviderWorkSourceAssessment> {
         val repository = workSourceAssociationRepository ?: return emptyList()
-        // Keep source-specific trust. MangaDex requires explicit details and
-        // numeric facet coverage; MangaDot is only admitted to the nonshipping
-        // research preview below after an exact native chapter request.
+        // Keep source-specific trust. Native coverage contracts additionally
+        // require a real exact-HID chapter request under a trusted Host grant.
         // A title match alone never qualifies an internal source.
         val trusted = ProviderWorkSourcePortfolio.trustedCandidates(
             providerId = target.registration.descriptor.id,
             facetId = target.facetId,
             candidates = matches,
-        ) + observeNativeMangaDotPreviews(
+        ) + observeNativeSourcePreviews(
             canonicalTitleId,
             target,
             queryTitle,
@@ -1659,7 +1702,7 @@ class CollectProviderReadingEvidence private constructor(
                 candidateCount = lookup.items.size,
                 errorCode = lookup.partialErrorCode,
             )
-            val matches = exactFacetMatches(title, target.facetId, lookup.items)
+            val matches = exactFacetMatches(title, target.facetId, lookup.items, retainConflictingObservations = true)
             traceLookupCandidates(
                 canonicalTitleId = canonicalTitleId,
                 target = target,
@@ -1670,12 +1713,14 @@ class CollectProviderReadingEvidence private constructor(
                 selected = null,
                 primary = null,
             )
+            val nativePreviews = mutableMapOf<ProviderBindingRef, NativeChapterPreview>()
             val verified = observeSourcePortfolio(
                 canonicalTitleId,
                 title,
                 target,
                 canonicalCreators,
-                matches,
+                matches.filterNot { it.externalWorkId == preferredRef.externalWorkId },
+                nativePreviews,
             ).filter { assessment ->
                 assessment.ref != preferredRef && assessment.canCollectProvisionalChapters
             }.take(MAX_COVERAGE_CONTENDERS)
@@ -1695,6 +1740,7 @@ class CollectProviderReadingEvidence private constructor(
                     sources = verified,
                     onPageCollected = onPageCollected,
                     onProvisionalCursorReady = onProvisionalCursorReady,
+                    nativePreviews = nativePreviews,
                 )
             }
         }
@@ -1760,6 +1806,7 @@ class CollectProviderReadingEvidence private constructor(
                 null
             }
             suspend fun sourceStillCurrent(): Boolean {
+                if (!supplementaryTargetStillAuthorized(canonicalTitleId, target)) return false
                 if (catalogIdentity != null &&
                     verifiedMangaUpdatesResearchIdentity(canonicalTitleId) != catalogIdentity
                 ) {
@@ -2058,6 +2105,63 @@ class CollectProviderReadingEvidence private constructor(
             cursor = next
         }
         return ProviderCallResult.Success(LookupSnapshot(items.toList(), complete = true))
+    }
+
+    /**
+     * Keep the preferred inventory in its own bounded target. Supplemental
+     * source lanes use the same global semaphore and cannot replace a binding.
+     * The Host must attest scoped native support before any lane is created.
+     */
+    private suspend fun supplementaryTargetStillAuthorized(
+        canonicalTitleId: String,
+        target: ReadingTarget,
+    ): Boolean {
+        val preferred = target.supplementaryPreferred ?: return true
+        return try {
+            val current = bindingRepository.get(canonicalTitleId, preferred.providerId, preferred.facetId)
+            current?.ref == preferred && current.availability == ProviderBindingAvailability.AVAILABLE &&
+                providerRegistry.registration(preferred.providerId) == target.registration &&
+                target.researchSource in gateway.nativeCoverageSourceIds(
+                    preferred.providerId,
+                    preferred.facetId,
+                    target.registration.descriptor.version.code,
+                )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private suspend fun supplementaryTargets(
+        canonicalTitleId: String,
+        target: ReadingTarget,
+    ): List<ReadingTarget> {
+        if (target.researchSource != null ||
+            target.registration.descriptor.id.value != "app.tsuzuki.mangaall" ||
+            workSourceAssociationRepository == null
+        ) {
+            return listOf(target)
+        }
+        return try {
+            val descriptor = target.registration.descriptor
+            val preferred = bindingRepository.get(canonicalTitleId, descriptor.id, target.facetId)
+                ?.takeIf { it.availability == ProviderBindingAvailability.AVAILABLE }?.ref
+                ?: return listOf(target)
+            val preferredSource = MangaAllReadingIdentity.sourceId(preferred) ?: return listOf(target)
+            val authorized = gateway.nativeCoverageSourceIds(descriptor.id, target.facetId, descriptor.version.code)
+                .intersect(MangaAllNativeChapterCoverage.sourceIds(descriptor.version.code, target.facetId))
+                .filterNot { it == preferredSource }
+                .sorted()
+            if (authorized.isEmpty()) return listOf(target)
+            listOf(target.copy(hasSupplementaryTargets = true)) + authorized.map { source ->
+                target.copy(researchSource = source, supplementaryPreferred = preferred)
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            listOf(target)
+        }
     }
 
     private fun readingTargets(): List<ReadingTarget> = providerRegistry.providers()
@@ -2621,12 +2725,15 @@ class CollectProviderReadingEvidence private constructor(
         val binding: ProviderReadingBinding? = null,
         val unresolved: Boolean = false,
         val workSources: List<ProviderWorkSourceAssessment> = emptyList(),
+        val nativePreviews: Map<ProviderBindingRef, NativeChapterPreview> = emptyMap(),
     )
 
     private data class ReadingTarget(
         val registration: ProviderRegistration,
         val facetId: String?,
         val researchSource: String? = null,
+        val supplementaryPreferred: ProviderBindingRef? = null,
+        val hasSupplementaryTargets: Boolean = false,
     )
 
     private companion object {
