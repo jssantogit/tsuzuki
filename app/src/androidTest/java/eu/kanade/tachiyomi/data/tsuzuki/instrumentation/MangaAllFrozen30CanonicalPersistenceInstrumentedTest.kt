@@ -167,8 +167,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 Build.HARDWARE in setOf("ranchu", "goldfish") ||
                 Build.PRODUCT.startsWith("sdk_gphone"),
         )
-        val lockName = if (japanese) "mangaall-japanese-manga-30-cohort-lock.json"
-        else "mangaall-dual-source-30-cohort-lock.json"
+        val lockName = if (japanese) {
+            "mangaall-japanese-manga-30-cohort-lock.json"
+        } else {
+            "mangaall-dual-source-30-cohort-lock.json"
+        }
         val lock = instrument.context.assets.open(lockName)
             .bufferedReader().use { Json.parseToJsonElement(it.readText()).jsonObject }
         val works = requireNotNull(lock["works"]).jsonArray.map { it.jsonPrimitive.content }
@@ -179,8 +182,11 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         assertEquals(30, works.toSet().size)
         assertEquals(corpusSha, hash(JsonArray(works.map { JsonPrimitive(it) }).toString()))
         val plan = if (catalogScope == "explicit_plan") {
-            val planName = if (japanese) "mangaall-japanese-manga-30-catalog-plan.json"
-            else "mangaall-frozen30-catalog-plan.json"
+            val planName = if (japanese) {
+                "mangaall-japanese-manga-30-catalog-plan.json"
+            } else {
+                "mangaall-frozen30-catalog-plan.json"
+            }
             val planText = instrument.context.assets.open(planName)
                 .bufferedReader().use { it.readText() }
             assertEquals(requireNotNull(args.getString("mangaAllCanonicalPlanSha256")), hash(planText))

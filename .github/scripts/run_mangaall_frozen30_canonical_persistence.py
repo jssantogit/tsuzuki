@@ -405,7 +405,30 @@ def selftest():
     assert parse_phase(six_subset, 0, "COLLECT", True, focused="remaining6")["complete"]
     assert not parse_phase(six_subset, 0, "COLLECT", True, focused=True)["complete"]
     assert not parse_phase(subset, 0, "COLLECT", True, focused="remaining6")["complete"]
-    print("MANGAALL_CANONICAL_PERSISTENCE|selftest=PASS")
+    old, new = load_cohort(), load_cohort("manga")
+    assert old.digest != new.digest
+    assert report_root(False, old) != report_root(False, new)
+    assert receipt_scope(False, old) != receipt_scope(False, new)
+    owners, plan_digest = scope("explicit_plan", new)
+    def japanese_sample(phase, status, pid):
+        return "\n".join(
+            [f"MANGAALL_CANONICAL_PROCESS|phase={phase}|shard=0|pid={pid}"]
+            + [f"MANGAALL_CANONICAL_PERSISTENCE|phase={phase}|index={i}|outcome={status}|catalog={owners[i]}"
+               for i in range(1, 11)]
+        )
+    jc = parse_phase(japanese_sample("COLLECT", "COLLECTED", 321), 0, "COLLECT", True, "explicit_plan", owners)
+    jr = parse_phase(japanese_sample("RESTORE", "RESTORED", 654), 0, "RESTORE", True, "explicit_plan", owners)
+    japanese_reader = "\n".join(
+        f"MANGAALL_CANONICAL_READER|index={i}|outcome=FIRST_PAGE_DECODED|catalog={owners[i]}|ui=NOT_TESTED"
+        for i in range(1, 11)
+    )
+    jr["reader"] = parse_reader(japanese_reader, 0, jr, True, "explicit_plan", owners)
+    jp = evaluate(0, jc, jr, True, "explicit_plan", True, cohort=new)
+    assert jp["outcome"] == "PASS" and jp["corpusSha256"] == new.digest
+    assert jp["scope"] == receipt_scope(False, new) and jp["planSha256"] == plan_digest
+    assert jp["scope"] != receipt_scope(False, old)
+    assert evaluate(0, jc, jr, False, "explicit_plan", True, cohort=new)["outcome"] == "RED"
+    print("MANGAALL_CANONICAL_PERSISTENCE|selftest=PASS|cohorts=SEPARATE")
 
 
 def main():
