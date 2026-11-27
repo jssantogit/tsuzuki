@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "corpusSha256": "5fbf70722e1ed87e2d9847f6b138728115b77be14dae64ac9730cb72c9d1dcc9",
+  "scope": "PUBLISHER_NATIVE_RETRIEVAL_CANDIDATES_NOT_ATTESTED",
+  "notes": [
+    "Official publisher bibliography, checked 2026-11-27. Volume suffixes omitted; original title and exact corpus indices unchanged.",
+    "These are candidate retrieval hints, not an owner plan, catalog IDs, source HIDs, approved aliases or reading authority.",
+    "Activate only for cases that remain unresolved after current comparison. Independent catalog detail must corroborate the frozen title, native retrieval title, format and actual staff. Date A Live specifically requires Sekihiko Inui's adaptation; Japanese title alone is ambiguous.",
+    "D.Gray-man and Orange deliberately omitted: no narrower native retrieval title established. Orange has an explicit creator constraint."
+  ],
+  "works": [
+    {
+      "index": 1,
+      "title": "High School DxD",
+      "nativeTitle": "ハイスクールＤ×Ｄ",
+      "publisherUrl": "https://www.kadokawa.co.jp/product/201102000425/",
+      "publishedCredits": "みしまひろじ; 石踏一榮"
+    },
+    {
+      "index": 2,
+      "title": "To Love Ru",
+      "nativeTitle": "To LOVEる―とらぶる―",
+      "publisherUrl": "https://www.shueisha.co.jp/books/items/contents.html?isbn=978-4-08-874278-6&mode=1",
+      "publishedCredits": "矢吹健太朗; 長谷見沙貴"
+    },
+    {
+      "index": 3,
+      "title": "Shinmai Maou no Testament",
+      "nativeTitle": "新妹魔王の契約者",
+      "publisherUrl": "https://www.kadokawa.co.jp/product/321306000054/",
+      "publishedCredits": "みやこかしわ; 上栖綴人"
+    },
+    {
+      "index": 5,
+      "title": "Date A Live",
+      "nativeTitle": "デート・ア・ライブ",
+      "publisherUrl": "https://comic-walker.com/detail/KC_004784_S",
+      "publishedCredits": "犬威赤彦; 橘公司"
+    },
+    {
+      "index": 6,
+      "title": "Gotoubun no Hanayome",
+      "nativeTitle": "五等分の花嫁",
+      "publisherUrl": "https://www.kodansha.co.jp/comic/products/0000116177",
+      "publishedCredits": "春場ねぎ"
+    },
+    {
+      "index": 10,
+      "title": "Houseki no Kuni",
+      "nativeTitle": "宝石の国",
+      "publisherUrl": "https://www.kodansha.co.jp/comic/products/0000047266",
+      "publishedCredits": "市川春子"
+    },
+    {
+      "index": 13,
+      "title": "Kono Oto Tomare!",
+      "nativeTitle": "この音とまれ！",
+      "publisherUrl": "https://www.shueisha.co.jp/books/items/contents.html?isbn=978-4-08-870545-3",
+      "publishedCredits": "アミュー"
+    },
+    {
+      "index": 17,
+      "title": "Soredemo Machi wa Mawatteiru",
+      "nativeTitle": "それでも町は廻っている",
+      "publisherUrl": "https://www.shonengahosha.co.jp/book_Info.php?id=5944",
+      "publishedCredits": "石黒正数"
+    },
+    {
+      "index": 18,
+      "title": "Ao Haru Ride",
+      "nativeTitle": "アオハライド",
+      "publisherUrl": "https://www.shueisha.co.jp/books/items/contents.html?jdcn=08846647846647315501",
+      "publishedCredits": "咲坂伊緒"
+    },
+    {
+      "index": 19,
+      "title": "Kamisama Hajimemashita",
+      "nativeTitle": "神様はじめました",
+      "publisherUrl": "https://www.hakusensha.co.jp/comicslist/44345/",
+      "publishedCredits": "鈴木ジュリエッタ"
+    },
+    {
+      "index": 20,
+      "title": "Yamada-kun to 7-nin no Majo",
+      "nativeTitle": "山田くんと７人の魔女",
+      "publisherUrl": "https://www.kodansha.co.jp/comic/products/0000019092",
+      "publishedCredits": "吉河美希"
+    },
+    {
+      "index": 21,
+      "title": "Ajin",
+      "nativeTitle": "亜人",
+      "publisherUrl": "https://afternoon.kodansha.co.jp/c/ajin.html",
+      "publishedCredits": "桜井画門"
+    },
+    {
+      "index": 23,
+      "title": "Kemono Jihen",
+      "nativeTitle": "怪物事変",
+      "publisherUrl": "https://www.shueisha.co.jp/books/items/contents.html?isbn=978-4-08-881096-6",
+      "publishedCredits": "藍本松"
+    },
+    {
+      "index": 26,
+      "title": "Tomodachi Game",
+      "nativeTitle": "トモダチゲーム",
+      "publisherUrl": "https://www.kodansha.co.jp/comic/products/0000019132",
+      "publishedCredits": "佐藤友生; 山口ミコト"
+    },
+    {
+      "index": 27,
+      "title": "Kyoukai no Rinne",
+      "nativeTitle": "境界のＲＩＮＮＥ",
+      "publisherUrl": "https://shogakukan-comic.jp/book?isbn=9784091217738",
+      "publishedCredits": "高橋留美子"
+    },
+    {
+      "index": 30,
+      "title": "Kimi no Iru Machi",
+      "nativeTitle": "君のいる町",
+      "publisherUrl": "https://www.kodansha.co.jp/comic/products/0000016819",
+      "publishedCredits": "瀬尾公治"
+    }
+  ]
+}
