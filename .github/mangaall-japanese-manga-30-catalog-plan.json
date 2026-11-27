@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "scope": "RESEARCH_EXPLICIT_OWNERS_NO_FALLBACK",
+  "corpusSha256": "5fbf70722e1ed87e2d9847f6b138728115b77be14dae64ac9730cb72c9d1dcc9",
+  "works": [
+    {
+      "index": 1,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 2,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 3,
+      "catalog": "shikimori",
+      "creatorAliases": {
+        "Miyakokasiwa": {
+          "Miyako Kashiwa": "https://www.manga-news.com/index.php/serie-vo/Shinmai-maho-no-testament-vo",
+          "みやこかしわ": "https://www.kadokawa.co.jp/product/321306000077/"
+        },
+        "Tetsuto Uesu": {
+          "上栖綴人": "https://www.kadokawa.co.jp/product/321306000077/"
+        }
+      }
+    },
+    {
+      "index": 4,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 5,
+      "catalog": "shikimori",
+      "searchTitle": "デート・ア・ライブ 十香デッドエンド",
+      "identityTitle": "Date A Live: Tooka Dead End",
+      "editionEvidence": "https://www.kadokawa.co.jp/product/321311000118/",
+      "creatorAliases": {
+        "Koushi Tachibana": {
+          "橘公司": "https://www.kadokawa.co.jp/product/321311000118/"
+        },
+        "Sekihiko Inui": {
+          "犬威赤彦": "https://www.kadokawa.co.jp/product/321311000118/"
+        }
+      }
+    },
+    {
+      "index": 6,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 7,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 8,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 9,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 10,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 11,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 12,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 13,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 14,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 15,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 16,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 17,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 18,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 19,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 20,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 21,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 22,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 23,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 24,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 25,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 26,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 27,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 28,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 29,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 30,
+      "catalog": "shikimori"
+    }
+  ]
+}

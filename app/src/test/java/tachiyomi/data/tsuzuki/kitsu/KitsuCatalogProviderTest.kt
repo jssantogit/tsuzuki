@@ -1,9 +1,12 @@
 package tachiyomi.data.tsuzuki.kitsu
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import tachiyomi.data.tsuzuki.kitsu.client.KitsuClient
@@ -436,6 +439,44 @@ class KitsuCatalogProviderTest {
         val unexpResult = provider3.search(CatalogQuery(query = "fail"))
         unexpResult.isFailure shouldBe true
         unexpResult.exceptionOrNull().shouldBeInstanceOf<CatalogError.ProviderUnavailable>()
+    }
+
+    @Test
+    fun `Kitsu rejects conflicting and foreign MAL mappings instead of choosing the last id`() = runTest {
+        fun response(secondId: String, secondItem: String) = json.decodeFromString<KitsuMangaResponse>(
+            """
+            {
+              "data": [{"id":"12","type":"manga","attributes":{"canonicalTitle":"Work","subtype":"manga"},
+                "relationships":{"mappings":{"data":[{"id":"a","type":"mappings"},{"id":"b","type":"mappings"}]}}}],
+              "included":[
+                {"id":"a","type":"mappings","attributes":{"externalSite":"myanimelist/manga","externalId":"42"},
+                 "relationships":{"item":{"data":{"type":"manga","id":"12"}}}},
+                {"id":"b","type":"mappings","attributes":{"externalSite":"myanimelist/manga","externalId":"$secondId"},
+                 "relationships":{"item":{"data":{"type":"manga","id":"$secondItem"}}}}
+              ]
+            }
+            """.trimIndent(),
+        )
+        suspend fun mapped(secondId: String, secondItem: String): Map<String, String> {
+            val client = FakeKitsuClient(searchResult = Result.success(response(secondId, secondItem)))
+            return KitsuCatalogProvider(client).search(CatalogQuery(query = "Work"))
+                .getOrThrow().items.single().externalIds
+        }
+        mapped("43", "12") shouldBe emptyMap()
+        mapped("43", "99") shouldBe mapOf("mal" to "42")
+        mapped("42", "12") shouldBe mapOf("mal" to "42")
+    }
+
+    @Test
+    fun `Kitsu cancellation propagates and an error document is not an empty search`() = runTest {
+        val provider = KitsuCatalogProvider(
+            FakeKitsuClient(searchResult = Result.failure(CancellationException("cancelled"))),
+        )
+        shouldThrow<CancellationException> { provider.search(CatalogQuery(query = "Work")) }
+        shouldThrow<SerializationException> {
+            json.decodeFromString<KitsuMangaResponse>("""{"errors":[{"status":"503"}]}""")
+        }
+        json.decodeFromString<KitsuMangaResponse>("""{"data":[]}""").data shouldBe emptyList()
     }
 
     private class FakeKitsuClient(

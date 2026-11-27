@@ -148,6 +148,12 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         runMangaAllContinuousReaderJourney(originalCode7Package = false)
     }
 
+    @Test(timeout = 300_000L)
+    fun mangaAllSyntheticMangaDotSourceTapFailureAndRetryPublishesDecodedReaderPixels() {
+        requireOptIn()
+        runMangaAllContinuousReaderJourney(originalCode7Package = false, syntheticMangaDot = true)
+    }
+
     /** Original, unmodified code7 .tsz + the same ReaderActivity tap→503→retry→PNG path. */
     @Test(timeout = 300_000L)
     fun mangaAllOriginalCode7TszSourceTap503RetryRendersCdnPixels() {
@@ -283,6 +289,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
     private fun runMangaAllContinuousReaderJourney(
         originalCode7Package: Boolean,
         originalCode8Package: Boolean = false,
+        syntheticMangaDot: Boolean = false,
     ) {
         val expectedMangaAllGreen = Color.rgb(12, 168, 82)
         // Guard the screenshot oracle itself: the first continuous E2E RED
@@ -307,11 +314,18 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "MANGAALL_INITIAL_READER")
             val previousSessionChapter = requireNotNull(reader.viewModel.state.value.currentChapter)
 
-            val mangaAll = fixture.mangaAllJourney(reader, originalCode7Package, originalCode8Package)
+            val mangaAll = fixture.mangaAllJourney(
+                reader,
+                originalCode7Package,
+                originalCode8Package,
+                syntheticMangaDot = syntheticMangaDot,
+            )
             try {
                 runBlocking { mangaAll.attach() }
 
-                fun openAndTapMangaFire() {
+                val sourceName = if (syntheticMangaDot) "MangaDot" else "MangaFire"
+
+                fun openAndTapMangaAllSource() {
                     reader.viewModel.openContentSelector()
                     awaitValue("MangaAll chapter-scoped options in ReaderActivity") {
                         reader.viewModel.state.value.providerSourceOptions
@@ -320,13 +334,13 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                     }
                     val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
                     assertTrue(
-                        "The real ReaderActivity must display MangaFire in the source selector",
-                        device.wait(Until.hasObject(By.text("MangaFire")), UI_TIMEOUT_MS),
+                        "The real ReaderActivity must display $sourceName in the source selector",
+                        device.wait(Until.hasObject(By.text(sourceName)), UI_TIMEOUT_MS),
                     )
-                    device.findObject(By.text("MangaFire")).click()
+                    device.findObject(By.text(sourceName)).click()
                 }
 
-                openAndTapMangaFire()
+                openAndTapMangaAllSource()
                 awaitValue("Provider page failure to be recoverable without replacing active Reader") {
                     val state = reader.viewModel.state.value
                     (
@@ -350,7 +364,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "MANGAALL_FAILED_RETAIN_RED")
 
                 mangaAll.allowPages()
-                openAndTapMangaFire()
+                openAndTapMangaAllSource()
                 awaitValue("MangaAll retry to stage a real HTTP page in the same Reader") {
                     val state = reader.viewModel.state.value
                     val page = state.currentChapter?.pages?.singleOrNull()
@@ -2292,6 +2306,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             originalCode9Package: Boolean = false,
             originalCode10Package: Boolean = false,
             liveTarget: MangaAllLiveReaderTarget? = null,
+            syntheticMangaDot: Boolean = false,
         ) = MangaAllReaderJourneyFixture(
             context = InstrumentationRegistry.getInstrumentation().targetContext,
             reader = reader,
@@ -2303,6 +2318,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             originalCode9Package = originalCode9Package,
             originalCode10Package = originalCode10Package,
             liveTarget = liveTarget,
+            syntheticMangaDot = syntheticMangaDot,
         )
 
         fun launchReader(

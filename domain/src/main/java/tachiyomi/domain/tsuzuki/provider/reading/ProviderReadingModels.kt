@@ -100,6 +100,8 @@ data class ProviderWorkCandidate(
     val detailOutcome: ProviderWorkDetailOutcome? = null,
     /** HTTP status is disclosed only when a detail request itself failed with an explicit status. */
     val detailHttpStatus: Int? = null,
+    /** Source-declared bibliographic links, never verified identities by themselves. */
+    val mangaUpdatesReferenceIds: List<String> = emptyList(),
 ) {
     init {
         require(coverageObservedCount == null || coverageObservedCount in 0..200) {
@@ -147,6 +149,11 @@ data class ProviderWorkCandidate(
         require(authors.size <= 8 && authors.all { it.isNotBlank() && it.length <= 128 }) {
             "Provider work candidate authors are invalid"
         }
+        require(
+            mangaUpdatesReferenceIds.size <= 32 &&
+                mangaUpdatesReferenceIds.distinct().size == mangaUpdatesReferenceIds.size &&
+                mangaUpdatesReferenceIds.all { it.matches(Regex("[1-9][0-9]{0,17}")) },
+        ) { "Invalid bibliographic reference IDs" }
     }
 
     private companion object {
@@ -274,10 +281,13 @@ data class ProviderReadingLookupRequest(
     val coverageEvidenceVersion: Int? = null,
     /** Language of the exact source facet to probe; never inferred from the work. */
     val requestedLanguage: String? = null,
+    /** Nonshipping code11 metadata experiment only. */
+    val catalogEvidenceVersion: Int? = null,
 ) {
     init {
         require(requestedLanguage == null || (requestedLanguage.isNotBlank() && requestedLanguage.length <= 32))
         require(coverageEvidenceVersion == null || coverageEvidenceVersion == 1)
+        require(catalogEvidenceVersion == null || catalogEvidenceVersion == 1)
         require(titles.isNotEmpty()) { "Provider lookup requires at least one title" }
         require(titles.size <= MAX_TITLES) { "Provider lookup has too many titles" }
         require(titles.all { it.isNotBlank() && it.length <= MAX_TITLE_CHARS }) {

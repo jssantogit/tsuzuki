@@ -3,6 +3,7 @@ package tachiyomi.domain.tsuzuki.provider.reading
 import dev.zacsweers.metro.Inject
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
+import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
@@ -27,12 +28,17 @@ data class ProviderChapterReadingOption(
     val providerChapterId: String,
     /** Attribution from observed chapter evidence, not work-search candidates. */
     val scanlationGroup: String? = null,
+    /** Local research-only work attestation for this exact chapter. */
+    val catalogWorkFingerprint: String? = null,
 ) {
     init {
         require(canonicalChapterId.isNotBlank()) { "Canonical chapter ID must not be blank" }
         require(bindingId.isNotBlank()) { "Provider binding ID must not be blank" }
         require(externalWorkId.isNotBlank()) { "Provider external work ID must not be blank" }
         require(providerChapterId.isNotBlank()) { "Provider chapter ID must not be blank" }
+        if (catalogWorkFingerprint != null) {
+            require(catalogWorkFingerprint.matches(Regex("catalog-work-v1:[0-9a-f]{64}")))
+        }
     }
 
     fun bindingRef() = ProviderBindingRef(
@@ -54,7 +60,9 @@ data class ProviderChapterReadingOption(
             externalWorkId,
             bindingId,
             providerChapterId,
-        ).joinToString("\u0000")
+        ).let { parts ->
+            catalogWorkFingerprint?.let { parts + it } ?: parts
+        }.joinToString("\u0000")
 }
 
 /**
@@ -137,7 +145,22 @@ enum class ProviderReadingIdentityRejectionReason {
     MIXED_REJECTIONS,
 }
 
-@Inject
+/** Closed, per-source explanation of a mapped row excluded from Reader options. */
+enum class ProviderReadingOptionRejectionReason {
+    CHAPTER_IDENTITY_REJECTED,
+    MISSING_CHAPTER_KEY,
+    SOURCE_NOT_AUTHORIZED,
+    CATALOG_PROOF_MISMATCH,
+    SOURCE_LANGUAGE_MISSING,
+    SOURCE_LANGUAGE_MISMATCH,
+    SOURCE_KEY_OR_FACET_REJECTED,
+}
+
+data class ProviderReadingOptionRejection(
+    val reason: ProviderReadingOptionRejectionReason,
+    val chapterIdentityReason: ProviderReadingIdentityRejectionReason? = null,
+)
+
 class ResolveProviderChapterReading(
     private val canonicalChapterRepository: CanonicalChapterRepository,
     private val evidenceRepository: ChapterEvidenceRepository,
@@ -149,9 +172,52 @@ class ResolveProviderChapterReading(
     private val managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
     private val chapterLabelParser: ParseCanonicalChapterLabel = ParseCanonicalChapterLabel(),
     private val volumeParser: ParseCanonicalChapterVolume = ParseCanonicalChapterVolume(),
+    private val catalogResearch: MangaAllCatalogReaderResearch? = null,
 ) {
+    @Inject
+    constructor(
+        canonicalChapterRepository: CanonicalChapterRepository,
+        evidenceRepository: ChapterEvidenceRepository,
+        bindingRepository: ProviderReadingBindingRepository,
+        workSourceAssociationRepository: ProviderWorkSourceAssociationRepository,
+        providerRegistry: ProviderRegistry,
+        gateway: ProviderReadingGateway,
+        managedResources: ProviderManagedResourceResolver,
+        chapterLabelParser: ParseCanonicalChapterLabel,
+        volumeParser: ParseCanonicalChapterVolume,
+    ) : this(
+        canonicalChapterRepository,
+        evidenceRepository,
+        bindingRepository,
+        workSourceAssociationRepository,
+        providerRegistry,
+        gateway,
+        managedResources,
+        chapterLabelParser,
+        volumeParser,
+        null,
+    )
 
-    suspend fun options(canonicalChapterId: String): List<ProviderChapterReadingOption> {
+    suspend fun options(canonicalChapterId: String): List<ProviderChapterReadingOption> =
+        evaluateOptions(canonicalChapterId)
+
+    /** Audit the same option pipeline even when another MangaALL source is eligible. */
+    suspend fun auditMangaAllOptionRejections(
+        canonicalChapterId: String,
+    ): Map<String, Map<ProviderReadingOptionRejection, Int>> {
+        val counts = mutableMapOf<String, MutableMap<ProviderReadingOptionRejection, Int>>()
+        evaluateOptions(canonicalChapterId) { ref, rejection ->
+            val source = ref?.let(MangaAllReadingIdentity::sourceId) ?: return@evaluateOptions
+            val byReason = counts.getOrPut(source) { mutableMapOf() }
+            byReason[rejection] = (byReason[rejection] ?: 0) + 1
+        }
+        return counts
+    }
+
+    private suspend fun evaluateOptions(
+        canonicalChapterId: String,
+        audit: ((ProviderBindingRef?, ProviderReadingOptionRejection) -> Unit)? = null,
+    ): List<ProviderChapterReadingOption> {
         val chapter = canonicalChapterRepository.getById(canonicalChapterId) ?: return emptyList()
         providerRegistry.awaitReady()
         val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
@@ -161,6 +227,7 @@ class ResolveProviderChapterReading(
         // A later verified source lookup may reveal that a previously auto-bound
         // HID is a colored/omnibus variant. Never silently keep serving it as
         // the base edition. An explicit user-confirmed edition remains intact.
+        val excludedWorkProducers = blockedWorkProducers(associations)
         val attestedVariantProducers = associations.asSequence()
             // Source-attested negative edition evidence does not need author
             // corroboration: it cannot prove an alternate HID, only disqualify
@@ -168,9 +235,10 @@ class ResolveProviderChapterReading(
             .filter { it.editionQualification == ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT }
             .map { it.ref.evidenceProducerId() }
             .toSet()
-        val bindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
-            .asSequence()
+        val allBindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
+        val bindings = allBindings.asSequence()
             .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
+            .filter { it.ref.evidenceProducerId() !in excludedWorkProducers }
             .filter { binding ->
                 binding.verification == ProviderBindingVerification.USER_CONFIRMED ||
                     binding.ref.evidenceProducerId() !in attestedVariantProducers
@@ -185,11 +253,13 @@ class ResolveProviderChapterReading(
             // corroborated author, the exact source HID, and a persisted
             // source chapter whose number/volume matches below.
             .filter { it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED }
+            .filter { it.ref.evidenceProducerId() !in excludedWorkProducers }
             .filter { it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED }
             .filter { source ->
                 registrations[source.ref.providerId]?.isEligibleForReading(source.ref.facetId) == true
             }
             .toList()
+        val catalogSources = catalogProofs(associations)
         val sources = buildMap<String, Pair<String, ProviderBindingRef>> {
             bindings.forEach { (producerId, binding) ->
                 put(producerId, binding.id to binding.ref)
@@ -200,8 +270,33 @@ class ResolveProviderChapterReading(
                     put(producerId, "work-source:$producerId" to source.ref)
                 }
             }
+            associations.forEach { source ->
+                val producerId = source.ref.evidenceProducerId()
+                if (producerId in catalogSources && producerId !in this) {
+                    put(producerId, "catalog-work:$producerId" to source.ref)
+                }
+            }
         }
-        if (sources.isEmpty()) return emptyList()
+        if (sources.isEmpty() && audit == null) return emptyList()
+        val knownRefs = if (audit == null) {
+            emptyMap()
+        } else {
+            buildMap {
+                allBindings.forEach { put(it.ref.evidenceProducerId(), it.ref) }
+                associations.forEach { putIfAbsent(it.ref.evidenceProducerId(), it.ref) }
+            }
+        }
+        fun reject(
+            persisted: PersistedChapterEvidence,
+            reason: ProviderReadingOptionRejectionReason,
+            identityReason: ProviderReadingIdentityRejectionReason? = null,
+        ): ProviderChapterReadingOption? {
+            audit?.invoke(
+                knownRefs[persisted.evidence.producerId],
+                ProviderReadingOptionRejection(reason, identityReason),
+            )
+            return null
+        }
 
         return evidenceRepository.getByCanonicalTitleId(chapter.canonicalTitleId)
             .asSequence()
@@ -210,21 +305,35 @@ class ResolveProviderChapterReading(
                     persisted.evidence.producerKind == ProducerKind.PROVIDER &&
                     persisted.evidence.authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
             }
-            .filter { persisted ->
-                // The same typed validation powers Reader and the no-match
-                // diagnostic. Keep acceptance and rejection attribution aligned.
-                identityRejectionReason(chapter, persisted.evidence) == null
-            }
             .mapNotNull { persisted ->
-                val providerChapterId = persisted.evidence.externalChapterKey ?: return@mapNotNull null
-                val (bindingId, ref) = sources[persisted.evidence.producerId] ?: return@mapNotNull null
-                if (!MangaAllReadingIdentity.accepts(
-                        ref,
-                        providerChapterId,
-                        persisted.evidence.providerMetadata?.language,
+                // The same typed validation powers Reader and both diagnostics.
+                val identityReason = identityRejectionReason(chapter, persisted.evidence)
+                if (identityReason != null) {
+                    return@mapNotNull reject(
+                        persisted,
+                        ProviderReadingOptionRejectionReason.CHAPTER_IDENTITY_REJECTED,
+                        identityReason,
                     )
+                }
+                val providerChapterId = persisted.evidence.externalChapterKey
+                    ?: return@mapNotNull reject(persisted, ProviderReadingOptionRejectionReason.MISSING_CHAPTER_KEY)
+                val (bindingId, ref) = sources[persisted.evidence.producerId]
+                    ?: return@mapNotNull reject(persisted, ProviderReadingOptionRejectionReason.SOURCE_NOT_AUTHORIZED)
+                val catalogProof = catalogSources[persisted.evidence.producerId]
+                if (catalogProof != null &&
+                    persisted.evidence.providerMetadata?.catalogWorkFingerprint != catalogProof
                 ) {
-                    return@mapNotNull null
+                    return@mapNotNull reject(persisted, ProviderReadingOptionRejectionReason.CATALOG_PROOF_MISMATCH)
+                }
+                val reportedLanguage = persisted.evidence.providerMetadata?.language
+                if (!MangaAllReadingIdentity.accepts(ref, providerChapterId, reportedLanguage)) {
+                    val reason = when {
+                        reportedLanguage == null -> ProviderReadingOptionRejectionReason.SOURCE_LANGUAGE_MISSING
+                        !reportedLanguage.equals(ref.facetId, ignoreCase = true) ->
+                            ProviderReadingOptionRejectionReason.SOURCE_LANGUAGE_MISMATCH
+                        else -> ProviderReadingOptionRejectionReason.SOURCE_KEY_OR_FACET_REJECTED
+                    }
+                    return@mapNotNull reject(persisted, reason)
                 }
                 ProviderChapterReadingOption(
                     canonicalChapterId = canonicalChapterId,
@@ -235,6 +344,7 @@ class ResolveProviderChapterReading(
                     providerChapterId = providerChapterId,
                     scanlationGroup = persisted.evidence.providerMetadata?.scanlationGroup
                         ?.trim()?.takeIf(String::isNotBlank),
+                    catalogWorkFingerprint = catalogProof,
                 )
             }
             .distinct()
@@ -396,6 +506,7 @@ class ResolveProviderChapterReading(
         val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
         val associations = workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
         val allBindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
+        val excludedWorkProducers = blockedWorkProducers(associations)
         val attestedVariantProducers = associations.asSequence()
             // Source-attested negative edition evidence does not need author
             // corroboration: it cannot prove an alternate HID, only disqualify
@@ -403,9 +514,11 @@ class ResolveProviderChapterReading(
             .filter { it.editionQualification == ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT }
             .map { it.ref.evidenceProducerId() }
             .toSet()
+        val catalogSources = catalogProofs(associations)
         val eligibleProducers = buildSet {
             allBindings
                 .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
+                .filter { it.ref.evidenceProducerId() !in excludedWorkProducers }
                 .filter { binding ->
                     binding.verification == ProviderBindingVerification.USER_CONFIRMED ||
                         binding.ref.evidenceProducerId() !in attestedVariantProducers
@@ -415,9 +528,11 @@ class ResolveProviderChapterReading(
 
             associations
                 .filter { it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED }
+                .filter { it.ref.evidenceProducerId() !in excludedWorkProducers }
                 .filter { it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED }
                 .filter { registrations[it.ref.providerId]?.isEligibleForReading(it.ref.facetId) == true }
                 .forEach { add(it.ref.evidenceProducerId()) }
+            addAll(catalogSources.keys)
         }
 
         val observations = evidenceRepository.getByCanonicalTitleId(chapter.canonicalTitleId)
@@ -438,7 +553,13 @@ class ResolveProviderChapterReading(
                 !hasConflictingIntegerChapterHint(parsed, evidence.rawNumber)
         }
         val mapped = observations.filter { it.mappedCanonicalChapterId == canonicalChapterId }
-        val mappedEligible = mapped.count { it.evidence.producerId in eligibleProducers }
+        fun eligible(observed: PersistedChapterEvidence): Boolean {
+            val producer = observed.evidence.producerId
+            val proof = catalogSources[producer]
+            return producer in eligibleProducers &&
+                (proof == null || observed.evidence.providerMetadata?.catalogWorkFingerprint == proof)
+        }
+        val mappedEligible = mapped.count(::eligible)
         // A mapped chapter can belong to an older, disabled, or untrusted source
         // while some unrelated source remains eligible for the same work.
         // Count unique producer identities without exporting the IDs or URLs.
@@ -480,15 +601,14 @@ class ResolveProviderChapterReading(
             mapped.isEmpty() -> ProviderReadingNoMatchReason.NO_CANONICAL_MAPPING
             mappedEligible == 0 -> ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE
             mapped.any {
-                it.evidence.producerId in eligibleProducers &&
-                    isUnqualifiedEarlyScene(chapter, it.evidence)
+                eligible(it) && isUnqualifiedEarlyScene(chapter, it.evidence)
             } -> ProviderReadingNoMatchReason.UNVERIFIED_EARLY_TITLE
             else -> ProviderReadingNoMatchReason.IDENTITY_REJECTED
         }
 
         val rejectedIdentityReasons = if (reason == ProviderReadingNoMatchReason.IDENTITY_REJECTED) {
             mapped.asSequence()
-                .filter { it.evidence.producerId in eligibleProducers }
+                .filter(::eligible)
                 .mapNotNull { identityRejectionReason(chapter, it.evidence) }
                 .distinct()
                 .toList()
@@ -592,6 +712,12 @@ class ResolveProviderChapterReading(
             }
             ?: return unavailable()
 
+        if (current.catalogWorkFingerprint != null) {
+            val titleId = canonicalChapterRepository.getById(current.canonicalChapterId)?.canonicalTitleId
+                ?: return unavailable()
+            if (catalogResearch?.permitsDelivery(titleId, current) != true) return unavailable()
+        }
+
         val result = gateway.pages(
             providerId = current.providerId,
             request = ProviderReadingPagesRequest(
@@ -599,6 +725,17 @@ class ResolveProviderChapterReading(
                 providerChapterId = current.providerChapterId,
             ),
         )
+        if (current.catalogWorkFingerprint != null) {
+            val titleId = canonicalChapterRepository.getById(current.canonicalChapterId)?.canonicalTitleId
+                ?: return unavailable()
+            if (catalogResearch?.permitsDelivery(titleId, current) != true ||
+                options(current.canonicalChapterId).none {
+                    it.copy(scanlationGroup = null) == current.copy(scanlationGroup = null)
+                }
+            ) {
+                return unavailable()
+            }
+        }
         // A bare numeric 'Ch. 0' can be an incorrectly numbered full-volume
         // bundle at the source. The 2026 physical smoke observed 182, 186 and
         // 191 pages on different works. Preserve valid chapter zeros and
@@ -693,6 +830,28 @@ class ResolveProviderChapterReading(
             else -> ProviderReadingMappedSourceIneligibilityReason.SOURCE_NOT_AUTHORIZED
         }
     }
+
+    /** The separate explicit research route does not reuse any saved edition binding. */
+    private suspend fun catalogProofs(
+        associations: List<ProviderWorkSourceAssociation>,
+    ): Map<String, String> = buildMap {
+        val research = catalogResearch ?: return@buildMap
+        for (association in associations) {
+            val proof = research.proof(association) ?: continue
+            put(association.ref.evidenceProducerId(), proof)
+        }
+    }
+
+    /**
+     * Catalog evidence alone is not authority for an old automatic or confirmed
+     * edition binding. Conflicting work observations always block that binding.
+     */
+    private fun blockedWorkProducers(
+        associations: List<ProviderWorkSourceAssociation>,
+    ): Set<String> = associations.asSequence()
+        .filter { it.workVerification.blocksReadingSource() }
+        .map { it.ref.evidenceProducerId() }
+        .toSet()
 
     private fun ProviderRegistration.isEligibleForReading(facetId: String?): Boolean =
         lifecycleStatus == ProviderLifecycleStatus.ENABLED &&

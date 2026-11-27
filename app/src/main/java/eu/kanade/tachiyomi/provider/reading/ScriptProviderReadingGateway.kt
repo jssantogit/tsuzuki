@@ -10,6 +10,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
+import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
@@ -152,6 +153,7 @@ class ScriptProviderReadingGateway internal constructor(
                     cursor = request.cursor?.value,
                     coverageEvidenceVersion = request.coverageEvidenceVersion,
                     requestedLanguage = request.requestedLanguage,
+                    catalogEvidenceVersion = request.catalogEvidenceVersion,
                 ),
             ),
         ) { value, active ->
@@ -170,6 +172,17 @@ class ScriptProviderReadingGateway internal constructor(
             ProviderPage(
                 items = decoded.items.map { item ->
                     item.url?.let { validateResultUrl(active, it, browserAllowed = true) }
+                    require(
+                        item.mangaUpdatesReferenceIds.isEmpty() ||
+                            (
+                                request.catalogEvidenceVersion == 1 &&
+                                    providerId.value == "app.tsuzuki.mangaall" &&
+                                    active.versionCode == 11L &&
+                                    active.repositoryId == "mangaall-frozen30-unsigned-research" &&
+                                    active.installedArtifactSha256 == null &&
+                                    item.externalWorkId.startsWith("mangadot:")
+                                ),
+                    ) { "Unsolicited or out-of-scope catalog evidence" }
                     ProviderWorkCandidate(
                         externalWorkId = item.externalWorkId,
                         title = item.title,
@@ -187,6 +200,7 @@ class ScriptProviderReadingGateway internal constructor(
                         coverageHasMore = item.coverageHasMore,
                         detailOutcome = item.detailOutcome?.let(ProviderWorkDetailOutcome::valueOf),
                         detailHttpStatus = item.detailHttpStatus,
+                        mangaUpdatesReferenceIds = item.mangaUpdatesReferenceIds,
                     )
                 },
                 nextCursor = decoded.nextCursor?.let(::ProviderCursor),
@@ -339,6 +353,9 @@ class ScriptProviderReadingGateway internal constructor(
                     cursor = request.cursor?.value,
                 ),
             ),
+            nativeChapterStart = request.cursor == null &&
+                request.binding.facetId in setOf("en", "pt-br") &&
+                request.binding.externalWorkId.matches(Regex("mangadot:[1-9][0-9]{0,15}")),
         ) { value, _ ->
             val decoded = json.decodeFromString<ChaptersPageDto>(value)
             ProviderPage(
@@ -451,6 +468,7 @@ class ScriptProviderReadingGateway internal constructor(
         inputJson: String,
         packageGate: (ActiveProviderScriptPackage) -> Boolean = { true },
         recheckPackageAfterInvocation: Boolean = false,
+        nativeChapterStart: Boolean = false,
         decode: (String, ActiveProviderScriptPackage) -> T,
     ): ProviderCallResult<T> {
         registry.awaitReady()
@@ -487,6 +505,20 @@ class ScriptProviderReadingGateway internal constructor(
             return malformed()
         }
 
+        // The native initial snapshot fetch includes bounded Host parsing and
+        // storage. Give only the explicitly granted code11 start a small grace
+        // within the collector's 7 s preview budget. Preserve custom limits,
+        // continuation, signed older versions and every other capability.
+        val invocationLimits = if (
+            nativeChapterStart && providerId.value == "app.tsuzuki.mangaall" &&
+            active.versionCode == 11L &&
+            ProviderHostModule.MANGAALL_CHAPTER_SNAPSHOT in hostPolicy.allowedHostModules() &&
+            limits == ProviderRuntimeLimitsDto()
+        ) {
+            limits.copy(wallClockTimeoutMs = 6_500L, jsExecutionTimeoutMs = 6_000L)
+        } else {
+            limits
+        }
         val runtimeRequest = try {
             ProviderRuntimeInvocationRequest(
                 protocolVersion = ProviderRuntimeProtocol.VERSION,
@@ -498,7 +530,7 @@ class ScriptProviderReadingGateway internal constructor(
                 configurationFingerprint = registration.configurationFingerprint,
                 fileName = active.parsed.manifest.entrypoint,
                 hostModules = hostPolicy.allowedHostModules(),
-                limits = limits,
+                limits = invocationLimits,
             )
         } catch (_: Throwable) {
             return malformed()
@@ -705,6 +737,7 @@ class ScriptProviderReadingGateway internal constructor(
         val editorialEvidenceVersion: Int = 1,
         val coverageEvidenceVersion: Int? = null,
         val requestedLanguage: String? = null,
+        val catalogEvidenceVersion: Int? = null,
     )
 
     @Serializable
@@ -745,6 +778,7 @@ class ScriptProviderReadingGateway internal constructor(
         val coverageHasMore: Boolean? = null,
         val detailOutcome: String? = null,
         val detailHttpStatus: Int? = null,
+        val mangaUpdatesReferenceIds: List<String> = emptyList(),
     )
 
     @Serializable

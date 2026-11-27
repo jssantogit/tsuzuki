@@ -1,6 +1,11 @@
 package eu.kanade.tachiyomi.data.track.myanimelist
 
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALManga
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALOAuth
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALSearchPaging
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALSearchResult
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALSearchResultNode
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.toSearchWindow
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import okhttp3.FormBody
@@ -104,6 +109,40 @@ class MyAnimeListApiTest {
 
         request.header("X-MAL-CLIENT-ID") shouldBe "user-owned-client"
         request.header("Authorization") shouldBe "Bearer access-token"
+    }
+
+    @Test
+    fun `MAL catalog cursor retains mixed media geometry and rejects skipped offsets`() {
+        fun row(id: Long, type: String) = MALSearchResultNode(
+            MALManga(
+                id = id,
+                title = "Work $id",
+                numChapters = 1,
+                covers = null,
+                status = "finished",
+                mediaType = type,
+                startDate = null,
+            ),
+        )
+        val rows = listOf(row(42, "manga"), row(43, "light_novel"))
+        val next = "https://api.myanimelist.net/v2/manga?q=Work&offset=4&limit=2"
+        val page = MALSearchResult(rows, MALSearchPaging(next))
+        val result = page.toSearchWindow(trackerId = 1, offset = 2, limit = 2)
+        result.items.map { it.remote_id } shouldBe listOf(42L, 43L)
+        result.hasNext shouldBe true
+        result.totalCount shouldBe null
+        page.copy(paging = MALSearchPaging()).toSearchWindow(1, 2, 2).hasNext shouldBe false
+        for (invalid in listOf(next.replace("offset=4", "offset=5"), next.replace("limit=2", "limit=4"))) {
+            shouldThrow<IllegalStateException> {
+                page.copy(paging = MALSearchPaging(invalid)).toSearchWindow(1, 2, 2)
+            }
+        }
+        shouldThrow<IllegalStateException> {
+            page.copy(data = listOf(rows.first(), rows.first())).toSearchWindow(1, 2, 2)
+        }
+        shouldThrow<IllegalStateException> {
+            page.copy(data = listOf(rows.first())).toSearchWindow(1, 2, 2)
+        }
     }
 
     @Test

@@ -20,22 +20,58 @@ class ResolveMangaAllSelectedReadingOption(
         requestedLanguage: String,
         verifiedOptions: List<ProviderChapterReadingOption>,
     ): ProviderChapterReadingOption? {
-        if (canonicalTitleId.isBlank() || canonicalChapterId.isBlank() || requestedLanguage.isBlank()) return null
+        val eligible = options(canonicalTitleId, canonicalChapterId, requestedLanguage, verifiedOptions)
+        val ref = eligible.firstOrNull()?.bindingRef() ?: return null
+        val savedRelease = selections.getRelease(canonicalTitleId, canonicalChapterId, ref)
+        return if (savedRelease == null) {
+            eligible.singleOrNull()?.takeIf { it.catalogWorkFingerprint == null }
+        } else {
+            // An unavailable saved release is not permission to choose a different one.
+            eligible.singleOrNull { it.providerChapterId == savedRelease }
+        }
+    }
+
+    suspend fun remember(
+        canonicalTitleId: String,
+        option: ProviderChapterReadingOption,
+        verifiedOptions: List<ProviderChapterReadingOption>,
+        at: Long,
+    ): Boolean {
+        val language = option.facetId ?: return false
+        if (at < 0) return false
+        val eligible = options(canonicalTitleId, option.canonicalChapterId, language, verifiedOptions)
+        val exact = eligible.singleOrNull { it.readerSourceKey == option.readerSourceKey } ?: return false
+        return selections.selectRelease(canonicalTitleId, exact, at)
+    }
+
+    /** Only eligible releases of the exact saved work and language, for explicit confirmation. */
+    suspend fun options(
+        canonicalTitleId: String,
+        canonicalChapterId: String,
+        requestedLanguage: String,
+        verifiedOptions: List<ProviderChapterReadingOption>,
+    ): List<ProviderChapterReadingOption> {
+        if (canonicalTitleId.isBlank() || canonicalChapterId.isBlank() ||
+            requestedLanguage.isBlank()
+        ) {
+            return emptyList()
+        }
         val language = requestedLanguage.lowercase()
-        val saved = selections.get(canonicalTitleId, language) ?: return null
+        val saved = selections.get(canonicalTitleId, language) ?: return emptyList()
         if (saved.canonicalTitleId != canonicalTitleId ||
             saved.ref.facetId != language ||
             !MangaAllReadingIdentity.supportsRequestedLanguage(saved.ref)
         ) {
-            return null
+            return emptyList()
         }
         return verifiedOptions.filter { option ->
             val source = option.contentSourceId
             option.canonicalChapterId == canonicalChapterId &&
                 option.bindingRef() == saved.ref &&
+                option.catalogWorkFingerprint == saved.catalogIdentityFingerprint &&
                 source != null &&
                 option.providerChapterId.startsWith("$source:") &&
                 option.providerChapterId.substringAfter(':').isNotBlank()
-        }.singleOrNull()
+        }
     }
 }

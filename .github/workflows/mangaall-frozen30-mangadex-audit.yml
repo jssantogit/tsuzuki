@@ -1,0 +1,251 @@
+name: MangaALL — frozen 30 MangaDex independent Android bitmap audit (OPT-IN)
+# Immutable corpus, build ONCE and run 3 isolated GitHub-hosted Android
+# emulators against the same unsigned code11 APK pair (10 locked works/shard).
+# MangaDex-only diagnostic scope, no canonical/UI promotion or coverage claim for missing releases.
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/workflows/mangaall-frozen30-mangadex-audit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-frozen30-mangadex-audit
+  cancel-in-progress: false
+
+jobs:
+  build-once-unsigned:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Require workflow-only opt-in, immutable 30-work hash and safe scripts
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/run_mangaall_frozen30_mangadex_audit.sh
+          python3 .github/scripts/verify_mangaall_frozen30_mangadex_audit.py --selftest
+          python3 -m py_compile .github/scripts/mangaall_code11_dual_source_unsigned.py
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import subprocess
+          files = subprocess.check_output(
+              ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+              text=True,
+          ).splitlines()
+          assert files == [".github/workflows/mangaall-frozen30-mangadex-audit.yml"], files
+          src = Path(".github/mangaall-dual-source-30-cohort-lock.json")
+          lock = json.loads(src.read_text())
+          request = json.loads(Path(".github/mangaall-dual-source-30-request.json").read_text())
+          works = lock["works"]
+          assert lock["cohort"] == "MANHWA_30_FIXED_20261123"
+          assert lock["format"] == "manhwa"
+          assert lock["freezeUntil"] == "THIRTY_OF_THIRTY_VERIFIED_AND_EXPLICITLY_APPROVED"
+          assert isinstance(works, list) and len(works) == len(set(works)) == 30
+          assert request["works"] == works
+          digest = hashlib.sha256(json.dumps(
+              works, ensure_ascii=False, separators=(",", ":")
+          ).encode("utf-8")).hexdigest()
+          assert digest == "19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1"
+          kotlin = Path("app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFrozen30MangaDexAuditInstrumentedTest.kt").read_text()
+          runner = Path(".github/scripts/run_mangaall_frozen30_mangadex_audit.sh").read_text()
+          assert digest in kotlin
+          assert "mangaAllFrozen30Shard" in kotlin and "mangaAllFrozen30Shard" in runner
+          assert "I_ACCEPT_FROZEN30_MANGADEX_AUDIT" in kotlin and "I_ACCEPT_FROZEN30_MANGADEX_AUDIT" in runner
+          assert "airplane-mode disable" in runner
+          assert "DEX_START" in kotlin and "MANGAALL_DEX_AUDIT" in kotlin
+          assert "verify_mangaall_frozen30_mangadex_audit.py" in runner
+          assert "MANGAALL_DEX_AUDIT" in Path(".github/scripts/verify_mangaall_frozen30_mangadex_audit.py").read_text()
+          assert "canonical=NOT_TESTED" in kotlin
+          Path("app/src/androidTest/assets").mkdir(parents=True, exist_ok=True)
+          Path("app/src/androidTest/assets/mangaall-dual-source-30-cohort-lock.json").write_bytes(
+              src.read_bytes()
+          )
+          print("MANGAALL_FROZEN30_ANDROID|cohort=LOCKED|works=30|shards=3|reader=NOT_TESTED|signed=UNCHANGED")
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: future-code11-source
+          persist-credentials: false
+      - name: Stage pinned, NONSHIPPING code11 ZIP and exact lock into test assets
+        run: |
+          set -euo pipefail
+          test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
+          python3 .github/scripts/mangaall_code11_dual_source_unsigned.py \
+            --source future-code11-source --manhwa-only \
+            --output app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          test -s app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          ! git ls-files --error-unmatch app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          python3 - <<'PY'
+          import json
+          import zipfile
+          from pathlib import Path
+          package = Path("app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip")
+          with zipfile.ZipFile(package) as zf:
+              manifest = json.loads(zf.read("manifest.json"))
+              dot = zf.read("modules/sources/mangadot/modules/mangadot.js").decode()
+              policy = zf.read("modules/sources/mangadot/modules/search-policy.js")
+              dex = zf.read("modules/sources/mangadex/modules/mangadex.js").decode()
+          assert manifest["id"] == "app.tsuzuki.mangaall"
+          assert manifest["version"]["code"] == 11
+          assert "mangafire" not in str(manifest).lower()
+          assert manifest["name"] == "MangaAll — frozen 30 manhwa source research"
+          assert 'originalLanguage !== "ko"' in dex
+          assert '["originalLanguage[]", "ko"]' in dex
+          assert '["search", mangaDotRetrievalQuery(title)]' in dot
+          assert 'n > mangaDotResearchPageLimit()' in dot
+          assert policy == Path(".github/scripts/mangaall_mangadot_search_policy.mjs").read_bytes()
+          assert '"The Boxer":"Boxer"' not in dot
+          assert '"Weak Hero","The World After the Fall","Cheese in the Trap"' not in dot
+          assert not any("mangafire" in member.lower() for member in manifest["permissions"]["network"]["origins"])
+          print("MANGAALL_FROZEN30_ANDROID|nativeSource=MANHWA_ONLY_KO|genericQueryPolicy=VERIFIED|canonical=NOT_TESTED")
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Compile corrected V1 audit and real per-HID bitmap checks
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*ResolveMangaAllIndependentCatalogIdentityTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+            cat "$log"
+            exit 0
+          fi
+          if ! grep -Eiq 'no cached version|offline mode|not available for offline' "$log"; then
+            cat "$log"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*ResolveMangaAllIndependentCatalogIdentityTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+              cat "$log"
+              echo 'MANGAALL_FROZEN30_ANDROID|build=PASS|compiler=VERIFIED'
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log"; then
+              cat "$log"
+              echo 'MANGAALL_FROZEN30_ANDROID|build=RED|reason=NON_429_GRADLE_FAILURE'
+              exit 1
+            fi
+            echo "MANGAALL_FROZEN30_ANDROID|build=RETRYABLE_INFRA_429|attempt=$attempt|max=3"
+            if [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              echo 'MANGAALL_FROZEN30_ANDROID|build=RED|reason=EXHAUSTED_MAVEN_HTTP_429'
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
+      - name: Share unsigned APKs with three emulator shards, without signing
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-frozen30-dex-audit-apks
+          path: app/build/outputs/apk/
+          if-no-files-found: error
+          retention-days: 1
+
+  independent-mangadex:
+    needs: build-once-unsigned
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download exact common unsigned Android APK pair
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mangaall-frozen30-dex-audit-apks
+          path: app/build/outputs/apk/
+      - name: Confirm one app APK, one instrument APK and shard-bound script
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/run_mangaall_frozen30_mangadex_audit.sh
+          test "$(find app/build/outputs/apk/debug -type f \( -name '*universal*.apk' -o -name 'app-debug.apk' \) | wc -l)" -eq 1
+          test "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' | wc -l)" -eq 1
+      - name: Enable KVM for GitHub-hosted Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Audit all exact MangaDex HIDs and English chapter-one page lists, shard ${{ matrix.shard }}
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_frozen30_mangadex_audit.sh ${{ matrix.shard }} 1
+      - name: Upload ONLY sanitized Android cohort verdict
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-frozen30-mangadex-shard-${{ matrix.shard }}
+          path: .github/results/mangaall-frozen30-mangadex-audit/shard-${{ matrix.shard }}/
+          if-no-files-found: ignore
+          retention-days: 2
+
+  strict-report:
+    if: always()
+    needs: [build-once-unsigned, independent-mangadex]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          pattern: mangaall-frozen30-mangadex-shard-*
+          path: reports
+      - name: Require all thirty distinct reports and distinguish coverage from audit integrity
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+          rows=[]
+          valid=True
+          for shard in range(3):
+              p=Path(f"reports/mangaall-frozen30-mangadex-shard-{shard}/verdict.json")
+              if not p.is_file():
+                  valid=False
+                  continue
+              report=json.loads(p.read_text())
+              actual=report.get("works",[])
+              valid &= (report.get("schemaVersion")==2 and report.get("scope")=="MANGADEX_EN_ONLY"
+                        and report.get("shard")==shard
+                        and report.get("corpusSha256")=="19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1"
+                        and report.get("integrity") is True
+                        and report.get("transportHealthy") is True
+                        and report.get("pixelContract") is True
+                        and report.get("pixelHealthy") is True
+                        and report.get("pixelProbe")=="FIRST_PAGE_PER_READABLE_HID"
+                        and report.get("outcome")=="PASS"
+                        and report.get("completeReport") is True
+                        and report.get("instrumentationPassed") is True
+                        and [r.get("index") for r in actual]==list(range(shard*10+1,shard*10+11)))
+              rows.extend(actual)
+          counts=Counter(r.get("outcome","UNKNOWN") for r in rows)
+          for outcome,count in sorted(counts.items()):
+              print(f"MANGAALL_DEX_AUDIT|outcome={outcome}|works={count}")
+          print(f"MANGAALL_DEX_AUDIT|observed={len(rows)}|ready={counts['SOURCE_PAGE_LIST_READY']}|expected=30|canonical=NOT_TESTED|pixelDecoded={sum(r['pixelDecoded'] for r in rows)}|readerUI=NOT_TESTED")
+          assert valid and [r["index"] for r in rows]==list(range(1,31))
+          PY
+          test '${{ needs.build-once-unsigned.result }}' = 'success'
+          test '${{ needs.independent-mangadex.result }}' = 'success'

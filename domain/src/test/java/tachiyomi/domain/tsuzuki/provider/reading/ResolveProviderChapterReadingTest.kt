@@ -1,6 +1,9 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -19,6 +22,10 @@ import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
+import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
@@ -34,6 +41,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
+import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 
 class ResolveProviderChapterReadingTest {
 
@@ -549,6 +557,158 @@ class ResolveProviderChapterReadingTest {
             sourceAssociations = listOf(colorAssociation),
         )
         explicitlyChosen.options(chapter.id).map { it.providerChapterId } shouldBe listOf("source-1")
+    }
+
+    @Test
+    fun `blocked work identity cannot reuse stale Reader bindings`(): Unit = runBlocking {
+        val observed = evidence(binding, "source-1", mappedChapterId = chapter.id)
+        for (verification in listOf(
+            ProviderWorkVerification.CATALOG_CORROBORATED,
+            ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT,
+            ProviderWorkVerification.AUTHOR_CONFLICT,
+            ProviderWorkVerification.TITLE_UNVERIFIED,
+        )) {
+            val association = ProviderWorkSourceAssociation(
+                canonicalTitleId = chapter.canonicalTitleId,
+                ref = binding.ref,
+                workVerification = verification,
+                editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+                observedAt = 100L,
+            )
+            val savedBindings = listOf(binding, binding.copy(verification = ProviderBindingVerification.USER_CONFIRMED))
+            for (saved in savedBindings) {
+                val reader = resolver(
+                    bindings = listOf(saved),
+                    evidence = listOf(observed),
+                    sourceAssociations = listOf(association),
+                    gateway = gateway { error("Blocked work must not invoke pages") },
+                )
+                reader.options(chapter.id) shouldBe emptyList()
+                reader.auditNoMatch(chapter.id).eligibleSourceCount shouldBe 0
+                reader.auditNoMatch(chapter.id).reason shouldBe ProviderReadingNoMatchReason.NO_ELIGIBLE_SOURCE
+            }
+        }
+    }
+
+    @Test
+    fun `catalog research requires live proof exact chapter and explicit scoped release choice`(): Unit = runBlocking {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val ref = ProviderBindingRef(mangaAll, "en", "mangadot:42")
+        val titleId = chapter.canonicalTitleId
+        val owner = IntegrationId("mangaupdates")
+        val proof = requireNotNull(MangaAllCatalogWorkIdentityProof.fingerprint(titleId, ref, "123", 11, "config"))
+        val source = ProviderWorkSourceAssociation(
+            canonicalTitleId = titleId,
+            ref = ref,
+            workVerification = ProviderWorkVerification.CATALOG_CORROBORATED,
+            editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+            observedAt = 10,
+            catalogIdentityFingerprint = proof,
+        )
+        val entries = mutableListOf(source)
+        val associations = sourceAssociationRepository(entries)
+        val titles = mockk<CanonicalTitleRepository>()
+        var identity = "123"
+        coEvery { titles.getExternalIdentities(titleId) } answers {
+            listOf(ExternalIdentity(titleId, owner.value, identity, verified = true, createdAt = 1L))
+        }
+        val integrations = mockk<IntegrationRegistry>()
+        var consent = true
+        every { integrations.isGlobalCapabilityActive(owner, IntegrationCapability.METADATA_BASIC) } answers { consent }
+        val initialRegistration = readingRegistration(provider = mangaAll)
+        val registration = initialRegistration.copy(
+            descriptor = initialRegistration.descriptor.copy(version = ProviderVersion("1.0.0", 11)),
+            configurationFingerprint = "config",
+        )
+        val registry = DefaultProviderRegistry(registrations = { listOf(registration) })
+        val selections = mockk<MangaAllSourceSelectionRepository>()
+        var choice: MangaAllSourceSelection? = null
+        var release: String? = null
+        coEvery { selections.get(titleId, "en") } answers { choice }
+        coEvery { selections.select(any()) } answers {
+            choice = firstArg()
+            true
+        }
+        coEvery { selections.getRelease(titleId, chapter.id, ref) } answers { release }
+        val research = MangaAllCatalogReaderResearch(titles, integrations, registry, associations, selections)
+        val sourceBinding = binding.copy(ref = ref)
+        val observed = evidence(sourceBinding, "mangadot:chapters:1", chapter.id).let {
+            it.copy(
+                evidence = it.evidence.copy(
+                    providerMetadata = ProviderEvidenceMetadata(language = "en", catalogWorkFingerprint = proof),
+                ),
+            )
+        }
+        val old = evidence(sourceBinding, "mangadot:chapters:2", chapter.id).let {
+            it.copy(evidence = it.evidence.copy(providerMetadata = ProviderEvidenceMetadata(language = "en")))
+        }
+        var pageRequests = 0
+        var revokeDuringDelivery = false
+        val delivered = ProviderCallResult.Success(
+            ProviderReadingDelivery.PageList(
+                listOf(
+                    ProviderPageRequest(
+                        url = "https://reader.example/page.jpg",
+                        allowedOrigins = setOf("https://reader.example"),
+                    ),
+                ),
+            ),
+        )
+        val reader = ResolveProviderChapterReading(
+            canonicalChapterRepository = canonicalChapterRepository(chapter),
+            evidenceRepository = evidenceRepository(listOf(observed, old)),
+            bindingRepository = bindingRepository(listOf(sourceBinding)),
+            workSourceAssociationRepository = associations,
+            providerRegistry = registry,
+            gateway = gateway(expectedProviderId = mangaAll) { request ->
+                pageRequests++
+                request.binding shouldBe ref
+                request.providerChapterId shouldBe "mangadot:chapters:1"
+                if (revokeDuringDelivery) consent = false
+                delivered
+            },
+            catalogResearch = research,
+        )
+        resolver(
+            bindings = listOf(sourceBinding),
+            evidence = listOf(observed),
+            providerRegistry = registry,
+            sourceAssociations = entries,
+        ).options(chapter.id) shouldBe emptyList()
+        val option = reader.options(chapter.id).single()
+        option.providerChapterId shouldBe "mangadot:chapters:1"
+        option.catalogWorkFingerprint shouldBe proof
+        (reader.delivery(option) is ProviderCallResult.Failure) shouldBe true
+        pageRequests shouldBe 0
+        val picker = SelectMangaAllSource(associations, selections, research)
+        picker.select(titleId, ref, 20) shouldBe MangaAllSourceSelectionResult.SELECTED
+        choice?.catalogIdentityFingerprint shouldBe proof
+        research.permitsDelivery(titleId, option) shouldBe false
+        (reader.delivery(option) is ProviderCallResult.Failure) shouldBe true
+        pageRequests shouldBe 0
+        release = option.providerChapterId
+        research.permitsDelivery(titleId, option) shouldBe true
+        reader.delivery(option) shouldBe delivered
+        pageRequests shouldBe 1
+        revokeDuringDelivery = true
+        (reader.delivery(option) is ProviderCallResult.Failure) shouldBe true
+        pageRequests shouldBe 2
+        consent shouldBe false
+        reader.options(chapter.id) shouldBe emptyList()
+        research.permitsDelivery(titleId, option) shouldBe false
+        consent = true
+        identity = "124"
+        reader.options(chapter.id) shouldBe emptyList()
+        identity = "123"
+        entries += source.copy(ref = ref.copy(externalWorkId = "mangadot:43"))
+        reader.options(chapter.id) shouldBe emptyList()
+        entries.removeAt(1)
+        entries[0] = source.copy(
+            workVerification = ProviderWorkVerification.AUTHOR_CONFLICT,
+            catalogIdentityFingerprint = null,
+        )
+        reader.options(chapter.id) shouldBe emptyList()
+        picker.select(titleId, ref, 21) shouldBe MangaAllSourceSelectionResult.BLOCKED
     }
 
     @Test
@@ -1268,6 +1428,43 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `source audit explains rejection when another source is readable`(): Unit = runBlocking {
+        val mangaAllId = ProviderId("app.tsuzuki.mangaall")
+        val dex = binding.copy(
+            id = "dex",
+            ref = ProviderBindingRef(mangaAllId, "en", "mangadex:12345678-1234-1234-1234-123456789abc"),
+        )
+        val dot = binding.copy(
+            id = "dot",
+            ref = ProviderBindingRef(mangaAllId, "en", "mangadot:123"),
+        )
+        fun observed(target: ProviderReadingBinding, key: String, language: String?) =
+            evidence(target, key, chapter.id).let {
+                it.copy(evidence = it.evidence.copy(providerMetadata = ProviderEvidenceMetadata(language = language)))
+            }
+        val reader = resolver(
+            bindings = listOf(dex, dot),
+            evidence = listOf(
+                observed(dex, "mangadex:abcdef12-1234-1234-1234-123456789abc", "en"),
+                observed(dot, "mangadot:uploads:17", null),
+                observed(dot, "mangadot:chapters:18", "pt-br"),
+                observed(dot, "mangadot:invalid:19", "en"),
+            ),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(readingRegistration(provider = mangaAllId)) },
+            ),
+        )
+        reader.options(chapter.id).map { it.contentSourceId } shouldBe listOf("mangadex")
+        reader.auditMangaAllOptionRejections(chapter.id) shouldBe mapOf(
+            "mangadot" to mapOf(
+                ProviderReadingOptionRejection(ProviderReadingOptionRejectionReason.SOURCE_LANGUAGE_MISSING) to 1,
+                ProviderReadingOptionRejection(ProviderReadingOptionRejectionReason.SOURCE_LANGUAGE_MISMATCH) to 1,
+                ProviderReadingOptionRejection(ProviderReadingOptionRejectionReason.SOURCE_KEY_OR_FACET_REJECTED) to 1,
+            ),
+        )
+    }
+
+    @Test
     fun `MangaAll keeps source identities separate and hides unreadable metadata-only chapters`(): Unit = runBlocking {
         val mangaAllId = ProviderId("app.tsuzuki.mangaall")
         val fire = binding.copy(
@@ -1444,6 +1641,7 @@ class ResolveProviderChapterReadingTest {
     )
 
     private fun gateway(
+        expectedProviderId: ProviderId = providerId,
         pages: suspend (ProviderReadingPagesRequest) -> ProviderCallResult<ProviderReadingDelivery>,
     ) = object : ProviderReadingGateway {
         override suspend fun lookup(
@@ -1460,7 +1658,7 @@ class ResolveProviderChapterReadingTest {
             providerId: ProviderId,
             request: ProviderReadingPagesRequest,
         ): ProviderCallResult<ProviderReadingDelivery> {
-            providerId shouldBe this@ResolveProviderChapterReadingTest.providerId
+            providerId shouldBe expectedProviderId
             return pages(request)
         }
     }

@@ -1,0 +1,3 @@
+-- Local proof-scoped research choices; legacy preferences carry no attestation.
+ALTER TABLE tsuzuki_mangaall_source_selections ADD COLUMN catalog_identity_fingerprint TEXT;
+ALTER TABLE tsuzuki_mangaall_chapter_releases ADD COLUMN catalog_identity_fingerprint TEXT;

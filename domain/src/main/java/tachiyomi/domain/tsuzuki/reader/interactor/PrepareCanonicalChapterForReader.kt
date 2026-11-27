@@ -29,6 +29,7 @@ import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
 import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
 import tachiyomi.domain.tsuzuki.download.service.canReuseArtifact
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveMangaAllSelectedChapter
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
@@ -95,6 +96,34 @@ class PrepareCanonicalChapterForReader(
                     canonicalChapterId,
                     requestedMangaAllLanguage,
                 )
+                val releases = if (option == null) {
+                    resolveMangaAllSelectedChapter?.options(canonicalChapterId, requestedMangaAllLanguage).orEmpty()
+                } else {
+                    emptyList()
+                }
+                // Even one remaining release requires confirmation when the saved
+                // exact release no longer resolves. Never silently substitute it.
+                if (releases.isNotEmpty()) {
+                    trace.event(
+                        subsystem = DiagnosticSubsystem.READER,
+                        name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                        stage = DiagnosticStage.READER,
+                        outcome = DiagnosticOutcome.NEEDS_CONFIRMATION,
+                        attributes = mapOf(
+                            DiagnosticAttribute.CANDIDATE_COUNT to
+                                DiagnosticAttributeValue.Number(releases.size.toLong()),
+                        ),
+                    )
+                    return complete(
+                        trace,
+                        started,
+                        CanonicalReaderPreparation.ProviderEditionConfirmationRequired(
+                            canonicalTitleId = chapter.canonicalTitleId,
+                            canonicalChapterId = canonicalChapterId,
+                            candidateCount = releases.size,
+                        ),
+                    )
+                }
                 trace.event(
                     subsystem = DiagnosticSubsystem.READER,
                     name = DiagnosticEventName.READER_SOURCE_SELECTED,
@@ -221,6 +250,12 @@ class PrepareCanonicalChapterForReader(
 
         return complete(trace, started, result)
     }
+
+    /** Called only after an explicit chapter-specific Reader selection succeeds. */
+    suspend fun rememberMangaAllRelease(
+        option: ProviderChapterReadingOption,
+        at: Long,
+    ): Boolean = resolveMangaAllSelectedChapter?.rememberRelease(option, at) == true
 
     private suspend fun prepareProviderFallback(
         canonicalChapterId: String,

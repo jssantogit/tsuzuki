@@ -23,6 +23,20 @@ class ProviderEvidenceMetadataCodecTest {
     }
 
     @Test
+    fun `local chapter attestation round trips without changing legacy release encoding`() {
+        val release = ProviderEvidenceMetadata(language = "en", scanlationGroup = "Group")
+        val oldBytes = ProviderEvidenceMetadataCodec.encode(release)
+        val proof = "catalog-work-v1:" + "a".repeat(64)
+        val local = release.copy(catalogWorkFingerprint = proof)
+        val localBytes = ProviderEvidenceMetadataCodec.encode(local)
+        ProviderEvidenceMetadataCodec.decode(localBytes) shouldBe local
+        ProviderEvidenceMetadataCodec.decode(oldBytes) shouldBe release
+        ProviderEvidenceMetadataCodec.encode(local.copy(catalogWorkFingerprint = null)) shouldBe oldBytes
+        ProviderEvidenceMetadataCodec.decode(localBytes.copyOf(localBytes.size - 1)) shouldBe null
+        ProviderEvidenceMetadataCodec.decode(localBytes + byteArrayOf(0)) shouldBe null
+    }
+
+    @Test
     fun `opaque or malformed metadata is not interpreted or declared portable`() {
         val unknown = listOf(
             byteArrayOf(1, 2, 3),

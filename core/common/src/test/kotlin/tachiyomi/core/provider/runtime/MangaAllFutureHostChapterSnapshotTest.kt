@@ -52,6 +52,7 @@ class MangaAllFutureHostChapterSnapshotTest {
 
     private fun fixture(
         existingStorage: FileProviderStorageHostService? = null,
+        expectedUrl: String = "https://mangadot.net/api/manga/131/chapters/list?lang=en",
         rawSource: () -> String,
     ): Pair<MangaAllFutureHostChapterSnapshot, () -> Int> {
         val owner = ProviderResourceOwner(providerId, "test-invocation")
@@ -62,7 +63,7 @@ class MangaAllFutureHostChapterSnapshotTest {
                 error("Large chapter lists must never use the 192KiB text interface")
 
             override suspend fun getResource(url: String): ProviderResourceHandle {
-                url shouldBe "https://mangadot.net/api/manga/131/chapters/list?lang=en"
+                url shouldBe expectedUrl
                 calls++
                 return resources.put(
                     owner,
@@ -153,6 +154,114 @@ class MangaAllFutureHostChapterSnapshotTest {
     }
 
     @Test
+    fun snapshots_for_two_works_and_languages_survive_new_host_instances(): Unit = runBlocking {
+        val root = tempDir.resolve("scoped-snapshots").toFile()
+        val shared = FileProviderStorageHostService(root, providerId)
+        val (first, _) = fixture(existingStorage = shared) { source(400, 0, "First") }
+        val (second, _) = fixture(
+            existingStorage = shared,
+            expectedUrl = "https://mangadot.net/api/manga/132/chapters/list?lang=en",
+        ) { source(400, 0, "Second") }
+        val (translated, _) = fixture(
+            existingStorage = shared,
+            expectedUrl = "https://mangadot.net/api/manga/131/chapters/list?lang=pt-br",
+        ) { source(400, 0, "Translated").replace("\"en\"", "\"pt-br\"") }
+
+        val firstCursor = first.start("mangadot:131", "en").nextCursor!!
+        val secondCursor = second.start("mangadot:132", "en").nextCursor!!
+        val translatedCursor = translated.start("mangadot:131", "pt-br").nextCursor!!
+        val (reopened, calls) = fixture(
+            existingStorage = FileProviderStorageHostService(root, providerId),
+        ) { error("Resume must not acquire HTTP") }
+
+        reopened.next("mangadot:131", "en", firstCursor)
+            .items.first()["title"]!!.jsonPrimitive.content.startsWith("First ") shouldBe true
+        reopened.next("mangadot:132", "en", secondCursor)
+            .items.first()["title"]!!.jsonPrimitive.content.startsWith("Second ") shouldBe true
+        reopened.next("mangadot:131", "pt-br", translatedCursor)
+            .items.first()["title"]!!.jsonPrimitive.content.startsWith("Translated ") shouldBe true
+        (
+            runCatching { reopened.next("mangadot:132", "en", firstCursor) }.exceptionOrNull()
+                is ProviderHostServiceException
+            ) shouldBe true
+        calls() shouldBe 0
+
+        first.start("mangadot:131", "en")
+        (
+            runCatching { reopened.next("mangadot:131", "en", firstCursor) }.exceptionOrNull()
+                is ProviderHostServiceException
+            ) shouldBe true
+        reopened.next("mangadot:132", "en", secondCursor).items.isNotEmpty() shouldBe true
+        reopened.next("mangadot:131", "pt-br", translatedCursor).items.isNotEmpty() shouldBe true
+    }
+
+    @Test
+    fun quota_rejection_preserves_other_active_scope_and_expired_scope_is_pruned(): Unit = runBlocking {
+        val shared = FileProviderStorageHostService(
+            root = tempDir.resolve("scoped-quota").toFile(),
+            providerId = providerId,
+        )
+        repeat(6) { shared.set("other" + it, "a".repeat(60 * 1024)) }
+        val (first, _) = fixture(existingStorage = shared) { source(1900, 0, "First") }
+        val (second, _) = fixture(
+            existingStorage = shared,
+            expectedUrl = "https://mangadot.net/api/manga/132/chapters/list?lang=en",
+        ) { source(1900, 0, "Second") }
+        val cursor = first.start("mangadot:131", "en").nextCursor!!
+        (
+            runCatching { second.start("mangadot:132", "en") }.exceptionOrNull()
+                is ProviderHostServiceException
+            ) shouldBe true
+        first.next("mangadot:131", "en", cursor).items.isNotEmpty() shouldBe true
+        shared.get("mangaall_private_chapters_132_en_index") shouldBe null
+
+        now += 5 * 60 * 1000 + 1
+        second.start("mangadot:132", "en").items.isNotEmpty() shouldBe true
+        shared.get("mangaall_private_chapters_131_en_index") shouldBe null
+        shared.get("mangaall_private_chapters_131_en_part_0") shouldBe null
+        repeat(6) { shared.get("other" + it) shouldBe "a".repeat(60 * 1024) }
+    }
+
+    @Test
+    fun completed_generation_is_replayed_until_pressure_then_reclaimed_without_waiting_for_ttl(): Unit = runBlocking {
+        val shared = FileProviderStorageHostService(
+            root = tempDir.resolve("terminal-quota").toFile(),
+            providerId = providerId,
+        )
+        repeat(6) { shared.set("other" + it, "a".repeat(60 * 1024)) }
+        val (first, _) = fixture(existingStorage = shared) { source(1900, 0, "First") }
+        val (second, _) = fixture(
+            existingStorage = shared,
+            expectedUrl = "https://mangadot.net/api/manga/132/chapters/list?lang=en",
+        ) { source(1900, 0, "Second") }
+        var page = first.start("mangadot:131", "en")
+        var terminalRequest = page.nextCursor!!
+        while (page.nextCursor != null) {
+            terminalRequest = page.nextCursor!!
+            page = first.next("mangadot:131", "en", terminalRequest)
+        }
+        first.next("mangadot:131", "en", terminalRequest) shouldBe page
+        val secondPage = second.start("mangadot:132", "en")
+        secondPage.nextCursor.isNullOrBlank() shouldBe false
+        shared.get("mangaall_private_chapters_131_en_index") shouldBe null
+        shared.get("mangaall_private_chapters_131_en_part_0") shouldBe null
+        second.next("mangadot:132", "en", secondPage.nextCursor!!).items.isNotEmpty() shouldBe true
+        repeat(6) { shared.get("other" + it) shouldBe "a".repeat(60 * 1024) }
+    }
+
+    @Test
+    fun completion_of_old_generation_does_not_mark_replacement(): Unit = runBlocking {
+        val shared = FileProviderStorageHostService(tempDir.resolve("terminal-cas").toFile(), providerId)
+        val (service, _) = fixture(existingStorage = shared) { source(400, 0) }
+        val original = service.start("mangadot:131", "en").nextCursor!!
+        val replacement = service.start("mangadot:131", "en").nextCursor!!
+        shared.markFutureMangaAllChapterSnapshotCompleted("mangadot:131", "en", original.split(':')[3])
+        val header = Json.parseToJsonElement(shared.get("mangaall_private_chapters_131_en_index")!!).jsonObject
+        header["completed"] shouldBe JsonPrimitive(false)
+        service.next("mangadot:131", "en", replacement).items.isNotEmpty() shouldBe true
+    }
+
+    @Test
     fun chapter_identity_keeps_upload_and_independent_source_chapter_with_same_numeric_id(): Unit = runBlocking {
         val raw = """[
             {"id":171,"chapter_number":2,"language":"en","source":"user"},
@@ -171,6 +280,33 @@ class MangaAllFutureHostChapterSnapshotTest {
     }
 
     @Test
+    fun contradictory_chapter_ids_and_malformed_nonempty_inventory_preserve_previous_generation(): Unit = runBlocking {
+        var current = source(400, 0)
+        val (service, _) = fixture { current }
+        val first = service.start("mangadot:131", "en")
+        val cursor = first.nextCursor!!
+        current = """
+            [
+              {"id":171,"chapter_number":1,"language":"en","source":"user"},
+              {"id":171,"chapter_number":2,"language":"en","source":"user"}
+            ]
+        """.trimIndent()
+        val conflict = runCatching { service.start("mangadot:131", "en") }.exceptionOrNull()
+        conflict?.message shouldBe "CONFLICTING_SOURCE_CHAPTER_ID"
+        service.next("mangadot:131", "en", cursor).items.isNotEmpty() shouldBe true
+
+        current = """[{"id":null,"chapter_number":1},null,{"id":17,"chapter_number":"invalid"}]"""
+        val malformed = runCatching { service.start("mangadot:131", "en") }.exceptionOrNull()
+        malformed?.message shouldBe "INCONCLUSIVE_SOURCE_ROWS"
+        service.next("mangadot:131", "en", cursor).items.isNotEmpty() shouldBe true
+
+        current = "[]"
+        val empty = service.start("mangadot:131", "en")
+        empty.items.size shouldBe 0
+        empty.nextCursor shouldBe null
+    }
+
+    @Test
     fun failed_shared_quota_preflight_keeps_unrelated_storage_and_previous_snapshot(): Unit = runBlocking {
         val shared = FileProviderStorageHostService(
             root = tempDir.resolve("shared-storage").toFile(),
@@ -181,7 +317,7 @@ class MangaAllFutureHostChapterSnapshotTest {
         val (service, _) = fixture(existingStorage = shared) { current }
         val committed = service.start("mangadot:131", "en")
         val oldCursor = committed.nextCursor!!
-        val oldIndex = shared.get("mangaall_private_chapters_index")
+        val oldIndex = shared.get("mangaall_private_chapters_131_en_index")
         (oldIndex != null) shouldBe true
 
         // Compact source rows fit the dedicated 440KiB envelope, but the
@@ -193,7 +329,7 @@ class MangaAllFutureHostChapterSnapshotTest {
             }.exceptionOrNull() is ProviderHostServiceException
             ) shouldBe true
 
-        shared.get("mangaall_private_chapters_index") shouldBe oldIndex
+        shared.get("mangaall_private_chapters_131_en_index") shouldBe oldIndex
         repeat(6) { shared.get("other" + it) shouldBe "a".repeat(60 * 1024) }
         service.next("mangadot:131", "en", oldCursor).items.isNotEmpty() shouldBe true
     }
@@ -359,7 +495,7 @@ class MangaAllFutureHostChapterSnapshotTest {
                 }.exceptionOrNull() is ProviderHostServiceException
                 ) shouldBe true
             calls.get() shouldBe 1
-            storage.get("mangaall_private_chapters_index") shouldBe null
+            storage.get("mangaall_private_chapters_131_en_index") shouldBe null
         } finally {
             statusDenied.close()
         }
@@ -414,6 +550,49 @@ class MangaAllFutureHostChapterSnapshotTest {
     }
 
     @Test
+    fun page_budget_matches_reference_serialization_at_utf8_and_row_boundaries(): Unit = runBlocking {
+        for (title in listOf("Plain", "界".repeat(90), "Quote \\" + '"' + " newline\n")) {
+            val (service, calls) = fixture { source(601, padding = 0, title = title) }
+            var page = service.start("mangadot:131", "en")
+            val pages = mutableListOf<MangaAllFutureChapterPage>()
+            while (true) {
+                pages += page
+                val cursor = page.nextCursor ?: break
+                page = service.next("mangadot:131", "en", cursor)
+            }
+            pages.sumOf { it.items.size } shouldBe 601
+            for ((index, current) in pages.withIndex()) {
+                val serialized = JsonObject(
+                    mapOf(
+                        "items" to JsonArray(current.items),
+                        "nextCursor" to (current.nextCursor?.let(::JsonPrimitive) ?: JsonNull),
+                    ),
+                ).toString()
+                (serialized.length <= 48 * 1024) shouldBe true
+                (serialized.encodeToByteArray().size <= 48 * 1024) shouldBe true
+                (current.items.size <= 256) shouldBe true
+                if (index < pages.lastIndex && current.items.size < 256) {
+                    val following = pages[index + 1]
+                    val nextPosition = current.nextCursor!!.substringAfterLast(':').toInt() + 1
+                    val cursor = if (nextPosition < 601) {
+                        current.nextCursor.substringBeforeLast(':') + ":" + nextPosition
+                    } else {
+                        null
+                    }
+                    val proposed = JsonObject(
+                        mapOf(
+                            "items" to JsonArray(current.items + following.items.first()),
+                            "nextCursor" to (cursor?.let(::JsonPrimitive) ?: JsonNull),
+                        ),
+                    ).toString()
+                    (proposed.length > 48 * 1024 || proposed.encodeToByteArray().size > 48 * 1024) shouldBe true
+                }
+            }
+            calls() shouldBe 1
+        }
+    }
+
+    @Test
     fun optimized_snapshot_chunking_is_byte_identical_to_reference_json_arrays_with_cjk(): Unit = runBlocking {
         // Deliberately use a *quadratic reference* on just 400 synthetic rows
         // to lock output compatibility. Production now performs each row's
@@ -427,7 +606,7 @@ class MangaAllFutureHostChapterSnapshotTest {
             source(400, padding = 0, title = title)
         }
         service.start("mangadot:131", "en")
-        val headerText = storage.get("mangaall_private_chapters_index")!!
+        val headerText = storage.get("mangaall_private_chapters_131_en_index")!!
         val header = Json.parseToJsonElement(headerText).jsonObject
         val generation = header["generation"]!!.jsonPrimitive.content
         // Reuse the exact *serialized* compact tuples as chunker input.
@@ -435,7 +614,7 @@ class MangaAllFutureHostChapterSnapshotTest {
         // test field normalization (including numeric rendering) instead of
         // isolating the array-partition algorithm under test here.
         val originalRows = header["ranges"]!!.jsonArray.indices.flatMap { index ->
-            val stored = storage.get("mangaall_private_chapters_part_$index")
+            val stored = storage.get("mangaall_private_chapters_131_en_part_$index")
                 ?: throw AssertionError("MANGAALL_CJK_PARITY|missingPart=$index")
             Json.parseToJsonElement(stored).jsonObject["rows"]!!.jsonArray.map { it.jsonArray }
         }
@@ -480,7 +659,7 @@ class MangaAllFutureHostChapterSnapshotTest {
                     "rows" to JsonArray(part),
                 ),
             ).toString()
-            val observed = storage.get("mangaall_private_chapters_part_$index")
+            val observed = storage.get("mangaall_private_chapters_131_en_part_$index")
             if (observed != expected) {
                 val firstMismatch = expected.indices.firstOrNull { pos ->
                     expected[pos] != observed?.getOrNull(pos)

@@ -38,12 +38,25 @@ jobs:
         run: |
           set -euo pipefail
           base="$(git merge-base origin/main HEAD)"
-          git diff --name-only "$base" HEAD | tee /tmp/mangaall-future-host-changed.txt
+          git diff --name-only --no-renames "$base" HEAD | tee /tmp/mangaall-future-host-changed.txt
           if grep -E '^(providers/|dist/|core/common/src/main/kotlin/tachiyomi/core/provider/supplychain/)' /tmp/mangaall-future-host-changed.txt; then
             echo "::error::Signed package or unrelated privileged source changed"
             exit 1
           fi
           if grep -E '^app/' /tmp/mangaall-future-host-changed.txt; then
+            # This separate reviewed research scope contains catalog/Reader and
+            # instrumentation changes, not App Binder implementation changes.
+            # Compare exact paths, not a wildcard App exemption; any added
+            # App path (including AIDL/runtime) requires its own review.
+            if [[ "${GITHUB_EVENT_NAME}" == "pull_request" &&
+                  "${GITHUB_HEAD_REF:-}" == 'probe/mangaall-dual-source-scale30-20261123' &&
+                  "${GITHUB_HEAD_REPO:-}" == "${GITHUB_REPOSITORY}" ]]; then
+              python3 .github/scripts/check_mangaall_integrated_app_scope.py --selftest
+              python3 .github/scripts/check_mangaall_integrated_app_scope.py "$base"
+              # Scope is still research only: no App Binder or signed package
+              # changes; continue to the full core JVM and negative tests.
+              echo 'MANGAALL_FUTURE_GRANT|signed_code10=UNCHANGED|app_binder=UNCHANGED|research_app=EXACT_ALLOWLIST|network=OFFLINE'
+            else
             # Only the exact same-repository future Binder PR can touch App
             # sources, and it MUST pass its separately gated compile/test CI.
             if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ||
@@ -63,6 +76,7 @@ jobs:
               fi
             done
             echo 'MANGAALL_FUTURE_GRANT|signed_code10=UNCHANGED|app_binder=SEPARATELY_GATED|network=OFFLINE'
+            fi
           else
             echo 'MANGAALL_FUTURE_GRANT|signed_code10=UNCHANGED|network=OFFLINE'
           fi

@@ -76,31 +76,33 @@ class RefreshProviderReadingChapters internal constructor(
             )
             val elapsedMillis = (System.nanoTime() - startedNanos) / 1_000_000L
             val page = when (result) {
-                is ProviderCallResult.Success -> {
-                    onPageFinished(pageIndex, result.value.items.size, null, elapsedMillis)
-                    result.value
-                }
+                is ProviderCallResult.Success -> result.value
                 is ProviderCallResult.Failure -> {
                     onPageFinished(pageIndex, null, result.error.code, elapsedMillis)
                     return result
                 }
             }
 
-            page.items.forEach { observation ->
-                if (!seenChapterIds.add(observation.providerChapterId)) {
-                    return failure(ProviderErrorCode.MALFORMED_RESULT)
-                }
-                observationCount++
-                if (observationCount > MAX_OBSERVATIONS) {
-                    return failure(ProviderErrorCode.RESOURCE_LIMIT)
-                }
-                observations?.add(observation)
-            }
-
+            // Transport success is not a validated page. Report the actual
+            // structural error, and do not deliver or checkpoint invalid rows.
+            val pageIds = page.items.map(ProviderChapterObservation::providerChapterId)
             val next = page.nextCursor
-            if (next != null && !seenCursors.add(next.value)) {
-                return failure(ProviderErrorCode.MALFORMED_RESULT)
+            val pageError = when {
+                pageIds.toSet().size != pageIds.size || pageIds.any(seenChapterIds::contains) ->
+                    ProviderErrorCode.MALFORMED_RESULT
+                next != null && next.value in seenCursors -> ProviderErrorCode.MALFORMED_RESULT
+                page.items.size > MAX_OBSERVATIONS - observationCount -> ProviderErrorCode.RESOURCE_LIMIT
+                else -> null
             }
+            if (pageError != null) {
+                onPageFinished(pageIndex, null, pageError, elapsedMillis)
+                return failure(pageError)
+            }
+            seenChapterIds.addAll(pageIds)
+            if (next != null) seenCursors += next.value
+            observationCount += page.items.size
+            observations?.addAll(page.items)
+            onPageFinished(pageIndex, page.items.size, null, elapsedMillis)
             // These are sanitized page-level diagnostics only, not partial chapter inventory.
             // Never publish a canonical snapshot until the final page is verified, so a
             // stalled or failed later page cannot detach previously recorded chapters.

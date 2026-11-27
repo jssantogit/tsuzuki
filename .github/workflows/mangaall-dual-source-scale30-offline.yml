@@ -1,0 +1,73 @@
+name: MangaALL two-source 30 works — scoped routing and audit contracts (OFFLINE)
+# No upstream MangaDex/MangaDot HTTP from this workflow. A distinct manifest-only
+# live workflow must pass explicit scope guard to send public API requests.
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/scripts/mangaall_dual_source_30.mjs'
+      - '.github/scripts/mangaall_dual_source_30_aggregate.py'
+      - '.github/mangaall-dual-source-30-request.json'
+      - '.github/mangaall-dual-source-30-cohort-lock.json'
+      - '.github/workflows/mangaall-dual-source-scale30-offline.yml'
+      - '.github/workflows/mangaall-dual-source-scale30-live.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-dual30-offline
+  cancel-in-progress: true
+
+jobs:
+  dual-source-offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 195502f981bd776a68feebde3efc6d20f55cca65
+          path: signed-code10
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact public source snapshot and published P-256 package
+        run: |
+          set -euo pipefail
+          test "$(git -C signed-code10 rev-parse HEAD)" = '195502f981bd776a68feebde3efc6d20f55cca65'
+          (cd signed-code10 && node tooling/verify_index.mjs)
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          index=json.loads(Path('signed-code10/dist/index.payload.json').read_text())
+          assert index['repositoryId']=='app.tsuzuki.providers' and index['sequence']==36
+          entries=[x for x in index['providers'] if x['providerId']=='app.tsuzuki.mangaall']
+          assert len(entries)==1 and entries[0]['versionCode']==10
+          digest='bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f'
+          assert entries[0]['sha256']==digest
+          assert hashlib.sha256(Path('signed-code10/dist/providers/app.tsuzuki.mangaall-10.tsz').read_bytes()).hexdigest()==digest
+          print('MANGAALL_DUAL30_PACKAGE|signedCode10=UNCHANGED|sourceModules=PINNED|upstream=NOT_STARTED')
+          PY
+      - name: Syntax check and 30-work aggregate adversarial unit contracts
+        run: |
+          set -euo pipefail
+          node --check .github/scripts/mangaall_dual_source_30.mjs
+          python3 -m py_compile .github/scripts/mangaall_dual_source_30_aggregate.py
+          python3 .github/scripts/mangaall_dual_source_30_aggregate.py --self-test
+      - name: Exercise original router's exact two-source variation with fake adapters (NO HTTP)
+        run: node .github/scripts/mangaall_dual_source_30.mjs --offline
+      - name: Prove all 30 identities and 10+10+10 shards before any live request
+        run: |
+          for shard in 0 1 2; do
+            MANGAALL_DUAL30_SHARD="$shard" \
+              node .github/scripts/mangaall_dual_source_30.mjs --plan
+          done
+      - name: Explicit evidence limitation
+        run: |
+          echo 'MANGAALL_DUAL30_OFFLINE|outcome=PASS|works=30|sources=MANGADEX_MANGADOT|mangafire=NOT_CALLED|canonical=NOT_PROVEN|signedCode10=UNTOUCHED'

@@ -25,8 +25,9 @@ import java.util.UUID
  *
  * This is bounded acquisition, not incremental HTTP streaming. Author/edition
  * identity and Reader permissions must be checked separately by the canonical
- * engine. Single active snapshot/provider; concurrent requests are serialized
- * inside this process. Multi-process locking is NOT implemented.
+ * engine. Snapshots are isolated by exact work and language within the shared
+ * Provider quota. Concurrent requests are serialized inside this process;
+ * storage operations also use a cross-process lock.
  */
 internal class MangaAllFutureHostChapterSnapshot(
     private val owner: ProviderResourceOwner,
@@ -89,6 +90,7 @@ internal class MangaAllFutureHostChapterSnapshot(
                 "generation" to JsonPrimitive(nonce),
                 "expiresAt" to JsonPrimitive(now + TTL_MS),
                 "count" to JsonPrimitive(tuples.size),
+                "completed" to JsonPrimitive(false),
                 "ranges" to JsonArray(ranges.map(::JsonPrimitive)),
             ),
         ).toString()
@@ -108,20 +110,16 @@ internal class MangaAllFutureHostChapterSnapshot(
             fail("SNAPSHOT_EXCEEDS_PROVIDER_STORAGE_QUOTA")
         }
 
-        // The typed Host-private storage operation checks the full provider
-        // state (including unrelated keys) and atomically replaces all reserved
-        // snapshot keys. Rejected new data cannot evict an older valid snapshot.
+        // Atomically replace only this scope; prune expired snapshots without
+        // evicting active foreign scopes or unrelated Provider storage.
         try {
-            storage.replaceFutureMangaAllChapterSnapshot(index, values)
+            storage.replaceFutureMangaAllChapterSnapshot(workId, language, now, index, values)
         } catch (_: ProviderHostServiceException) {
             fail("SNAPSHOT_STORAGE_WRITE_FAILED")
         }
-        // A second Android process could publish a newer (possibly foreign
-        // work/facet) snapshot between our atomic replacement and the first
-        // page read. Never return its rows under the original workId. The
-        // storage layer uses process-wide + OS locks per operation; a later
-        // replacement between index/part reads still fails by generation.
-        val committed = readIndex()
+        // Another Android process could replace this exact scope between
+        // index/part reads. Never return rows from a different generation.
+        val committed = readIndex(workId, language)
         if (committed.workId != workId ||
             committed.language != language ||
             committed.generation != nonce
@@ -137,7 +135,7 @@ internal class MangaAllFutureHostChapterSnapshot(
         cursor: String,
     ): MangaAllFutureChapterPage = lock.withLock {
         requireScope(workId, language)
-        val index = readIndex()
+        val index = readIndex(workId, language)
         if (index.workId != workId || index.language != language) {
             fail("STALE_OR_FOREIGN_CHAPTER_CURSOR")
         }
@@ -166,6 +164,13 @@ internal class MangaAllFutureHostChapterSnapshot(
         val cached = mutableMapOf<Int, JsonArray>()
         var position = start
         var nextCursor: String? = null
+        // Count the exact serialized JSON envelope and each row once. Rebuilding
+        // the entire growing page for every row was quadratic in payload size.
+        val emptyEnvelope = pageJson(emptyList(), null)
+        val envelopeChars = emptyEnvelope.length - "null".length
+        val envelopeBytes = byteSize(emptyEnvelope) - "null".length
+        var rowsChars = 0
+        var rowsBytes = 0
         while (position < index.count && items.size < MAX_PAGE_ROWS) {
             val packed = readTuple(index, position, cached)
             val normalized = expand(packed, language)
@@ -176,11 +181,19 @@ internal class MangaAllFutureHostChapterSnapshot(
             } else {
                 null
             }
-            val payload = pageJson(items + normalized, candidateCursor)
-            if (payload.length > MAX_OUTPUT || byteSize(payload) > MAX_OUTPUT) {
+            val rowJson = normalized.toString()
+            val cursorJson = candidateCursor?.let { JsonPrimitive(it).toString() } ?: "null"
+            val separator = if (items.isEmpty()) 0 else 1
+            val candidateChars = rowsChars + separator + rowJson.length
+            val candidateBytes = rowsBytes + separator + byteSize(rowJson)
+            if (envelopeChars + candidateChars + cursorJson.length > MAX_OUTPUT ||
+                envelopeBytes + candidateBytes + byteSize(cursorJson) > MAX_OUTPUT
+            ) {
                 if (items.isEmpty()) fail("CHAPTER_ROW_EXCEEDS_HOST_RESULT")
                 break
             }
+            rowsChars = candidateChars
+            rowsBytes = candidateBytes
             items += normalized
             position = following
             nextCursor = candidateCursor
@@ -190,6 +203,9 @@ internal class MangaAllFutureHostChapterSnapshot(
                 index.generation + ":" + position
         }
         if (index.count > 0 && items.isEmpty()) fail("NO_CHAPTER_CURSOR_PROGRESS")
+        if (nextCursor == null) {
+            storage.markFutureMangaAllChapterSnapshotCompleted(workId, language, index.generation)
+        }
         return MangaAllFutureChapterPage(items, nextCursor)
     }
 
@@ -215,7 +231,8 @@ internal class MangaAllFutureHostChapterSnapshot(
                     JsonArray(emptyList())
                 }
                 val actual = if (rows.isEmpty()) {
-                    val raw = storage.get(PART_PREFIX + part)
+                    val prefix = futureMangaAllChapterSnapshotPrefix(index.workId, index.language)
+                    val raw = storage.get(prefix + "part_" + part)
                         ?: fail("MISSING_SNAPSHOT_PART")
                     if (raw.length > MAX_STORAGE_VALUE || byteSize(raw) > MAX_STORAGE_VALUE) {
                         fail("CORRUPT_SNAPSHOT_PART")
@@ -240,8 +257,9 @@ internal class MangaAllFutureHostChapterSnapshot(
         fail("CORRUPT_SNAPSHOT_INDEX")
     }
 
-    private suspend fun readIndex(): Index {
-        val raw = storage.get(INDEX_KEY) ?: fail("MISSING_CHAPTER_SNAPSHOT")
+    private suspend fun readIndex(expectedWorkId: String, expectedLanguage: String): Index {
+        val prefix = futureMangaAllChapterSnapshotPrefix(expectedWorkId, expectedLanguage)
+        val raw = storage.get(prefix + "index") ?: fail("MISSING_CHAPTER_SNAPSHOT")
         if (raw.length > MAX_STORAGE_VALUE || byteSize(raw) > MAX_STORAGE_VALUE) {
             fail("CORRUPT_SNAPSHOT_INDEX")
         }
@@ -250,6 +268,7 @@ internal class MangaAllFutureHostChapterSnapshot(
         val workId = obj["workId"]?.primitiveText() ?: fail("CORRUPT_SNAPSHOT_INDEX")
         val language = obj["language"]?.primitiveText() ?: fail("CORRUPT_SNAPSHOT_INDEX")
         requireScope(workId, language)
+        if (workId != expectedWorkId || language != expectedLanguage) fail("CORRUPT_SNAPSHOT_INDEX")
         val nonce = obj["generation"]?.primitiveText() ?: fail("CORRUPT_SNAPSHOT_INDEX")
         if (!NONCE.matches(nonce)) fail("CORRUPT_SNAPSHOT_INDEX")
         val expiresAt = obj["expiresAt"]?.primitiveLong() ?: fail("CORRUPT_SNAPSHOT_INDEX")
@@ -271,7 +290,7 @@ internal class MangaAllFutureHostChapterSnapshot(
     }
 
     private fun compact(rows: JsonArray, language: String): List<JsonArray> {
-        val seen = HashSet<String>()
+        val seen = HashMap<String, JsonArray>()
         var rejectedFacet = false
         val result = mutableListOf<JsonArray>()
         for (entry in rows) {
@@ -298,9 +317,6 @@ internal class MangaAllFutureHostChapterSnapshot(
             } else {
                 1
             }
-            // Full source chapter identity includes the upload/chapter kind:
-            // one numeric upstream ID can represent two separate chapters.
-            if (!seen.add("$kind:$id")) continue
             val title = text(row["chapter_title"], 3900)
             val groups = row["groups"] as? JsonArray
             val firstGroup = groups?.firstOrNull() as? JsonObject
@@ -311,7 +327,7 @@ internal class MangaAllFutureHostChapterSnapshot(
             // A negative timestamp is not valid source evidence (JS dateMillis
             // returns null before 1970). Ambiguous local-time strings stay null.
             val date = row["date_added"]?.primitiveText()?.let(::sourceDateMillis)
-            result += JsonArray(
+            val tuple = JsonArray(
                 listOf(
                     JsonPrimitive(id),
                     JsonPrimitive(number),
@@ -322,9 +338,14 @@ internal class MangaAllFutureHostChapterSnapshot(
                     date?.let(::JsonPrimitive) ?: JsonNull,
                 ),
             )
+            // Exact repeated rows are idempotent. The same full chapter ID
+            // cannot represent contradictory chapter metadata in one snapshot.
+            val previous = seen.putIfAbsent("$kind:$id", tuple)
+            if (previous != null && previous != tuple) fail("CONFLICTING_SOURCE_CHAPTER_ID")
+            if (previous == null) result += tuple
         }
-        if (rows.isNotEmpty() && result.isEmpty() && rejectedFacet) {
-            fail("INCONCLUSIVE_SOURCE_LANGUAGE")
+        if (rows.isNotEmpty() && result.isEmpty()) {
+            fail(if (rejectedFacet) "INCONCLUSIVE_SOURCE_LANGUAGE" else "INCONCLUSIVE_SOURCE_ROWS")
         }
         return result
     }
@@ -517,8 +538,6 @@ internal class MangaAllFutureHostChapterSnapshot(
         val NUMBER = Regex("[0-9]{1,6}(?:\\.[0-9]{1,3})?")
         val NONCE = Regex("[a-f0-9]{16}")
         val CURSOR = Regex("m1:([1-9][0-9]{0,15}):(en|pt-br):([a-f0-9]{16}):([0-9]{1,5})")
-        const val INDEX_KEY = "mangaall_private_chapters_index"
-        const val PART_PREFIX = "mangaall_private_chapters_part_"
         const val MAX_SOURCE_BYTES = 16 * 1024 * 1024
         const val MAX_ROWS = 16000
         const val MAX_PART = 48 * 1024

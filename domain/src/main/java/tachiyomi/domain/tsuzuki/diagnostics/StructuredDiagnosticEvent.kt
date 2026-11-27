@@ -509,6 +509,8 @@ enum class DiagnosticProviderDetailOutcome : DiagnosticSafeCode {
 /** Sanitized per-HID work/edition assessment codes, not source-authored text. */
 enum class DiagnosticProviderWorkVerification : DiagnosticSafeCode {
     AUTHOR_CORROBORATED,
+    CATALOG_CORROBORATED,
+    CATALOG_REFERENCE_CONFLICT,
     CANONICAL_METADATA_UNVERIFIED,
     SOURCE_DETAIL_UNVERIFIED,
     MISSING_AUTHOR_EVIDENCE,

@@ -9,11 +9,13 @@ import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriCollectionQuery
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriIntegrationApi
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.collections.execution.PageCatalogFetcher
 import tachiyomi.domain.tsuzuki.collections.execution.PageIndexOrigin
 import tachiyomi.domain.tsuzuki.collections.execution.PageOffsetNormalizer
+import tachiyomi.domain.tsuzuki.integration.CreatorAliasProvider
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.MetadataProvider
 import tachiyomi.domain.tsuzuki.integration.RatingsProvider
@@ -30,7 +32,7 @@ import kotlin.coroutines.cancellation.CancellationException
 class ShikimoriIntegrationProvider private constructor(
     private val api: ShikimoriIntegrationApi,
     private val requestGate: ShikimoriRequestGate,
-) : SearchProvider, MetadataProvider, RatingsProvider {
+) : SearchProvider, CreatorAliasProvider, RatingsProvider {
 
     @Inject
     constructor(
@@ -52,7 +54,7 @@ class ShikimoriIntegrationProvider private constructor(
         return PageOffsetNormalizer.load(
             rawOffset = query.offset.coerceAtLeast(0),
             limit = query.limit,
-            upstreamPageSize = SHIKIMORI_PAGE_SIZE,
+            upstreamPageSize = query.limit.coerceAtMost(SHIKIMORI_PAGE_SIZE),
             pageOrigin = PageIndexOrigin.ONE,
             fetcher = PageCatalogFetcher { page, pageSize ->
                 capture {
@@ -62,7 +64,12 @@ class ShikimoriIntegrationProvider private constructor(
                                 page = page,
                                 limit = pageSize,
                                 order = DEFAULT_SEARCH_ORDER,
-                                kind = MANGA_KIND_EXCLUSIONS,
+                                kind = when (query.format) {
+                                    CatalogItemFormat.MANGA -> "manga"
+                                    CatalogItemFormat.MANHWA -> "manhwa"
+                                    CatalogItemFormat.MANHUA -> "manhua"
+                                    else -> MANGA_KIND_EXCLUSIONS
+                                },
                                 search = text,
                             ),
                         )
@@ -81,6 +88,10 @@ class ShikimoriIntegrationProvider private constructor(
             api.getMangaDetailsPublic(externalId.requireShikimoriId())
         } ?: error("Shikimori title not found: $externalId")
         details.toIntegrationCatalogItem(integrationId.value)
+    }
+
+    override suspend fun creatorAliases(externalId: String) = capture {
+        requestGate.withPermit { api.getVerifiedCreatorAliases(externalId.requireShikimoriId()) }
     }
 
     override suspend fun ratings(externalId: String): Result<List<ExternalRating>> = capture {

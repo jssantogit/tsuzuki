@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.tsuzuki.integration
 
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdatesIntegrationApi
+import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdatesSearchWindow
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdatesUserLibraryApi
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdatesUserLibrarySnapshot
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdatesUserList
@@ -11,6 +12,7 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
 import tachiyomi.domain.tsuzuki.integration.RatingsProvider
 import tachiyomi.domain.tsuzuki.integration.UserListProvider
@@ -168,6 +170,47 @@ class MangaUpdatesIntegrationProviderTest {
         api.discoveryRequests shouldContainExactly listOf(
             Triple("week_pos", 0, 20),
             Triple("list_reading", 20, 20),
+        )
+    }
+
+    @Test
+    fun `catalog search uses upstream pagination and total instead of truncated tracker search`() = runTest {
+        val calls = mutableListOf<List<Any?>>()
+        val api = object : MangaUpdatesIntegrationApi {
+            override suspend fun search(query: String): List<TrackSearch> = error("Legacy search must not run")
+
+            override suspend fun searchWindow(
+                query: String,
+                offset: Int,
+                limit: Int,
+                type: String?,
+            ): MangaUpdatesSearchWindow {
+                calls += listOf(query, offset, limit, type)
+                val rows = (1L..51L).map { track(it, "Title $it", 8.0).apply { publishing_type = "Manhwa" } }
+                return MangaUpdatesSearchWindow(rows.drop(offset).take(limit), rows.size)
+            }
+
+            override suspend fun discover(orderBy: String, offset: Int, limit: Int): List<TrackSearch> = emptyList()
+            override suspend fun getMangaDetails(id: Long): TrackSearch = error("Not needed")
+        }
+        val provider = MangaUpdatesIntegrationProvider.forTest(api)
+        val second = provider.search(
+            CatalogQuery(query = "Title", format = CatalogItemFormat.MANHWA, offset = 25, limit = 25),
+        ).getOrThrow()
+        second.items.map { it.providerId } shouldBe (26..50).map(Int::toString)
+        second.hasNextPage shouldBe true
+        second.totalCount shouldBe 51
+        val last = provider.search(
+            CatalogQuery(query = "Title", format = CatalogItemFormat.MANHWA, offset = 50, limit = 25),
+        ).getOrThrow()
+        last.items.single().providerId shouldBe "51"
+        last.hasNextPage shouldBe false
+        provider.search(CatalogQuery(query = "Title", format = CatalogItemFormat.MANGA, offset = 0, limit = 25))
+            .getOrThrow()
+        calls shouldBe listOf(
+            listOf("Title", 25, 25, "Manhwa"),
+            listOf("Title", 50, 25, "Manhwa"),
+            listOf("Title", 0, 25, "Manga"),
         )
     }
 

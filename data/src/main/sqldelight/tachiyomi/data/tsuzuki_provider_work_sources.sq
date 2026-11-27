@@ -8,6 +8,7 @@ CREATE TABLE tsuzuki_provider_work_sources(
     work_verification TEXT NOT NULL,
     edition_qualification TEXT NOT NULL,
     observed_at INTEGER NOT NULL,
+    catalog_identity_fingerprint TEXT,
     PRIMARY KEY(provider_id, facet_id, external_work_id),
     FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
 );
@@ -37,7 +38,8 @@ INSERT INTO tsuzuki_provider_work_sources(
     external_work_id,
     work_verification,
     edition_qualification,
-    observed_at
+    observed_at,
+    catalog_identity_fingerprint
 )
 SELECT
     :canonicalTitleId,
@@ -46,7 +48,8 @@ SELECT
     :externalWorkId,
     :workVerification,
     :editionQualification,
-    :observedAt
+    :observedAt,
+    :catalogIdentityFingerprint
 WHERE NOT EXISTS (
     SELECT 1 FROM tsuzuki_provider_bindings
     WHERE provider_id = :providerId
@@ -57,6 +60,25 @@ WHERE NOT EXISTS (
 ON CONFLICT(provider_id, facet_id, external_work_id) DO UPDATE SET
     work_verification = excluded.work_verification,
     edition_qualification = excluded.edition_qualification,
-    observed_at = excluded.observed_at
+    observed_at = excluded.observed_at,
+    catalog_identity_fingerprint = excluded.catalog_identity_fingerprint
 WHERE tsuzuki_provider_work_sources.canonical_title_id = excluded.canonical_title_id
-AND excluded.observed_at > tsuzuki_provider_work_sources.observed_at;
+-- Missing metadata or author-only corroboration cannot resolve an observed
+-- independent catalog conflict. Only a fresh catalog assessment can replace it.
+AND (
+    tsuzuki_provider_work_sources.work_verification <> 'CATALOG_REFERENCE_CONFLICT'
+    OR excluded.work_verification IN ('CATALOG_REFERENCE_CONFLICT', 'CATALOG_CORROBORATED')
+)
+-- An explicit creator conflict also survives missing/weak metadata. Only
+-- fresh creator verification or a stronger catalog conflict may supersede it.
+AND (
+    tsuzuki_provider_work_sources.work_verification <> 'AUTHOR_CONFLICT'
+    OR excluded.work_verification IN ('AUTHOR_CONFLICT', 'AUTHOR_CORROBORATED', 'CATALOG_REFERENCE_CONFLICT')
+)
+AND (
+    excluded.observed_at > tsuzuki_provider_work_sources.observed_at
+    OR (
+        excluded.observed_at = tsuzuki_provider_work_sources.observed_at
+        AND excluded.work_verification IN ('CATALOG_REFERENCE_CONFLICT', 'AUTHOR_CONFLICT')
+    )
+);

@@ -1,0 +1,242 @@
+name: MangaALL — frozen 30 joint Android research (OPT-IN)
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths: ['.github/workflows/mangaall-frozen30-joint-android-research.yml']
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-frozen30-joint-android-research
+  cancel-in-progress: true
+jobs:
+  build-once:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Validate exact workflow opt-in, frozen cohort and strict reporters
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-frozen30-joint-android-research.yml'
+          python3 -m py_compile .github/scripts/run_mangaall_frozen30_independent_catalog.py .github/scripts/run_mangaall_frozen30_catalog_plan.py .github/scripts/run_mangaall_frozen30_canonical_persistence.py
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
+          node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
+          bash -n .github/scripts/run_mangaall_frozen30_mangadex_audit.sh
+          bash -n .github/scripts/run_mangaall_mangadot_creator_android.sh
+          bash -n .github/scripts/run_mangaall_mangadot_corroboration_android.sh
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: future-code11-source
+          persist-credentials: false
+      - name: Stage exact pinned unsigned two-source research package and locked inputs
+        run: |
+          set -euo pipefail
+          test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
+          mkdir -p app/src/androidTest/assets
+          cp .github/mangaall-dual-source-30-cohort-lock.json .github/mangaall-frozen30-catalog-plan.json app/src/androidTest/assets/
+          python3 .github/scripts/mangaall_code11_dual_source_unsigned.py \
+            --source future-code11-source --manhwa-only --mangadot-creators \
+            --output app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          test -s app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          ! git ls-files --error-unmatch app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          cache-read-only: true
+      - name: Regress affected contracts and compile corrected unsigned APK pair
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          tasks=(
+            :core:common:spotlessKotlinCheck :core:common:testDebugUnitTest --tests '*ProviderHostTransformServicesTest'
+            :domain:spotlessKotlinCheck :domain:testDebugUnitTest
+            --tests '*CreatorAliasProviderTest' --tests '*MangaAllMangaDotNativeCoverageTest'
+            --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*ProviderWorkSourcePortfolioTest'
+            :app:spotlessKotlinCheck :app:testDebugUnitTest --tests '*ShikimoriIntegrationProviderTest'
+            --tests '*MangaUpdatesIntegrationProviderTest' --tests '*ShikimoriApiTest' --tests '*MURecordTest'
+            :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+          )
+          if ./gradlew "${tasks[@]}" --offline >"$log" 2>&1; then
+            cat "$log"
+            exit 0
+          fi
+          if ! grep -Eiq 'no cached version|offline mode|not available for offline' "$log"; then
+            cat "$log"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if ./gradlew "${tasks[@]}" >"$log" 2>&1; then
+              cat "$log"
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log" || [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mangaall-joint-unsigned-apks
+          path: app/build/outputs/apk/
+          if-no-files-found: error
+          retention-days: 1
+
+  independent-tests:
+    needs: build-once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - scope: catalog
+            shard: 0
+          - scope: catalog
+            shard: 1
+          - scope: catalog
+            shard: 2
+          - scope: dex
+            shard: 0
+          - scope: dex
+            shard: 1
+          - scope: dex
+            shard: 2
+          - scope: dot
+            shard: 0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: mangaall-joint-unsigned-apks
+          path: app/build/outputs/apk/
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run isolated independent catalog, MangaDex or MangaDot controls
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            case '${{ matrix.scope }}' in catalog) python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --shard ${{ matrix.shard }} ;; dex) bash .github/scripts/run_mangaall_frozen30_mangadex_audit.sh ${{ matrix.shard }} ;; dot) bash .github/scripts/run_mangaall_mangadot_creator_android.sh && bash .github/scripts/run_mangaall_mangadot_corroboration_android.sh explicit_controls ;; *) exit 2 ;; esac
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always() && matrix.scope != 'dot'
+        with:
+          name: joint-${{ matrix.scope }}-${{ matrix.shard }}
+          path: .github/results/mangaall-frozen30-*/shard-${{ matrix.shard }}/verdict.json
+          if-no-files-found: ignore
+          retention-days: 2
+
+  canonical-restart:
+    if: always() && needs.build-once.result == 'success'
+    needs: [build-once, independent-tests]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: mangaall-joint-unsigned-apks
+          path: app/build/outputs/apk/
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Real canonical collector and SQLite restart on the same exact APK pair
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --catalog explicit_plan --shard ${{ matrix.shard }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: joint-canonical-${{ matrix.shard }}
+          path: .github/results/mangaall-frozen30-canonical-persistence/shard-${{ matrix.shard }}/verdict.json
+          if-no-files-found: ignore
+          retention-days: 2
+
+  strict-report:
+    if: always()
+    needs: [build-once, independent-tests, canonical-restart]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          pattern: joint-*
+          path: joint-reports
+      - name: Report independent catalog, MangaDex coverage and canonical restart separately
+        run: |
+          set -uo pipefail
+          dex_status=0
+          python3 - <<'PY' || dex_status=$?
+          import json, shutil
+          from collections import Counter
+          from pathlib import Path
+          scopes={"catalog":"mangaall-frozen30-catalog-plan","dex":"mangaall-frozen30-mangadex-audit","canonical":"mangaall-frozen30-canonical-persistence"}
+          dex=[]
+          dex_valid=True
+          for kind,folder in scopes.items():
+              for shard in range(3):
+                  base=Path(f"joint-reports/joint-{kind}-{shard}")
+                  candidates=list(base.rglob("verdict.json")) if base.is_dir() else []
+                  if len(candidates)!=1:
+                      print(f"JOINT_REPORT|scope={kind}|shard={shard}|outcome=MISSING_OR_AMBIGUOUS")
+                      if kind=="dex": dex_valid=False
+                      continue
+                  dest=Path(".github/results")/folder/f"shard-{shard}"
+                  dest.mkdir(parents=True,exist_ok=True)
+                  shutil.copyfile(candidates[0],dest/"verdict.json")
+                  if kind=="dex":
+                      report=json.loads(candidates[0].read_text())
+                      rows=report.get("works",[])
+                      dex_valid &= (report.get("scope")=="MANGADEX_EN_ONLY" and report.get("shard")==shard and report.get("corpusSha256")=="19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1" and report.get("integrity") is True and report.get("completeReport") is True and [r.get("index") for r in rows]==list(range(shard*10+1,shard*10+11)))
+                      dex.extend(rows)
+          for outcome,count in sorted(Counter(r.get("outcome","UNKNOWN") for r in dex).items()):
+              print(f"JOINT_DEX|outcome={outcome}|works={count}")
+          print(f"JOINT_DEX|observed={len(dex)}|expected=30|canonical=NOT_TESTED")
+          assert dex_valid and [r.get("index") for r in dex]==list(range(1,31)), "Incomplete independent MangaDex reports"
+          PY
+          catalog_status=0
+          canonical_status=0
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --aggregate || catalog_status=$?
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --catalog explicit_plan --aggregate || canonical_status=$?
+          test "$dex_status" -eq 0 && test "$catalog_status" -eq 0 && test "$canonical_status" -eq 0 &&
+            test '${{ needs.build-once.result }}' = 'success' &&
+            test '${{ needs.independent-tests.result }}' = 'success' &&
+            test '${{ needs.canonical-restart.result }}' = 'success'

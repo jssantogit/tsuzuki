@@ -19,8 +19,30 @@ class ResolveMangaAllSelectedChapter(
     suspend fun execute(canonicalChapterId: String, requestedLanguage: String): ProviderChapterReadingOption? {
         if (canonicalChapterId.isBlank() || requestedLanguage.isBlank()) return null
         val chapter = canonicalChapters.getById(canonicalChapterId) ?: return null
-        val validated = chapterSources.options(canonicalChapterId)
         return selectedSource.select(
+            canonicalTitleId = chapter.canonicalTitleId,
+            canonicalChapterId = canonicalChapterId,
+            requestedLanguage = requestedLanguage,
+            verifiedOptions = chapterSources.options(canonicalChapterId),
+        )
+    }
+
+    /** Only an explicit Reader picker tap can record a release preference. */
+    suspend fun rememberRelease(option: ProviderChapterReadingOption, at: Long): Boolean {
+        val chapter = canonicalChapters.getById(option.canonicalChapterId) ?: return false
+        return selectedSource.remember(
+            canonicalTitleId = chapter.canonicalTitleId,
+            option = option,
+            verifiedOptions = chapterSources.options(chapter.id),
+            at = at,
+        )
+    }
+
+    suspend fun options(canonicalChapterId: String, requestedLanguage: String): List<ProviderChapterReadingOption> {
+        if (canonicalChapterId.isBlank() || requestedLanguage.isBlank()) return emptyList()
+        val chapter = canonicalChapters.getById(canonicalChapterId) ?: return emptyList()
+        val validated = chapterSources.options(canonicalChapterId)
+        return selectedSource.options(
             canonicalTitleId = chapter.canonicalTitleId,
             canonicalChapterId = canonicalChapterId,
             requestedLanguage = requestedLanguage,

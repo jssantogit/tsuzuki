@@ -19,7 +19,7 @@ class ProviderHostTransformServicesTest {
     private val store = ProviderResourceStore()
 
     @Test
-    fun `dom selectors operate on host side html handles`() = runBlocking {
+    fun `dom selectors operate on host side html handles`(): Unit = runBlocking {
         val handle = store.put(
             owner = owner,
             kind = ProviderResourceKind.HTML,
@@ -33,7 +33,51 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
-    fun `zip extraction keeps archive and entry bytes behind opaque handles`() = runBlocking {
+    fun `large html resource yields only unique bounded structured metadata`(): Unit = runBlocking {
+        val json = """{"@type":"ComicSeries","name":"Work","author":{"@type":"Person","name":"Creator"}}"""
+        val script = """<script type="application/ld+json">$json</script>"""
+        val html = "<html><head>$script</head><body>" + "x".repeat(350 * 1024) + "</body></html>"
+        val handle = store.put(owner, ProviderResourceKind.HTML, html.encodeToByteArray())
+        val dom = DefaultProviderDomHostService(owner, store)
+        dom.selectText(handle, "script[type=application/ld+json]") shouldBe json
+        dom.selectText(handle, "script") shouldBe ""
+        val other = DefaultProviderDomHostService(owner.copy(invocationId = "invocation-2"), store)
+        runCatching { other.selectText(handle, "script[type=application/ld+json]") }.isFailure shouldBe true
+    }
+
+    @Test
+    fun `ordinary DOM text retains its character bound`(): Unit = runBlocking {
+        val value = "é".repeat(40 * 1024)
+        val handle = store.put(owner, ProviderResourceKind.HTML, "<h1>$value</h1>".encodeToByteArray())
+        val dom = DefaultProviderDomHostService(owner, store)
+        dom.selectText(handle, "h1") shouldBe value
+    }
+
+    @Test
+    fun `structured metadata rejects duplicate or oversized script blocks`(): Unit = runBlocking {
+        val script = """<script type="application/ld+json">{"name":"Work"}</script>"""
+        val dom = DefaultProviderDomHostService(owner, store)
+        val duplicate = store.put(owner, ProviderResourceKind.HTML, (script + script).encodeToByteArray())
+        runCatching { dom.selectText(duplicate, "script[type=application/ld+json]") }.isFailure shouldBe true
+        val oversized = """<script type="application/ld+json">""" + "é".repeat(40 * 1024) + "</script>"
+        val handle = store.put(owner, ProviderResourceKind.HTML, oversized.encodeToByteArray())
+        runCatching { dom.selectText(handle, "script[type=application/ld+json]") }.isFailure shouldBe true
+    }
+
+    @Test
+    fun `unique semantic text rejects duplicate matches without changing ordinary selectors`(): Unit = runBlocking {
+        val html = "<div><span class='author'>Writer</span><span class='author'>Other</span>" +
+            "<span class='artist'>Artist</span></div>"
+        val handle = store.put(owner, ProviderResourceKind.HTML, html.encodeToByteArray())
+        val dom = DefaultProviderDomHostService(owner, store)
+        dom.selectText(handle, ".author") shouldBe "Writer"
+        dom.selectText(handle, ":tsuzuki-unique .artist") shouldBe "Artist"
+        runCatching { dom.selectText(handle, ":tsuzuki-unique .author") }.isFailure shouldBe true
+        runCatching { dom.selectText(handle, ":tsuzuki-unique .missing") }.isFailure shouldBe true
+    }
+
+    @Test
+    fun `zip extraction keeps archive and entry bytes behind opaque handles`(): Unit = runBlocking {
         val archive = store.put(
             owner = owner,
             kind = ProviderResourceKind.ARCHIVE,
@@ -47,7 +91,7 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
-    fun `binary resource promotion stays host owned and returns only opaque managed token`() = runBlocking {
+    fun `binary resource promotion stays host owned and returns only opaque managed token`(): Unit = runBlocking {
         val handle = store.put(
             owner = owner,
             kind = ProviderResourceKind.BINARY,
@@ -71,7 +115,7 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
-    fun `aes cbc decrypt returns a new host resource without exposing bytes to script`() = runBlocking {
+    fun `aes cbc decrypt returns a new host resource without exposing bytes to script`(): Unit = runBlocking {
         val key = ByteArray(16) { it.toByte() }
         val iv = ByteArray(16) { (it + 16).toByte() }
         val encrypted = aesEncrypt(

@@ -1,5 +1,6 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.provider.ProviderId
@@ -84,6 +85,49 @@ class MangaAllReadingIdentityTest {
             "mangadex:chapter-1",
             "fr",
         ) shouldBe false
+    }
+
+    @Test
+    fun `identity contract scales independently of source count and order`() {
+        for (size in listOf(3, 5, 10)) {
+            val contracts = (1..size).map { index ->
+                MangaAllSourceIdentityContract(
+                    sourceId = "source-$index",
+                    languages = if (index % 2 == 0) setOf("en", "pt-br") else setOf("en"),
+                    readerReady = index != size,
+                    workKey = Regex("[1-9][0-9]*"),
+                    chapterKey = Regex("release:[1-9][0-9]*"),
+                )
+            }
+            for (ordered in listOf(contracts, contracts.reversed())) {
+                val policy = MangaAllSourceIdentityPolicy(ordered)
+                for (index in 1..size) {
+                    val source = "source-$index"
+                    val ref = ProviderBindingRef(mangaAllId, "en", "$source:42")
+                    policy.sourceId(ref) shouldBe source
+                    policy.accepts(ref, "$source:release:7", "en") shouldBe (index != size)
+                    policy.accepts(ref, "$source:release:7", null) shouldBe false
+                    policy.accepts(ref, "$source:release:7", "pt-br") shouldBe false
+                    policy.accepts(ref, "$source:wrong:7", "en") shouldBe false
+                    policy.accepts(ref.copy(externalWorkId = "$source:invalid"), "$source:release:7", "en") shouldBe
+                        false
+                    policy.accepts(ref, "source-${index % size + 1}:release:7", "en") shouldBe false
+                    val pt = ref.copy(facetId = "pt-br")
+                    policy.supportsRequestedLanguage(pt) shouldBe (index % 2 == 0)
+                    policy.accepts(pt, "$source:release:7", "pt-br") shouldBe (index % 2 == 0 && index != size)
+                }
+                val unknown = ProviderBindingRef(mangaAllId, "en", "unregistered:42")
+                policy.accepts(unknown, "unregistered:release:7", "en") shouldBe false
+            }
+        }
+    }
+
+    @Test
+    fun `duplicate registration cannot silently replace an identity policy`() {
+        val contract = MangaAllSourceIdentityContract("source-a", setOf("en"), false)
+        shouldThrow<IllegalArgumentException> {
+            MangaAllSourceIdentityPolicy(listOf(contract, contract.copy(readerReady = true)))
+        }
     }
 
     @Test

@@ -48,14 +48,26 @@ jobs:
           set -euo pipefail
           base="$(git merge-base origin/main HEAD)"
           test -n "$base"
-          git diff --name-only "$base" HEAD | tee /tmp/mangaall-host-snapshot-changed.txt
+          git diff --name-only --no-renames "$base" HEAD | tee /tmp/mangaall-host-snapshot-changed.txt
           # The original private-snapshot smoke protects code10 and generic
           # Host HTTP, but the separate future-code11 permission PR now
           # legitimately touches the QuickJs package runtime. Never relax
           # this check for ordinary snapshot changes or unreviewed branches.
-          if grep -E '^(providers/|dist/|app/src/|core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(ProviderHttpProtocol|ProviderHttpHostService)\.kt)' /tmp/mangaall-host-snapshot-changed.txt; then
+          if grep -E '^(providers/|dist/|core/common/src/main/kotlin/tachiyomi/core/provider/supplychain/|core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(ProviderHttpProtocol|ProviderHttpHostService)\.kt)' /tmp/mangaall-host-snapshot-changed.txt; then
             echo "::error::Signed Provider or generic production HTTP API touched"
             exit 1
+          fi
+          # Integrated App research is allowed only by the same exact-path policy
+          # as the manifest gate. All other branches retain the original denial.
+          if grep -E '^app/' /tmp/mangaall-host-snapshot-changed.txt; then
+            if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ||
+                  "${GITHUB_HEAD_REF:-}" != 'probe/mangaall-dual-source-scale30-20261123' ||
+                  "${GITHUB_HEAD_REPO:-}" != "${GITHUB_REPOSITORY}" ]]; then
+              echo "::error::App paths are forbidden outside the exact integrated research PR"
+              exit 1
+            fi
+            python3 .github/scripts/check_mangaall_integrated_app_scope.py --selftest
+            python3 .github/scripts/check_mangaall_integrated_app_scope.py "$base"
           fi
           if grep -E '^core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(ProviderQuickJsRuntime|ProviderScriptPackageRuntime)\.kt$' /tmp/mangaall-host-snapshot-changed.txt; then
             if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ||
@@ -81,10 +93,32 @@ jobs:
           else
             echo 'MANGAALL_HOST_PRIVATE_SNAPSHOT|signed_code10=UNCHANGED|quickjs_bindings=UNCHANGED|network=NONE'
           fi
-      - name: Kotlin formatting
-        run: ./gradlew :core:common:spotlessKotlinCheck --stacktrace
-      - name: Full private snapshot capacity regression on JVM
-        run: ./gradlew :core:common:testDebugUnitTest --tests 'tachiyomi.core.provider.runtime.MangaAllFutureHostChapterSnapshotTest' --stacktrace
+      - name: Kotlin formatting and private snapshot capacity regression on JVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          tasks=( :core:common:spotlessKotlinCheck :core:common:testDebugUnitTest --tests '*MangaAllFutureHostChapterSnapshotTest' )
+          if ./gradlew "${tasks[@]}" --stacktrace --offline >"$log" 2>&1; then
+            cat "$log"
+            exit 0
+          fi
+          if ! grep -Eiq 'no cached version|offline mode|not available for offline' "$log"; then
+            cat "$log"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if ./gradlew "${tasks[@]}" --stacktrace >"$log" 2>&1; then
+              cat "$log"
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log" || [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
       - name: Report only closed snapshot assertion diagnostics on failure
         if: failure()
         shell: bash

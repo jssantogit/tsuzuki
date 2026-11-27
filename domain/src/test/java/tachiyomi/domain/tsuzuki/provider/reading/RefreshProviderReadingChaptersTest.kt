@@ -446,6 +446,49 @@ class RefreshProviderReadingChaptersTest {
         acceptedPages shouldBe 1
     }
 
+    @Test
+    fun `structural failures are reported as failed chapter attempts not successful HTTP pages`() = runBlocking {
+        for (duplicateChapter in listOf(true, false)) {
+            val finished = mutableListOf<Triple<Int, Int?, ProviderErrorCode?>>()
+            val accepted = mutableListOf<String?>()
+            var calls = 0
+            val refresher = RefreshProviderReadingChapters(
+                gateway = gateway {
+                    calls++
+                    val id = if (duplicateChapter) "same" else "chapter-$calls"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation(id, "Chapter $calls")),
+                            nextCursor = ProviderCursor("repeated"),
+                        ),
+                    )
+                },
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                publishSnapshot = null,
+                onPageFinished = { page, count, error, _ -> finished += Triple(page, count, error) },
+                onPageAccepted = { accepted += it?.value },
+            )
+            refresher.execute(binding, allowPartialPageLimit = true) shouldBe ProviderCallResult.Failure(
+                ProviderError(ProviderErrorCode.MALFORMED_RESULT, retryable = false),
+            )
+            finished shouldBe listOf(Triple(1, 1, null), Triple(2, null, ProviderErrorCode.MALFORMED_RESULT))
+            accepted shouldBe listOf("repeated")
+        }
+    }
+
+    @Test
+    fun `terminal empty inventory remains a successful zero-row chapter observation`() = runBlocking {
+        val finished = mutableListOf<Triple<Int, Int?, ProviderErrorCode?>>()
+        val refresher = RefreshProviderReadingChapters(
+            gateway = gateway { ProviderCallResult.Success(ProviderPage(emptyList(), null)) },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = null,
+            onPageFinished = { page, count, error, _ -> finished += Triple(page, count, error) },
+        )
+        refresher.execute(binding) shouldBe ProviderCallResult.Success(0)
+        finished shouldBe listOf(Triple(1, 0, null))
+    }
+
     private fun gateway(
         chapters: suspend (
             ProviderReadingChaptersRequest,

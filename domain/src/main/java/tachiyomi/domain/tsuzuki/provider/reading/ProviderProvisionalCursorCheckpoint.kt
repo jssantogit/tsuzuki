@@ -59,4 +59,20 @@ interface ProviderProvisionalCursorRepository {
      * overwrite a newer cursor, and a finished source only removes its own state.
      */
     suspend fun commit(progress: ProviderProvisionalCursorProgress)
+
+    /** Remove only the exact unusable operational hint; never advance or detach evidence. */
+    suspend fun discard(checkpoint: ProviderProvisionalCursorCheckpoint, at: Long) {
+        commit(
+            ProviderProvisionalCursorProgress(
+                canonicalTitleId = checkpoint.canonicalTitleId,
+                ref = checkpoint.ref,
+                providerVersionCode = checkpoint.providerVersionCode,
+                configurationFingerprint = checkpoint.configurationFingerprint,
+                expectedCursor = checkpoint.nextCursor,
+                nextCursor = null,
+                completedPages = checkpoint.completedPages,
+                recordedAt = at,
+            ),
+        )
+    }
 }

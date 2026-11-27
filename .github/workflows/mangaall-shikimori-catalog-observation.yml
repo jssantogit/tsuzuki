@@ -1,0 +1,72 @@
+name: MangaALL — bounded Shikimori independent catalog observation (NONSHIPPING)
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths: ['.github/workflows/mangaall-shikimori-catalog-observation.yml']
+permissions:
+  contents: read
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Observe alternate title fields for the three unresolved frozen identities
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/mangaall-shikimori-catalog-observation.yml'
+          python3 - <<'PY'
+          import json, re, sys, time, unicodedata, urllib.request, urllib.error
+          sys.path.insert(0, ".github/scripts")
+          from run_mangaall_frozen30_independent_catalog import locked_works
+          works=locked_works()
+          def normalized(s):
+              s=unicodedata.normalize("NFKD",s).casefold()
+              return " ".join(re.sub(r"[^\w]+"," ","".join(c for c in s if not unicodedata.combining(c))).split())
+          for index in (2,28,29):
+              title=works[index-1]
+              query="query { mangas(search: "+json.dumps(title)+", page: 1, limit: 25, order: popularity, kind: \"manhwa\") { id name english japanese synonyms kind personRoles { person { name } rolesEn } } }"
+              req=urllib.request.Request("https://shikimori.io/api/graphql",data=json.dumps({"query":query}).encode(),headers={"Content-Type":"application/json","Accept":"application/json","User-Agent":"Tsuzuki-CI-catalog-contract-observation"},method="POST")
+              try:
+                  with urllib.request.urlopen(req,timeout=15) as resp:
+                      raw=resp.read(512*1024+1)
+                  if len(raw)>512*1024:
+                      print(f"SHIKI_OBS|index={index}|outcome=BODY_LIMIT")
+                      continue
+                  obj=json.loads(raw)
+                  if obj.get("errors"):
+                      print(f"SHIKI_OBS|index={index}|outcome=GRAPHQL_ERROR")
+                      continue
+                  rows=obj.get("data",{}).get("mangas")
+                  if not isinstance(rows,list):
+                      print(f"SHIKI_OBS|index={index}|outcome=INVALID_ROWS")
+                      continue
+                  def aliases(r):
+                      values=[r.get("english"),r.get("japanese")]
+                      synonyms=r.get("synonyms")
+                      if synonyms is not None and not isinstance(synonyms,list):
+                          raise TypeError("synonyms")
+                      values+=synonyms or []
+                      if any(v is not None and not isinstance(v,str) for v in values):
+                          raise TypeError("alias")
+                      return [v for v in values if isinstance(v,str)]
+                  exact=[r for r in rows if isinstance(r,dict) and r.get("kind")=="manhwa" and normalized(title) in {normalized(v) for v in [r.get("name") or ""]+aliases(r)}]
+                  # Public editorial names only, bounded; no personal or credential data.
+                  for row in rows[:25]:
+                      names=[row.get("name") or ""]+aliases(row)
+                      print("SHIKI_NAMES|index="+str(index)+"|names="+json.dumps([v[:256] for v in names[:12]],ensure_ascii=True))
+                  primary=sum(normalized(r.get("name") or "")==normalized(title) for r in exact)
+                  credits=sum(any(isinstance(p,dict) and (p.get("person") or {}).get("name") and any("Story" in x or "Art" in x for x in p.get("rolesEn") or []) for p in r.get("personRoles") or []) for r in exact)
+                  ids=[str(r.get("id")) for r in rows if isinstance(r,dict)]
+                  print(f"SHIKI_OBS|index={index}|outcome=HTTP200|rows={len(rows)}|unique={len(set(ids))}|exact={len(exact)}|primary={primary}|alias_only={len(exact)-primary}|credited={credits}")
+              except urllib.error.HTTPError as error:
+                  print(f"SHIKI_OBS|index={index}|outcome=HTTP{error.code}")
+                  if error.code in (403,429):
+                      sys.exit(1)
+              except (ValueError,OSError,AttributeError,TypeError):
+                  print(f"SHIKI_OBS|index={index}|outcome=SCHEMA_OR_TRANSPORT_FAILURE")
+              time.sleep(2)
+          PY

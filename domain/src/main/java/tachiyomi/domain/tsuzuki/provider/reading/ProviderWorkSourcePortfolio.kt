@@ -1,5 +1,7 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
+import tachiyomi.domain.tsuzuki.catalog.interactor.mangaAllCatalogCreatorKey
+import tachiyomi.domain.tsuzuki.identity.foldLatinIdentityDiacritics
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import java.text.Normalizer
 
@@ -17,13 +19,13 @@ import java.text.Normalizer
 object ProviderWorkSourcePortfolio {
 
     /**
-     * Only the actual signed MangaFire implementation, standalone or embedded
-     * inside MangaAll, currently supplies detail/coverage evidence strong enough
-     * for the established provisional work-source portfolio.
+     * MangaFire retains its established source-specific policy. MangaDex can
+     * enter the provisional portfolio only with verified source details,
+     * expanded creators and observed numeric coverage for the requested facet.
      *
-     * MangaDex/MangaDot still contribute lookup/chapter evidence, but their
-     * similarly named records must not borrow MangaFire's author authority.
-     * MangaFire's standalone facet stays English in this version.
+     * MangaDot is not trusted by this predicate. Its experimental native
+     * coverage path must independently fetch and validate the exact chapter page.
+     * No internal source can borrow another source's author authority.
      */
     fun trustedCandidates(
         providerId: ProviderId,
@@ -57,26 +59,59 @@ object ProviderWorkSourcePortfolio {
         queryTitle: String,
         independentlyVerifiedAuthors: Set<String>?,
         candidates: List<ProviderWorkCandidate>,
+        independentlyVerifiedMangaUpdatesId: String? = null,
+        requiredCreatorGroups: List<Set<String>> = emptyList(),
     ): List<ProviderWorkSourceAssessment> {
         val normalizedQuery = normalizeTitle(queryTitle)
         require(normalizedQuery.isNotEmpty()) { "Portfolio query title cannot be empty" }
         val expectedAuthors = independentlyVerifiedAuthors
-            ?.mapNotNull(::normalizeCreator)
+            ?.flatMap(::creatorKeys)
             ?.toSet()
             ?.takeIf { it.isNotEmpty() }
 
-        return candidates.distinctBy(ProviderWorkCandidate::externalWorkId).map { candidate ->
+        require(requiredCreatorGroups.size <= 8)
+        require(requiredCreatorGroups.all { it.isNotEmpty() && it.size <= 9 && it.none(String::isBlank) })
+        require(requiredCreatorGroups.flatten().distinct().size == requiredCreatorGroups.sumOf { it.size })
+        val canonicalKeys = independentlyVerifiedAuthors.orEmpty().map(::mangaAllCatalogCreatorKey).toSet()
+        val constraintsVerified = requiredCreatorGroups.all { group -> group.any(canonicalKeys::contains) }
+
+        val observations = candidates.map { candidate ->
             val exactTitle = sequenceOf(candidate.title)
                 .plus(candidate.aliases.asSequence())
                 .any { normalizeTitle(it) == normalizedQuery }
             val detailVerified = candidate.detailOutcome in VERIFIED_SOURCE_DETAILS
-            val sourceAuthors = candidate.authors.mapNotNull(::normalizeCreator).toSet()
+            val sourceAuthors = candidate.authors.flatMap(::creatorKeys).toSet()
+            val catalogId = independentlyVerifiedMangaUpdatesId?.takeIf {
+                val url = "https://mangadot.net/manga/${candidate.externalWorkId.substringAfter(':')}"
+                providerId.value == MANGAALL_PROVIDER_ID &&
+                    facetId in setOf("en", "pt-br") &&
+                    candidate.externalWorkId.matches(Regex("mangadot:[1-9][0-9]{0,15}")) &&
+                    candidate.url in setOf(url, "$url/") &&
+                    it.matches(Regex("[1-9][0-9]{0,17}"))
+            }
+            val references = candidate.mangaUpdatesReferenceIds
+            val catalogConflict = catalogId != null && references.isNotEmpty() &&
+                references != listOf(catalogId)
+            val catalogMatch = catalogId != null && references == listOf(catalogId)
+            val exactCreditKeys = candidate.authors.map(::mangaAllCatalogCreatorKey).toSet()
+            val matchedGroups = requiredCreatorGroups.count { group -> group.any(exactCreditKeys::contains) }
             val verification = when {
                 !exactTitle -> ProviderWorkVerification.TITLE_UNVERIFIED
-                expectedAuthors == null -> ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED
+                expectedAuthors == null || !constraintsVerified ->
+                    ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED
                 !detailVerified -> ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED
+                catalogConflict -> ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+                // For a reviewed adaptation, a shared original writer alone is
+                // not proof of the manga edition. Keep every required credit
+                // distinct, even when a provider returns a positive chapter count.
+                matchedGroups < requiredCreatorGroups.size &&
+                    matchedGroups == 0 && sourceAuthors.isNotEmpty() -> ProviderWorkVerification.AUTHOR_CONFLICT
+                matchedGroups < requiredCreatorGroups.size -> ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE
+                sourceAuthors.isEmpty() && catalogMatch -> ProviderWorkVerification.CATALOG_CORROBORATED
                 sourceAuthors.isEmpty() -> ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE
-                sourceAuthors.none { it in expectedAuthors } -> ProviderWorkVerification.AUTHOR_CONFLICT
+                sourceAuthors.none { it in expectedAuthors } &&
+                    !hasCatalogAttestedRomanization(providerId, candidate, independentlyVerifiedAuthors.orEmpty()) ->
+                    ProviderWorkVerification.AUTHOR_CONFLICT
                 else -> ProviderWorkVerification.AUTHOR_CORROBORATED
             }
             val qualified = hasSourceAttestedAlternateEdition(
@@ -100,6 +135,34 @@ object ProviderWorkSourcePortfolio {
                 },
             )
         }
+        // Explicit negative work evidence must survive duplicate source rows,
+        // independently of arrival order. Keep catalog conflict strongest.
+        // An incomplete duplicate cannot mask an independently corroborated
+        // row. Prefer coverage only within the same verification class; do not
+        // combine credits and chapter attestation from different observations.
+        // Edition qualification is independent of work verification.
+        return observations.groupBy { it.ref }.values.map { group ->
+            val selected = group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.AUTHOR_CONFLICT
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.TITLE_UNVERIFIED
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED && it.sourceChapterPageAttested
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED && it.sourceChapterPageAttested
+            } ?: group.firstOrNull {
+                it.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED
+            } ?: group.first()
+            if (group.any { it.editionQualification == ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT }) {
+                selected.copy(editionQualification = ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT)
+            } else {
+                selected
+            }
+        }
     }
 
     /**
@@ -120,8 +183,66 @@ object ProviderWorkSourcePortfolio {
             mangaFireUrlAttestsEditionVariant(providerId, candidate, normalizedBase)
     }
 
+    // Only a catalog's independently attested native credit may establish
+    // a transliteration comparison. Never compare two similar Latin names.
+    private fun hasCatalogAttestedRomanization(
+        providerId: ProviderId,
+        candidate: ProviderWorkCandidate,
+        verifiedNames: Set<String>,
+    ): Boolean {
+        if (providerId.value != MANGAALL_PROVIDER_ID ||
+            (
+                !candidate.externalWorkId.startsWith(MANGAALL_MANGADEX_PREFIX) &&
+                    !candidate.externalWorkId.startsWith("mangadot:")
+                )
+        ) {
+            return false
+        }
+        return candidate.authors.any { source ->
+            HangulCreatorRomanization.matchesUnique(verifiedNames, source)
+        }
+    }
+
+    private fun creatorKeys(name: String): Set<String> = buildSet {
+        val normalized = Normalizer.normalize(name, Normalizer.Form.NFC)
+        // A public creator credit may explicitly publish the Latin spelling
+        // followed by its Hangul spelling in parentheses. Treat each complete
+        // spelling as independently usable, not a concatenation of both.
+        // Never split arbitrary Latin parentheticals, labels or partial names.
+        val spellings = buildSet {
+            add(normalized)
+            BILINGUAL_KOREAN_CREDIT.matchEntire(normalized.trim())?.let {
+                val native = it.groupValues[2]
+                if (native.count { char -> char in '가'..'힣' } in 2..32) {
+                    add(it.groupValues[1])
+                    add(native)
+                }
+            }
+        }
+        for (spelling in spellings) {
+            normalizeCreator(spelling)?.let(::add)
+            // Romanized full names may spell one explicitly hyphenated token
+            // with or without a hyphen. Do not concatenate independent words,
+            // infer a missing surname or alter single-token pseudonyms.
+            if (spelling.trim().split(WHITESPACE).size >= 2) {
+                val joined = EXPLICIT_NAME_HYPHEN.replace(spelling) {
+                    it.groupValues[1] + it.groupValues[2]
+                }
+                if (joined != spelling) normalizeCreator(joined)?.let(::add)
+            }
+        }
+    }
+
     private fun normalizeCreator(name: String): String? {
-        val tokens = name.trim().lowercase()
+        // Korean catalogs may insert a space between a surname and given
+        // name. Preserve the full Hangul sequence, including its order;
+        // ignore only whitespace in an entirely Hangul credit. This is not
+        // phonetic transliteration or a Latin pseudonym matching rule.
+        val trimmed = name.trim()
+        if (HANGUL_CREDIT.matches(trimmed)) {
+            return "hangul:" + trimmed.replace(WHITESPACE, "")
+        }
+        val tokens = trimmed.lowercase()
             .split(CREATOR_SEPARATORS)
             .filter(String::isNotBlank)
             .takeIf { it.isNotEmpty() }
@@ -134,8 +255,7 @@ object ProviderWorkSourcePortfolio {
         // pseudonyms (e.g. "ONE") into a broader identity.
         val normalized = if (tokens.size >= 2) {
             tokens.map { token ->
-                val withoutMacrons = Normalizer.normalize(token, Normalizer.Form.NFKD)
-                    .replace(CREATOR_COMBINING_MARKS, "")
+                val withoutMacrons = foldLatinIdentityDiacritics(token)
                 JAPANESE_LONG_YO.replace(withoutMacrons) { match -> match.value.dropLast(1) }
             }
         } else {
@@ -145,7 +265,9 @@ object ProviderWorkSourcePortfolio {
     }
 
     private fun normalizeTitle(title: String): String =
-        title.trim().lowercase().replace(WHITESPACE, " ")
+        Normalizer.normalize(title, Normalizer.Form.NFC)
+            .replace('’', '\'').replace('‘', '\'').replace('ʼ', '\'')
+            .trim().lowercase().replace(WHITESPACE, " ")
 
     private fun explicitlyQualifiedEdition(sourceTitle: String, normalizedBase: String): Boolean {
         val name = normalizeTitle(sourceTitle)
@@ -218,8 +340,12 @@ object ProviderWorkSourcePortfolio {
         ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
     )
     private val WHITESPACE = Regex("\\s+")
-    private val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
-    private val CREATOR_COMBINING_MARKS = Regex("\\p{M}+")
+    private val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}\\p{M}]+")
+    private val HANGUL_CREDIT = Regex("""[가-힣]+(?:\s+[가-힣]+)*""")
+    private val BILINGUAL_KOREAN_CREDIT = Regex(
+        """([\p{IsLatin}][\p{IsLatin}\p{M} ,.'’_\-‐‑]{0,127}?)\s*\(([가-힣]+(?:\s+[가-힣]+)*)\)""",
+    )
+    private val EXPLICIT_NAME_HYPHEN = Regex("([A-Za-z])[-‐‑]([A-Za-z])")
     private val JAPANESE_LONG_YO = Regex("(?:ry|ky|gy|sh|ch|j|ny|hy|by|py|my)ou")
     private val EDITION_MARKERS = listOf(
         "colored",
@@ -235,12 +361,25 @@ object ProviderWorkSourcePortfolio {
 
 enum class ProviderWorkVerification {
     AUTHOR_CORROBORATED,
+    CATALOG_CORROBORATED,
+    CATALOG_REFERENCE_CONFLICT,
     CANONICAL_METADATA_UNVERIFIED,
     SOURCE_DETAIL_UNVERIFIED,
     MISSING_AUTHOR_EVIDENCE,
     AUTHOR_CONFLICT,
     TITLE_UNVERIFIED,
 }
+
+/**
+ * Shared negative-work policy for new explicit source choices and previously
+ * saved Reader bindings. Missing or unavailable metadata alone is not a
+ * contradiction of an established binding.
+ */
+internal fun ProviderWorkVerification.blocksReadingSource(): Boolean =
+    this == ProviderWorkVerification.AUTHOR_CONFLICT ||
+        this == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT ||
+        this == ProviderWorkVerification.CATALOG_CORROBORATED ||
+        this == ProviderWorkVerification.TITLE_UNVERIFIED
 
 enum class ProviderSourceEditionQualification {
     /** No source-attested variant label; this is NOT confirmation of original edition. */
@@ -253,14 +392,18 @@ data class ProviderWorkSourceAssessment(
     val workVerification: ProviderWorkVerification,
     val editionQualification: ProviderSourceEditionQualification,
     val sourceChapterPageAttested: Boolean = false,
+    /** In-memory proof, set only after an exact, independently verified native research preview. */
+    val researchCatalogIdentity: String? = null,
 ) {
     /**
      * A first page with source IDs and numerically valid chapter labels permits
      * *provisional, per-HID* observation only. No editorial equivalence is asserted.
      */
     val canCollectProvisionalChapters: Boolean
-        get() = workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED &&
-            editionQualification == ProviderSourceEditionQualification.UNRESOLVED &&
+        get() = (
+            workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED ||
+                (workVerification == ProviderWorkVerification.CATALOG_CORROBORATED && researchCatalogIdentity != null)
+            ) && editionQualification == ProviderSourceEditionQualification.UNRESOLVED &&
             sourceChapterPageAttested
 
     /**

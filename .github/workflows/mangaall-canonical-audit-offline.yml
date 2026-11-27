@@ -1,0 +1,128 @@
+name: MangaALL — identity, pagination and Reader regression audit (OFFLINE)
+# No live provider requests or frozen-30 restart. Synthetic inputs exercise
+# exact work/creator, source-scoped pagination and saved-release recovery.
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/workflows/mangaall-canonical-audit-offline.yml'
+      - '.github/mangaall-frozen30-catalog-plan.json'
+      - '.github/scripts/mangaall_code11_dual_source_unsigned.py'
+      - '.github/scripts/mangaall_mangadot_search_policy.mjs'
+      - '.github/scripts/test_mangaall_mangadot_search_policy.mjs'
+      - '.github/scripts/mangaall_mangadot_creator_evidence.mjs'
+      - '.github/scripts/test_mangaall_mangadot_creator_evidence.mjs'
+      - 'app/src/main/java/eu/kanade/tachiyomi/data/track/shikimori/ShikimoriApi.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/data/track/shikimori/ShikimoriApiTest.kt'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/integration/CreatorAliasProvider.kt'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/integration/CreatorAliasProviderTest.kt'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/catalog/interactor/ResolveMangaAllIndependentCatalogIdentity.kt'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/catalog/interactor/ResolveMangaAllIndependentCatalogIdentityTest.kt'
+      - '.github/scripts/run_mangaall_frozen30_catalog_plan.py'
+      - '.github/scripts/run_mangaall_frozen30_canonical_persistence.py'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/provider/reading/**'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/reader/**'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/provider/reading/**'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/reader/**'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshot.kt'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/ProviderStateHostServices.kt'
+      - 'core/common/src/test/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshotTest.kt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-canonical-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline strict creator and receipt contracts
+        run: |
+          set -euo pipefail
+          node --check .github/scripts/mangaall_mangadot_creator_evidence.mjs
+          node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
+          node .github/scripts/test_mangaall_mangadot_search_policy.mjs
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
+          python3 .github/scripts/verify_mangaall_frozen30_mangadex_audit.py --selftest
+          python3 -m py_compile .github/scripts/mangaall_code11_dual_source_unsigned.py
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          cohort = json.loads(Path('.github/mangaall-dual-source-30-cohort-lock.json').read_text())
+          assert cohort['cohort'] == 'MANHWA_30_FIXED_20261123'
+          assert len(cohort['works']) == len(set(cohort['works'])) == 30
+          encoded = json.dumps(cohort['works'], ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+          assert hashlib.sha256(encoded).hexdigest() == '19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1'
+          print('MANGAALL_COHORT|lock=PASS|works=30')
+          PY
+  domain-data-app:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          cache-read-only: true
+      - name: Verify scoped Host snapshot and storage regressions
+        run: |
+          ./gradlew :core:common:spotlessKotlinCheck :core:common:testDebugUnitTest \
+            --tests '*MangaAllFutureHostChapterSnapshotTest' --tests '*ProviderStateHostServicesTest' --stacktrace
+      - name: Regress all core-common JVM tests (integrated branch)
+        run: |
+          ./gradlew :core:common:testDebugUnitTest --stacktrace
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          reports = list(Path('core/common/build/test-results/testDebugUnitTest').glob('TEST-*.xml'))
+          assert reports, 'No core-common JUnit reports'
+          names = set()
+          count = 0
+          for report in reports:
+              root = ET.parse(report).getroot()
+              assert int(root.get('failures', '0')) == 0 and int(root.get('errors', '0')) == 0
+              count += int(root.get('tests', '0'))
+              for case in root.findall('testcase'):
+                  if case.find('skipped') is None:
+                      names.add(case.get('name', ''))
+          for test in (
+              'snapshots_for_two_works_and_languages_survive_new_host_instances',
+              'quota_rejection_preserves_other_active_scope_and_expired_scope_is_pruned',
+          ):
+              assert any(test in name for name in names), 'Missing scoped snapshot regression: ' + test
+          print('MANGAALL_INTEGRATED_CORE_COMMON|tests=' + str(count) + '|result=PASS')
+          PY
+      - name: Compile and exercise identity, continuation, SQLite and Reader
+        run: |
+          ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck \
+            :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' \
+            --tests '*ProviderWorkSourcePortfolioTest' --tests '*MangaAllMangaDotNativeCoverageTest' \
+            --tests '*CollectProviderReadingEvidenceTest' --tests '*CollectProviderReadingEvidenceEligibilityTest' \
+            --tests '*RefreshProviderReadingChaptersTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' \
+            --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' \
+            --tests '*ResolveProviderChapterReadingTest' --tests '*SelectMangaAllSourceTest' --tests '*MangaAllReadingIdentityTest' --tests '*BalancedSourceCandidateSampleTest' \
+            --tests '*ProviderEvidenceMetadataCodecTest' \
+            :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' \
+            --tests '*ChapterEvidenceRepositoryImplTest' \
+            :app:testDebugUnitTest --tests '*ShikimoriApiTest' \
+            --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' \
+            --tests '*ReaderSourceCardRecoveryTest' --tests '*MangaAllFutureGatewaySnapshotGateTest' \
+            :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Explicit scope
+        run: echo 'MANGAALL_CANONICAL_AUDIT|offline=PASS|live=NOT_STARTED|readerUI=NOT_TESTED|corpus=UNCHANGED|signed=UNCHANGED'

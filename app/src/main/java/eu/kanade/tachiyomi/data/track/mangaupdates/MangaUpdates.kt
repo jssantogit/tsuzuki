@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.track.DeletableTracker
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUListItem
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MURating
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import tachiyomi.domain.tsuzuki.integration.CatalogCreatorAliasEvidence
 import tachiyomi.i18n.MR
 import tachiyomi.domain.track.model.Track as DomainTrack
 
@@ -36,8 +37,23 @@ data class MangaUpdatesCollectionPage(
     val totalHits: Int,
 )
 
+data class MangaUpdatesSearchWindow(
+    val items: List<TrackSearch>,
+    val totalHits: Int,
+)
+
 interface MangaUpdatesIntegrationApi {
     suspend fun search(query: String): List<TrackSearch>
+
+    suspend fun searchWindow(
+        query: String,
+        offset: Int,
+        limit: Int,
+        type: String? = null,
+    ): MangaUpdatesSearchWindow {
+        val all = search(query).filter { type == null || it.publishing_type.equals(type, ignoreCase = true) }
+        return MangaUpdatesSearchWindow(all.drop(offset).take(limit), all.size)
+    }
 
     suspend fun discover(
         orderBy: String,
@@ -46,6 +62,8 @@ interface MangaUpdatesIntegrationApi {
     ): List<TrackSearch>
 
     suspend fun getMangaDetails(id: Long): TrackSearch
+
+    suspend fun getVerifiedCreatorAliases(id: Long): List<CatalogCreatorAliasEvidence> = emptyList()
 
     suspend fun lookupGenres(): List<Pair<String, String>> = emptyList()
 
@@ -95,6 +113,19 @@ class MangaUpdates(id: Long) : BaseTracker(id, "MangaUpdates"), DeletableTracker
         override suspend fun search(query: String): List<TrackSearch> =
             this@MangaUpdates.search(query)
 
+        override suspend fun searchWindow(
+            query: String,
+            offset: Int,
+            limit: Int,
+            type: String?,
+        ): MangaUpdatesSearchWindow =
+            if (query.startsWith(SEARCH_ID_PREFIX)) {
+                val all = search(query).filter { type == null || it.publishing_type.equals(type, ignoreCase = true) }
+                MangaUpdatesSearchWindow(all.drop(offset).take(limit), all.size)
+            } else {
+                api.searchWindow(query, offset, limit, type)
+            }
+
         override suspend fun discover(
             orderBy: String,
             offset: Int,
@@ -105,6 +136,9 @@ class MangaUpdates(id: Long) : BaseTracker(id, "MangaUpdates"), DeletableTracker
         override suspend fun getMangaDetails(id: Long): TrackSearch =
             api.getSeriesDetails(id)?.toTrackSearch(this@MangaUpdates.id)
                 ?: error("MangaUpdates title not found: $id")
+
+        override suspend fun getVerifiedCreatorAliases(id: Long): List<CatalogCreatorAliasEvidence> =
+            api.getVerifiedCreatorAliases(id)
 
         override suspend fun lookupGenres(): List<Pair<String, String>> =
             api.lookupGenres()

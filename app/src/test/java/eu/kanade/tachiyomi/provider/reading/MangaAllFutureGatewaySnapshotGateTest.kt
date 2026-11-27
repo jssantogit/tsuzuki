@@ -13,6 +13,7 @@ import tachiyomi.core.provider.packageformat.ProviderScriptManifest
 import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
+import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
@@ -24,6 +25,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCursor
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
@@ -92,7 +94,7 @@ class MangaAllFutureGatewaySnapshotGateTest {
                 entries = mapOf("main.js" to "export default {}".encodeToByteArray()),
             ),
         )
-        val observed = mutableListOf<Pair<String, Boolean>>()
+        val observed = mutableListOf<Triple<String, Boolean, ProviderRuntimeLimitsDto>>()
         val gateway = ScriptProviderReadingGateway(
             registry = registry,
             packageSource = ActiveProviderScriptPackageSource { requested ->
@@ -100,7 +102,7 @@ class MangaAllFutureGatewaySnapshotGateTest {
             },
             invokePackage = ProviderPackageCapabilityInvoker { request, _, _, policy ->
                 val allowed = ProviderHostModule.MANGAALL_CHAPTER_SNAPSHOT in policy.allowedHostModules()
-                observed += request.capabilityId to allowed
+                observed += Triple(request.capabilityId, allowed, request.limits)
                 ProviderRuntimeInvocationResponse.failure(ProviderRuntimeFailureCode.HOST_ERROR)
             },
             invocationIdFactory = { "future-gateway-test" },
@@ -108,11 +110,22 @@ class MangaAllFutureGatewaySnapshotGateTest {
         val binding = ProviderBindingRef(providerId, "en", "mangadot:131")
         gateway.lookup(providerId, ProviderReadingLookupRequest(listOf("Bleach")))
         gateway.chapters(providerId, ProviderReadingChaptersRequest(binding))
+        gateway.chapters(
+            providerId,
+            ProviderReadingChaptersRequest(binding, cursor = ProviderCursor("m1:131:en:aaaaaaaaaaaaaaaa:200")),
+        )
+        gateway.chapters(
+            providerId,
+            ProviderReadingChaptersRequest(binding.copy(externalWorkId = "mangadex:fixture")),
+        )
         gateway.pages(providerId, ProviderReadingPagesRequest(binding, "mangadot:uploads:171"))
+        val normal = ProviderRuntimeLimitsDto()
         observed shouldBe listOf(
-            "reading.lookup" to false,
-            "reading.chapters" to true,
-            "reading.pages" to false,
+            Triple("reading.lookup", false, normal),
+            Triple("reading.chapters", true, normal.copy(wallClockTimeoutMs = 6_500L, jsExecutionTimeoutMs = 6_000L)),
+            Triple("reading.chapters", true, normal),
+            Triple("reading.chapters", true, normal),
+            Triple("reading.pages", false, normal),
         )
     }
 }

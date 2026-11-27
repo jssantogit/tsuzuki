@@ -14,8 +14,10 @@ import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdatesUserListEntry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
+import tachiyomi.domain.tsuzuki.integration.CreatorAliasProvider
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.MetadataProvider
@@ -42,7 +44,7 @@ class MangaUpdatesIntegrationProvider private constructor(
     private val api: MangaUpdatesIntegrationApi,
     private val userLibraryApi: MangaUpdatesUserLibraryApi,
     override val connection: Flow<Boolean>,
-) : SearchProvider, DiscoveryProvider, MetadataProvider, RatingsProvider, UserListProvider {
+) : SearchProvider, DiscoveryProvider, CreatorAliasProvider, RatingsProvider, UserListProvider {
 
     @Inject
     constructor(trackerManager: TrackerManager) : this(
@@ -57,15 +59,22 @@ class MangaUpdatesIntegrationProvider private constructor(
         val text = query.query?.trim().orEmpty()
         if (text.isEmpty()) return@capture CatalogPage(emptyList(), false)
 
-        val all = api.search(text)
-        val page = all
-            .drop(query.offset.coerceAtLeast(0))
-            .take(query.limit.coerceAtLeast(0))
+        val offset = query.offset.coerceAtLeast(0)
+        val limit = query.limit.coerceAtLeast(0)
+        if (limit == 0) return@capture CatalogPage(emptyList(), false)
+        val nativeType = when (query.format) {
+            CatalogItemFormat.MANGA -> "Manga"
+            CatalogItemFormat.MANHWA -> "Manhwa"
+            else -> null
+        }
+        val page = api.searchWindow(text, offset, limit, nativeType)
+        check(page.items.size <= limit && page.totalHits >= 0)
+        check(page.items.size.toLong() == (page.totalHits.toLong() - offset).coerceIn(0L, limit.toLong()))
 
         CatalogPage(
-            items = page.map { it.toIntegrationCatalogItem(integrationId.value) },
-            hasNextPage = query.offset + page.size < all.size,
-            totalCount = all.size,
+            items = page.items.map { it.toIntegrationCatalogItem(integrationId.value) },
+            hasNextPage = offset.toLong() + page.items.size < page.totalHits,
+            totalCount = page.totalHits,
         )
     }
 
@@ -101,6 +110,10 @@ class MangaUpdatesIntegrationProvider private constructor(
     override suspend fun getDetails(externalId: String) = capture {
         api.getMangaDetails(externalId.requireMangaUpdatesId())
             .toIntegrationCatalogItem(integrationId.value)
+    }
+
+    override suspend fun creatorAliases(externalId: String) = capture {
+        api.getVerifiedCreatorAliases(externalId.requireMangaUpdatesId())
     }
 
     override suspend fun ratings(externalId: String): Result<List<ExternalRating>> = capture {

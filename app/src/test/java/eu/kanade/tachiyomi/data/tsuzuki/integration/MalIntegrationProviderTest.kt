@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.tsuzuki.integration
 
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.data.track.myanimelist.MalIntegrationApi
+import eu.kanade.tachiyomi.data.track.myanimelist.MalSearchWindow
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
@@ -171,16 +172,41 @@ class MalIntegrationProviderTest {
         api.detailRequests shouldContainExactly listOf(99)
     }
 
+    @Test
+    fun `mal catalog retains native offset and upstream next page without claiming a total`() = runTest {
+        val rows = listOf(
+            malTrack(id = 42, title = "Work", publishingType = "manga").apply {
+                alternate_titles = listOf("Native alias")
+            },
+        )
+        val api = FakeMalIntegrationApi(searchWindows = mapOf(25 to MalSearchWindow(rows, true)))
+        val provider = MalIntegrationProvider.forTest(api)
+        val page = provider.search(CatalogQuery(query = "Work", offset = 25, limit = 25)).getOrThrow()
+
+        api.searchWindowRequests shouldBe listOf(Triple("Work", 25, 25))
+        page.hasNextPage shouldBe true
+        page.totalCount shouldBe null
+        page.items.single().titles.values.toList() shouldBe listOf("Native alias")
+    }
+
     private class FakeMalIntegrationApi(
         private val searchResults: List<TrackSearch> = emptyList(),
         private val rankingResults: List<TrackSearch> = emptyList(),
         private val detailsById: Map<Int, TrackSearch> = emptyMap(),
+        private val searchWindows: Map<Int, MalSearchWindow> = emptyMap(),
     ) : MalIntegrationApi {
 
         val detailRequests = mutableListOf<Int>()
         val rankingRequests = mutableListOf<Triple<String, Int, Int>>()
 
+        val searchWindowRequests = mutableListOf<Triple<String, Int, Int>>()
+
         override suspend fun search(query: String): List<TrackSearch> = searchResults
+
+        override suspend fun searchWindow(query: String, offset: Int, limit: Int): MalSearchWindow {
+            searchWindowRequests += Triple(query, offset, limit)
+            return searchWindows[offset] ?: super.searchWindow(query, offset, limit)
+        }
 
         override suspend fun getRanking(
             rankingType: String,

@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "scope": "RESEARCH_EXPLICIT_OWNERS_NO_FALLBACK",
+  "corpusSha256": "19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1",
+  "works": [
+    {
+      "index": 1,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 2,
+      "catalog": "mangaupdates",
+      "searchTitle": "전지적 독자 시점"
+    },
+    {
+      "index": 3,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 4,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 5,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 6,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 7,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 8,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 9,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 10,
+      "catalog": "mangaupdates",
+      "searchTitle": "더 복서"
+    },
+    {
+      "index": 11,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 12,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 13,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 14,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 15,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 16,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 17,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 18,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 19,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 20,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 21,
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 22,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 23,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 24,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 25,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 26,
+      "catalog": "shikimori"
+    },
+    {
+      "index": 27,
+      "catalog": "mangaupdates",
+      "reviewedCreatorReferences": [
+        {
+          "nativeTitle": "재혼황후",
+          "role": "AUTHOR",
+          "creditedName": "Alphatart",
+          "creditUrl": "https://www.webtoons.com/en/fantasy/the-remarried-empress/list?title_no=2135",
+          "aliases": {
+            "Alpha Tart": "https://www.japanmagazine.fr/2024/10/26/imperatrice-remariee-2/"
+          }
+        }
+      ],
+      "searchTitle": "재혼황후"
+    },
+    {
+      "index": 28,
+      "catalog": "mangaupdates",
+      "searchTitle": "그녀가 공작저로 가야 했던 사정"
+    },
+    {
+      "index": 29,
+      "catalog": "mangaupdates",
+      "searchTitle": "치즈인더트랩",
+      "reviewedCreatorReferences": [
+        {
+          "nativeTitle": "치즈인더트랩",
+          "role": "AUTHOR",
+          "creditedName": "Soonkki",
+          "creditUrl": "https://www.webtoons.com/en/drama/cheese-in-the-trap/list?title_no=99",
+          "aliases": {
+            "Sunkki": "https://journals.sagepub.com/doi/10.1177/0163443719867277",
+            "순끼": "https://comic.naver.com/webtoon/list?titleId=761722&week=fri",
+            "Soon Ki": "https://www.harum.io/products/cheese-in-the-trap-season-1-set-manhwa"
+          }
+        }
+      ]
+    },
+    {
+      "index": 30,
+      "catalog": "shikimori"
+    }
+  ]
+}

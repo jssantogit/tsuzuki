@@ -3,6 +3,9 @@ package tachiyomi.core.provider.runtime
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -14,6 +17,13 @@ import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
+
+internal fun futureMangaAllChapterSnapshotPrefix(workId: String, language: String): String {
+    if (!Regex("mangadot:[1-9][0-9]{0,15}").matches(workId) || language !in setOf("en", "pt-br")) {
+        throw ProviderHostServiceException("Future MangaALL snapshot scope is invalid")
+    }
+    return "mangaall_private_chapters_" + workId.removePrefix("mangadot:") + "_" + language + "_"
+}
 
 class FileProviderStorageHostService(
     private val root: File,
@@ -66,22 +76,42 @@ class FileProviderStorageHostService(
 
     /**
      * HOST-PRIVATE future MangaALL snapshot replacement; NOT exposed through the
-     * Provider storage interface or to QuickJs. Replace reserved keys with one
-     * atomic provider-state write, preserving unrelated entries and the previous
-     * snapshot if the combined state exceeds any quota.
+     * Provider storage interface or to QuickJs. Replace one exact work/facet
+     * atomically, retaining other active scopes and unrelated keys on quota failure.
      */
-    internal suspend fun replaceFutureMangaAllChapterSnapshot(index: String, parts: List<String>) {
-        if (providerId != "app.tsuzuki.mangaall" || parts.size > 16) {
+    internal suspend fun replaceFutureMangaAllChapterSnapshot(
+        workId: String,
+        language: String,
+        now: Long,
+        index: String,
+        parts: List<String>,
+    ) {
+        if (providerId != "app.tsuzuki.mangaall" || parts.size > 16 || now < 0) {
             throw ProviderHostServiceException("Future MangaALL snapshot scope is invalid")
         }
+        val prefix = futureMangaAllChapterSnapshotPrefix(workId, language)
         withStateLock {
             val replacement = readState().toMutableMap()
+            // Legacy single-slot cursors are disposable operational hints. Remove
+            // their keys only as part of a successful new atomic publication.
             replacement.remove(FUTURE_MANGAALL_INDEX_KEY)
             repeat(16) { replacement.remove(FUTURE_MANGAALL_PART_PREFIX + it) }
+            val expiredPrefixes = replacement.entries.mapNotNull { (key, value) ->
+                if (!FUTURE_MANGAALL_SCOPED_INDEX.matches(key)) return@mapNotNull null
+                val expires = runCatching {
+                    val header = json.parseToJsonElement(value) as? JsonObject
+                    (header?.get("expiresAt") as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull
+                }.getOrNull()
+                key.removeSuffix("index").takeIf { expires != null && expires >= 0 && now > expires }
+            }
+            for (removed in expiredPrefixes + prefix) {
+                replacement.remove(removed + "index")
+                repeat(16) { replacement.remove(removed + "part_" + it) }
+            }
 
             val newValues = parts.mapIndexed { n, value ->
-                FUTURE_MANGAALL_PART_PREFIX + n to value
-            } + (FUTURE_MANGAALL_INDEX_KEY to index)
+                prefix + "part_" + n to value
+            } + (prefix + "index" to index)
             for ((key, value) in newValues) {
                 validateKey(key)
                 if (value.length > maxValueChars ||
@@ -92,16 +122,72 @@ class FileProviderStorageHostService(
                 replacement[key] = value
             }
 
-            if (replacement.size > maxEntries ||
-                replacement.values.sumOf(String::length) > maxTotalChars ||
-                replacement.values.sumOf { it.encodeToByteArray().size.toLong() } > maxTotalChars
-            ) {
+            fun exceedsQuota(): Boolean =
+                replacement.size > maxEntries ||
+                    replacement.values.sumOf(String::length) > maxTotalChars ||
+                    replacement.values.sumOf { it.encodeToByteArray().size.toLong() } > maxTotalChars
+
+            // Terminal pages are replayable while capacity permits. Under
+            // pressure reclaim only completed generations, oldest first.
+            // Incomplete generations and ordinary Provider keys stay pinned.
+            if (exceedsQuota()) {
+                val completed = replacement.entries.mapNotNull { (key, value) ->
+                    if (!FUTURE_MANGAALL_SCOPED_INDEX.matches(key) || key == prefix + "index") {
+                        return@mapNotNull null
+                    }
+                    val header = runCatching { json.parseToJsonElement(value) as? JsonObject }.getOrNull()
+                        ?: return@mapNotNull null
+                    if (header["completed"] != JsonPrimitive(true)) return@mapNotNull null
+                    val expires = (header["expiresAt"] as? JsonPrimitive)?.longOrNull
+                        ?: return@mapNotNull null
+                    key.removeSuffix("index") to expires
+                }.sortedWith(compareBy({ it.second }, { it.first }))
+                for ((retired, _) in completed) {
+                    replacement.remove(retired + "index")
+                    repeat(16) { replacement.remove(retired + "part_" + it) }
+                    if (!exceedsQuota()) break
+                }
+            }
+            if (exceedsQuota()) {
                 throw ProviderHostServiceException("Future MangaALL snapshot exceeds shared provider quota")
             }
 
             // Same-filesystem atomic move; no clear-then-write intermediate
             // state and no loss of other Provider keys on quota rejection.
             writeState(replacement)
+        }
+    }
+
+    /**
+     * Record terminal delivery eligibility using generation CAS. Never mark a
+     * replacement from another process as completed by an older page.
+     */
+    internal suspend fun markFutureMangaAllChapterSnapshotCompleted(
+        workId: String,
+        language: String,
+        generation: String,
+    ) {
+        if (providerId != FUTURE_MANGAALL_PROVIDER_ID) {
+            throw ProviderHostServiceException("Future MangaALL snapshot scope is invalid")
+        }
+        val key = futureMangaAllChapterSnapshotPrefix(workId, language) + "index"
+        withStateLock {
+            val state = readState().toMutableMap()
+            val raw = state[key] ?: return@withStateLock
+            val header = json.parseToJsonElement(raw) as? JsonObject ?: return@withStateLock
+            if (header["generation"] != JsonPrimitive(generation)) return@withStateLock
+            if (header["completed"] == JsonPrimitive(true)) return@withStateLock
+            val completed = JsonObject(header + ("completed" to JsonPrimitive(true))).toString()
+            // Old on-disk headers may not contain the reserved flag. Do not
+            // exceed quota merely to mark them as reclaimable.
+            state[key] = completed
+            if (completed.length <= maxValueChars &&
+                completed.encodeToByteArray().size <= 64 * 1024 &&
+                state.values.sumOf(String::length) <= maxTotalChars &&
+                state.values.sumOf { it.encodeToByteArray().size.toLong() } <= maxTotalChars
+            ) {
+                writeState(state)
+            }
         }
     }
 
@@ -231,6 +317,7 @@ class FileProviderStorageHostService(
         const val LOCK_WAIT_NANOS = 3_000_000_000L
         const val LOCK_RETRY_MILLIS = 20L
         val FUTURE_MANGAALL_LOCKS = ConcurrentHashMap<String, ReentrantLock>()
+        val FUTURE_MANGAALL_SCOPED_INDEX = Regex("mangaall_private_chapters_[1-9][0-9]{0,15}_(en|pt-br)_index")
         const val FUTURE_MANGAALL_INDEX_KEY = "mangaall_private_chapters_index"
         const val FUTURE_MANGAALL_PART_PREFIX = "mangaall_private_chapters_part_"
     }

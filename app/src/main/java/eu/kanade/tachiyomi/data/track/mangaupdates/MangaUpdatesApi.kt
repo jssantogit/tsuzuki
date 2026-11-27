@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.track.mangaupdates
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates.Companion.READING_LIST
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates.Companion.WISH_LIST
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUAuthorDetail
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUContext
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUCurrentUser
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUListItem
@@ -21,6 +22,7 @@ import eu.kanade.tachiyomi.network.PUT
 import eu.kanade.tachiyomi.network.await
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.parseAs
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -37,6 +39,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.domain.tsuzuki.integration.CatalogCreatorAliasEvidence
+import tachiyomi.domain.tsuzuki.integration.CreatorCreditRole
 import uy.kohesive.injekt.injectLazy
 import tachiyomi.domain.track.model.Track as DomainTrack
 
@@ -283,6 +287,87 @@ class MangaUpdatesApi(
         }
     }
 
+    // A real page window, not a locally sliced first search response.
+    suspend fun searchWindow(
+        query: String,
+        offset: Int,
+        limit: Int,
+        type: String?,
+    ): MangaUpdatesSearchWindow {
+        require(offset >= 0 && limit > 0)
+        val requestedSize = 25
+        suspend fun fetchPage(page: Int): MUSearchResult {
+            val body = buildJsonObject {
+                put("search", query)
+                put("page", page)
+                put("perpage", requestedSize)
+                type?.let { put("type", buildJsonArray { add(it) }) }
+                put(
+                    "filter_types",
+                    buildJsonArray {
+                        add("drama cd")
+                        add("novel")
+                    },
+                )
+            }
+            return with(json) {
+                client.newCall(
+                    POST(
+                        url = "$BASE_URL/v1/series/search",
+                        body = body.toString().toRequestBody(CONTENT_TYPE),
+                    ),
+                )
+                    .awaitSuccess()
+                    .parseAs<MUSearchResult>()
+            }
+        }
+
+        val requestedPage = offset / requestedSize + 1
+        val initial = fetchPage(requestedPage)
+        val size = initial.perPage
+        val total = initial.totalHits
+        if (initial.page == requestedPage && total == 0 && initial.results.isEmpty()) {
+            return MangaUpdatesSearchWindow(emptyList(), 0)
+        }
+        check(initial.page == requestedPage && size in 1..100 && total >= 0) {
+            "MU_SEARCH_CONTRACT|reason=FIRST_GEOMETRY|page=${initial.page}|size=$size|total=$total|rows=${initial.results.size}"
+        }
+        val items = mutableListOf<TrackSearch>()
+        val seenIds = mutableSetOf<Long>()
+        fun validate(response: MUSearchResult, page: Int): List<TrackSearch> {
+            check(response.page == page && response.perPage == size && response.totalHits == total) {
+                "MU_SEARCH_CONTRACT|reason=PAGE_GEOMETRY|page=${response.page}|size=${response.perPage}" +
+                    "|total=${response.totalHits}|rows=${response.results.size}"
+            }
+            val start = (page.toLong() - 1L) * size
+            val expected = (total.toLong() - start).coerceIn(0L, size.toLong()).toInt()
+            check(response.results.size == expected) {
+                "MU_SEARCH_CONTRACT|reason=ROW_COUNT|page=$page|size=$size|total=$total|rows=${response.results.size}"
+            }
+            val mapped = response.results.map { it.record.toTrackSearch(trackerId) }
+            check(mapped.all { it.remote_id > 0 && seenIds.add(it.remote_id) }) {
+                "MU_SEARCH_CONTRACT|reason=INVALID_OR_REPEATED_ID|page=$page|size=$size|total=$total|rows=${mapped.size}"
+            }
+            return mapped
+        }
+
+        var page = offset / size + 1
+        var skip = offset % size
+        if (offset >= total) {
+            validate(initial, requestedPage)
+            return MangaUpdatesSearchWindow(emptyList(), total)
+        }
+        while (items.size < limit) {
+            val response = if (page == requestedPage) initial else fetchPage(page)
+            val mapped = validate(response, page)
+            items += mapped.drop(skip).take(limit - items.size)
+            if ((page.toLong() - 1L) * size + mapped.size >= total) break
+            skip = 0
+            page++
+        }
+        return MangaUpdatesSearchWindow(items, total)
+    }
+
     suspend fun discover(
         orderBy: String,
         offset: Int,
@@ -419,6 +504,63 @@ class MangaUpdatesApi(
                     response.parseAs<MURecord>()
                 }
             }
+        }
+    }
+
+    /**
+     * Follow only creator IDs actually linked by the exact work detail.
+     * Never search for a person by a similar name or use another work's credits.
+     */
+    suspend fun getVerifiedCreatorAliases(workId: Long): List<CatalogCreatorAliasEvidence> = withIOContext {
+        require(workId > 0)
+        val series = with(json) {
+            client.newCall(GET("$BASE_URL/v1/series/$workId"))
+                .awaitSuccess()
+                .parseAs<MURecord>()
+        }
+        check(series.seriesId == workId)
+        val credits = series.authors.filter {
+            it.authorId != null && it.authorId > 0 && it.type in setOf("Author", "Artist") &&
+                it.name.isNotBlank() && it.name.length <= 128
+        }
+        val ids = credits.mapNotNull { it.authorId }.distinct()
+        if (ids.size > 8 || credits.size > 32) return@withIOContext emptyList()
+        val people = mutableMapOf<Long, MUAuthorDetail>()
+        for (id in ids) {
+            val person = try {
+                with(json) {
+                    client.newCall(GET("$BASE_URL/v1/authors/$id"))
+                        .awaitSuccess()
+                        .parseAs<MUAuthorDetail>()
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // An unavailable author must not invalidate another verified
+                // work-linked creator or manufacture an alias.
+                continue
+            }
+            if (person.confirmsId(id)) people[id] = person
+        }
+        credits.mapNotNull { credit ->
+            val id = requireNotNull(credit.authorId)
+            val person = people[id] ?: return@mapNotNull null
+            val aliases = person.associated.map { it.name.trim() }.filter(String::isNotBlank).distinct()
+            val primary = person.name.trim()
+            if (aliases.size > 32 || primary.isBlank() || primary.length > 128 ||
+                aliases.any { it.length > 128 } ||
+                (listOf(primary) + aliases).none { it.equals(credit.name.trim(), ignoreCase = true) }
+            ) {
+                return@mapNotNull null
+            }
+            CatalogCreatorAliasEvidence(
+                workExternalId = workId.toString(),
+                creatorExternalId = id.toString(),
+                role = if (credit.type == "Author") CreatorCreditRole.AUTHOR else CreatorCreditRole.ARTIST,
+                creditedName = credit.name,
+                primaryName = primary,
+                aliases = aliases,
+            )
         }
     }
 

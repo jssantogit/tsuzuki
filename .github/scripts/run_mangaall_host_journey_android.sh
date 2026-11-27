@@ -76,6 +76,17 @@ run_case() {
   fi
   printf 'MANGAALL_JOURNEY|phase=%s|outcome=PASS\n' "$label"
 }
+# Focused offline selector/Reader regression: no downloaded Provider packages,
+# no source/CDN traffic, no frozen cohort. Each test starts with clean app data.
+if [ "${MANGAALL_SELECTOR_OFFLINE_ONLY:-0}" = "1" ]; then
+  run_case 'MANGAALL_DUAL_SOURCE_ROW_TAP' 'eu.kanade.presentation.reader.MangaAllReaderSourceCardInstrumentedTest#tappingMangaDotKeepsExactChapterAndFacetInsteadOfMangaDex' 'mangaAllSourceRowOptIn'
+  run_case 'MANGADOT_CONTINUOUS_READER_TAP_RETRY_PIXELS' 'eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllSyntheticMangaDotSourceTapFailureAndRetryPublishesDecodedReaderPixels' 'androidSourceSwitchOptIn'
+  run_case 'READER_UI_SOURCE_SWITCH_PIXELS' "$ui_case" 'androidSourceSwitchOptIn'
+  run_case 'READER_ACTIVITY_RECREATION' 'eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#activityRecreationRestoresObservedCanonicalPosition' 'androidSourceSwitchOptIn'
+  run_case 'READER_HISTORY_IDEMPOTENCE' 'eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#repeatedSourceSwitchKeepsPreferenceAndSingleHistoryEntry' 'androidSourceSwitchOptIn'
+  echo 'MANGAALL_SELECTOR_OFFLINE|sourceRow=DEX_DOT|syntheticReader=PASS|activityRecreation=PASS|history=PASS|processRestart=NOT_TESTED|code11=NOT_TESTED|live=NONE'
+  exit 0
+fi
 # Dedicated feature-branch gate avoids rerunning the historic 10-phase suite
 # every time the code8 Reader acceptance test is reviewed. The full original
 # suite remains accessible through workflow_dispatch with default scope.

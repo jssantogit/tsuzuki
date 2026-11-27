@@ -1,0 +1,137 @@
+name: MangaALL — 30 real works, MangaDex + MangaDot only (UNSIGNED CI)
+# Explicit 30-work two-source preview on Tsuzuki's OWN GitHub-hosted Actions.
+# The original code10 archive stays signed/unchanged; an in-memory original
+# router list excludes MangaFire. Neither Host Android canonicals nor Reader
+# pixels are attested by this source-only experimental diagnostic.
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/mangaall-dual-source-30-request.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-dual-source-30-live
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    name: Exact manifest-only 30-work input & consent (NO source requests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Reject all other commits before source requests
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/mangaall_dual_source_30_aggregate.py --self-test
+          python3 - <<'PY'
+          import json, subprocess, hashlib
+          from pathlib import Path
+          files=[p for p in subprocess.check_output(
+              ['git','diff-tree','--no-commit-id','--name-only','-r','HEAD'],
+              text=True).splitlines() if p]
+          assert files == ['.github/mangaall-dual-source-30-request.json'], files
+          raw=Path('.github/mangaall-dual-source-30-request.json').read_bytes()
+          assert len(raw)<=4096
+          data=json.loads(raw)
+          assert isinstance(data,dict) and set(data)=={'works','acknowledge'}
+          assert data['acknowledge']=='I_ACCEPT_MANGAALL_TWO_SOURCE_30_LIVE'
+          assert isinstance(data['works'],list) and len(data['works'])==30
+          assert all(isinstance(t,str) and 1<=len(t)<=180 and
+              'http' not in t.lower() for t in data['works'])
+          assert len({t.strip().casefold() for t in data['works']})==30
+          lock=json.loads(Path('.github/mangaall-dual-source-30-cohort-lock.json').read_text())
+          assert set(lock)=={'cohort','format','freezeUntil','works'}
+          assert lock['cohort']=='MANHWA_30_FIXED_20261123'
+          assert lock['format']=='manhwa'
+          assert lock['freezeUntil']=='THIRTY_OF_THIRTY_VERIFIED_AND_EXPLICITLY_APPROVED'
+          assert data['works']==lock['works'], 'FROZEN_30_MANHWA_CORPUS_VIOLATED'
+          cohort_sha=hashlib.sha256(json.dumps(
+              data['works'], ensure_ascii=False, separators=(',',':')
+          ).encode('utf-8')).hexdigest()
+          assert cohort_sha=='19996790a934514c7877447610ee09a9e0dd2bd8fe8b2c42ff46a7a5cfe64bd1', 'PINNED_30_MANHWA_HASH_MISMATCH'
+          print('MANGAALL_DUAL30_AUTH|works=30|cohort=MANHWA_FIXED|format=manhwa|sources=MANGADEX_MANGADOT|provider=IMMUTABLE_CODE10_MODULES|live=AUTHORIZED')
+          PY
+
+  real-dual-source:
+    needs: authorize
+    name: Original MangaALL router, two real sources, shard ${{ matrix.shard }}/3
+    runs-on: ubuntu-24.04
+    timeout-minutes: 95
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 195502f981bd776a68feebde3efc6d20f55cca65
+          path: signed-code10
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify P-256 source package, source commit and two-source router offline
+        env:
+          MANGAALL_DUAL30_SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          test "$(git -C signed-code10 rev-parse HEAD)" = '195502f981bd776a68feebde3efc6d20f55cca65'
+          (cd signed-code10 && node tooling/verify_index.mjs)
+          node .github/scripts/mangaall_dual_source_30.mjs --offline
+          node .github/scripts/mangaall_dual_source_30.mjs --plan
+      - name: Probe 10 assigned works using live MangaDex and MangaDot APIs
+        env:
+          MANGAALL_DUAL30_SHARD: ${{ matrix.shard }}
+          MANGAALL_DUAL30_SHARD_COUNT: '3'
+          MANGAALL_DUAL30_ACK: I_ACCEPT_MANGAALL_TWO_SOURCE_30_LIVE
+          MANGAALL_DUAL30_OUTPUT: .github/results/mangaall-dual-source-30/shard-${{ matrix.shard }}.json
+        run: |
+          node .github/scripts/mangaall_dual_source_30.mjs --live
+      - name: Retain actual per-work summaries even if an upstream API fails
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-dual30-shard-${{ matrix.shard }}
+          path: .github/results/mangaall-dual-source-30/shard-${{ matrix.shard }}.json
+          if-no-files-found: warn
+          retention-days: 3
+
+  aggregate30:
+    needs: [authorize, real-dual-source]
+    if: always() && needs.authorize.result != 'failure'
+    name: Correlate exact 30 original works and diagnose ambiguity, pages and cursors
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mangaall-dual30-shard-*
+          merge-multiple: true
+          path: .github/results/mangaall-dual-source-30
+      - name: Fail-closed 30/30 source identity and real chapter report
+        run: |
+          python3 .github/scripts/mangaall_dual_source_30_aggregate.py \
+            --input-dir .github/results/mangaall-dual-source-30 \
+            --output .github/results/mangaall-dual-source-30/aggregate.json
+      - name: Preserve diagnostic results and outstanding issues (NO canonical claims)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-dual30-aggregate
+          path: .github/results/mangaall-dual-source-30/aggregate.json
+          if-no-files-found: warn
+          retention-days: 3

@@ -7,6 +7,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -3410,6 +3411,667 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `research collects only native provisional evidence for creditless catalog work`() = runTest {
+        verifyCatalogResearchCollection(revoke = false)
+    }
+
+    @Test
+    fun `research discards native preview after catalog permission is revoked`() = runTest {
+        verifyCatalogResearchCollection(revoke = true)
+    }
+
+    @Test
+    fun `research rejects duplicate HID with contradictory catalog references`() = runTest {
+        verifyCatalogResearchCollection(revoke = false, conflicting = true)
+    }
+
+    @Test
+    fun `research discards provisional metadata when durable catalog conflict arrives during continuation`() = runTest {
+        verifyCatalogResearchCollection(revoke = false, conflictDuringContinuation = true)
+    }
+
+    @Test
+    fun `research discards provisional author evidence when creator conflict arrives during continuation`() = runTest {
+        verifyCatalogResearchCollection(revoke = false, conflictDuringContinuation = true, withAuthor = true)
+    }
+
+    @Test
+    fun `research rejects changed catalog proof even when work verification enum is unchanged`() = runTest {
+        verifyCatalogResearchCollection(revoke = false, changedProofDuringContinuation = true)
+    }
+
+    private suspend fun verifyCatalogResearchCollection(
+        revoke: Boolean,
+        conflicting: Boolean = false,
+        conflictDuringContinuation: Boolean = false,
+        withAuthor: Boolean = false,
+        changedProofDuringContinuation: Boolean = false,
+    ) {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val owner = IntegrationId("mangaupdates")
+        val independentId = "123456789012345678"
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Independent Creator"), owner, externalId = independentId),
+                externalIds = mapOf(owner to independentId),
+            ),
+            refreshedAt = 42L,
+        )
+        val integrations = mockk<IntegrationRegistry>(relaxed = true)
+        var consent = true
+        every {
+            integrations.isGlobalCapabilityActive(owner, IntegrationCapability.METADATA_BASIC)
+        } answers { consent }
+        val observations = MemoryWorkSourceAssociationRepository()
+        val bindings = MemoryBindingRepository()
+        val ref = ProviderBindingRef(mangaAll, "en", "mangadot:317")
+        val catalogVersions = mutableListOf<Int?>()
+        var chapterRequests = 0
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(
+                canonicalTitle,
+                listOf(
+                    ExternalIdentity(canonicalTitle.id, owner.value, independentId, verified = true, createdAt = 1L),
+                ),
+            ),
+            providerRegistry = registry(
+                provider = mangaAll,
+                versionCode = 11,
+                configurationFingerprint = "catalog-test",
+            ),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    if (requireNotNull(request.cursor).value.contains("mangadex")) {
+                        ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
+                    } else {
+                        catalogVersions += request.catalogEvidenceVersion
+                        val candidate = ProviderWorkCandidate(
+                            externalWorkId = ref.externalWorkId,
+                            title = canonicalTitle.displayTitle,
+                            url = "https://mangadot.net/manga/317",
+                            authors = if (withAuthor) listOf("Independent Creator") else emptyList(),
+                            detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                            mangaUpdatesReferenceIds = listOf(independentId),
+                        )
+                        val items = if (conflicting) {
+                            listOf(candidate, candidate.copy(mangaUpdatesReferenceIds = listOf("456")))
+                        } else {
+                            listOf(candidate)
+                        }
+                        ProviderCallResult.Success(ProviderPage(items, nextCursor = null))
+                    }
+                },
+                chaptersHandler = { request ->
+                    check(!conflicting) { "Conflicting catalog references must never request chapters" }
+                    request.binding shouldBe ref
+                    if (revoke) consent = false
+                    chapterRequests++
+                    if (conflictDuringContinuation && request.cursor != null) {
+                        observations.observe(
+                            requireNotNull(observations.get(ref)).copy(
+                                workVerification = if (withAuthor) {
+                                    ProviderWorkVerification.AUTHOR_CONFLICT
+                                } else {
+                                    ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+                                },
+                                observedAt = 43L,
+                                catalogIdentityFingerprint = null,
+                            ),
+                        )
+                    }
+                    if (changedProofDuringContinuation && request.cursor != null) {
+                        observations.observe(
+                            requireNotNull(observations.get(ref)).copy(
+                                catalogIdentityFingerprint = "catalog-work-v1:" + "0".repeat(64),
+                                observedAt = 43L,
+                            ),
+                        )
+                    }
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "mangadot:chapters:${110 + chapterRequests}",
+                                    rawLabel = "Chapter $chapterRequests",
+                                    rawNumber = chapterRequests.toDouble(),
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = if (
+                                (conflictDuringContinuation || changedProofDuringContinuation) && request.cursor == null
+                            ) {
+                                ProviderCursor("fixture-continuation")
+                            } else {
+                                null
+                            },
+                        ),
+                    )
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            integrationRegistry = integrations,
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = observations,
+            nativeMangaDotPortfolioResearch = true,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        catalogVersions shouldBe listOf(1)
+        if (conflictDuringContinuation || changedProofDuringContinuation) chapterRequests shouldBe 2
+        observations.get(ref)?.workVerification shouldBe when {
+            conflictDuringContinuation && withAuthor -> ProviderWorkVerification.AUTHOR_CONFLICT
+            conflicting || conflictDuringContinuation -> ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+            withAuthor -> ProviderWorkVerification.AUTHOR_CORROBORATED
+            else -> ProviderWorkVerification.CATALOG_CORROBORATED
+        }
+        val savedProof = observations.get(ref)?.catalogIdentityFingerprint
+        (savedProof != null) shouldBe (!conflicting && !conflictDuringContinuation && !withAuthor)
+        val rejected = revoke || conflicting || conflictDuringContinuation || changedProofDuringContinuation
+        result.partialEvidence.map { it.externalChapterKey } shouldBe
+            if (rejected) emptyList() else listOf("mangadot:chapters:111")
+        result.snapshots shouldBe emptyList()
+        if (rejected) {
+            result.cursorProgress shouldBe emptyList()
+        } else {
+            val progress = result.cursorProgress.single()
+            progress.configurationFingerprint.startsWith("catalog-v2:") shouldBe true
+            result.partialEvidence.single().providerMetadata?.catalogWorkFingerprint shouldBe savedProof
+            progress.configurationFingerprint.contains(independentId) shouldBe false
+        }
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
+    @Test
+    fun `unsigned research lanes retain native MangaDot evidence despite a slow MangaDex lookup`() = runTest {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val bindings = MemoryBindingRepository()
+        val observed = MemoryWorkSourceAssociationRepository()
+        val dotId = "mangadot:317"
+        var dotLookups = 0
+        var dexLookups = 0
+        var dotReads = 0
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll, versionCode = 11),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    val cursor = requireNotNull(request.cursor).value
+                    if (cursor.contains("\"mangadex\"")) {
+                        dexLookups++
+                        delay(30_000)
+                        error("lookup must time out")
+                    } else {
+                        check(cursor.contains("\"mangadot\""))
+                        dotLookups++
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(
+                                    ProviderWorkCandidate(
+                                        externalWorkId = dotId,
+                                        title = "Dandadan",
+                                        url = "https://mangadot.net/manga/317",
+                                        authors = listOf("Arakawa Hiromu"),
+                                        detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    ),
+                                ),
+                                nextCursor = ProviderCursor("next-dot-page"),
+                            ),
+                        )
+                    }
+                },
+                chaptersHandler = { request ->
+                    request.binding.externalWorkId shouldBe dotId
+                    dotReads++
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "mangadot:chapters:111",
+                                    rawLabel = "Chapter 1",
+                                    rawNumber = 1.0,
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = observed,
+            nativeMangaDotPortfolioResearch = true,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        dexLookups shouldBe 1
+        dotLookups shouldBe 1
+        dotReads shouldBe 1
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        result.snapshots shouldBe emptyList()
+        result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:111"
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        observed.getByTitle(canonicalTitle.id).single().workVerification shouldBe
+            ProviderWorkVerification.AUTHOR_CORROBORATED
+    }
+
+    @Test
+    fun `research checks observed aliases before another broad primary search page`() = runTest {
+        verifyResearchAliasBatch(
+            0,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+        )
+    }
+
+    @Test
+    fun `research next batch reaches verified alias beyond first six without binding`() = runTest {
+        verifyResearchAliasBatch(
+            1,
+            (1..12).map { "Variant $it" },
+            "Variant 8",
+            listOf("Variant 6", "Variant 7", "Variant 8"),
+        )
+    }
+
+    @Test
+    fun `research short alias inventory retries primary batch without inventing names`() = runTest {
+        verifyResearchAliasBatch(
+            3,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+        )
+    }
+
+    @Test
+    fun `late author qualified alias retains time for native coverage outside lookup deadline`() = runTest {
+        verifyResearchAliasBatch(
+            0,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+            slowLookup = true,
+        )
+    }
+
+    @Test
+    fun `slow rival preview does not discard already verified native coverage`() = runTest {
+        verifyResearchAliasBatch(
+            0,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+            slowRival = true,
+        )
+    }
+
+    @Test
+    fun `research retains creator conflict across aliases without native preview`() = runTest {
+        verifyResearchAliasBatch(
+            0,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+            conflictingFirst = true,
+        )
+    }
+
+    @Test
+    fun `native preview uses corroborated duplicate once despite missing credit in earlier row`() = runTest {
+        verifyResearchAliasBatch(
+            0,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+            incompleteDuplicate = true,
+        )
+    }
+
+    private suspend fun verifyResearchAliasBatch(
+        batch: Int,
+        aliases: List<String>,
+        desiredAlias: String,
+        expectedQueries: List<String>,
+        slowLookup: Boolean = false,
+        slowRival: Boolean = false,
+        conflictingFirst: Boolean = false,
+        incompleteDuplicate: Boolean = false,
+    ) {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Kim Yong-Hwan"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val names = mockk<TitleNameObservationRepository>()
+        coEvery { names.getByTitle(canonicalTitle.id) } returns aliases.map {
+            TitleNameObservation(canonicalTitle.id, "mal", "english", it, 42L)
+        }
+        val integrations = mockk<IntegrationRegistry>(relaxed = true)
+        every {
+            integrations.isGlobalCapabilityActive(metadataId, IntegrationCapability.METADATA_BASIC)
+        } returns true
+        val dotQueries = mutableListOf<String>()
+        var dotReads = 0
+        val incomplete = if (incompleteDuplicate) {
+            ProviderWorkCandidate(
+                externalWorkId = "mangadot:317",
+                title = desiredAlias,
+                url = "https://mangadot.net/manga/317",
+                authors = emptyList(),
+                detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+            )
+        } else {
+            null
+        }
+        val bindings = MemoryBindingRepository()
+        val associations = MemoryWorkSourceAssociationRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll, versionCode = 11),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    val cursor = requireNotNull(request.cursor).value
+                    if (cursor.contains("mangadex")) {
+                        ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
+                    } else {
+                        val query = request.titles.single()
+                        dotQueries += query
+                        if (slowLookup) delay(5_000)
+                        if (query == canonicalTitle.displayTitle) {
+                            ProviderCallResult.Success(
+                                ProviderPage(
+                                    items = if (conflictingFirst) {
+                                        listOf(
+                                            ProviderWorkCandidate(
+                                                externalWorkId = "mangadot:317",
+                                                title = query,
+                                                url = "https://mangadot.net/manga/317",
+                                                authors = listOf("Different Creator"),
+                                                detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                            ),
+                                        )
+                                    } else {
+                                        emptyList()
+                                    },
+                                    nextCursor = if (conflictingFirst) null else ProviderCursor("broad-page-two"),
+                                ),
+                            )
+                        } else if (query == desiredAlias) {
+                            ProviderCallResult.Success(
+                                ProviderPage(
+                                    listOfNotNull(
+                                        incomplete,
+                                        ProviderWorkCandidate(
+                                            externalWorkId = "mangadot:317",
+                                            title = desiredAlias,
+                                            url = "https://mangadot.net/manga/317",
+                                            authors = listOf("Yonghwan Kim"),
+                                            detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                        ),
+                                    ) + if (slowRival) {
+                                        listOf(
+                                            ProviderWorkCandidate(
+                                                externalWorkId = "mangadot:318",
+                                                title = desiredAlias,
+                                                url = "https://mangadot.net/manga/318",
+                                                authors = listOf("Yonghwan Kim"),
+                                                detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                            ),
+                                        )
+                                    } else {
+                                        emptyList()
+                                    },
+                                    nextCursor = null,
+                                ),
+                            )
+                        } else {
+                            ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
+                        }
+                    }
+                },
+                chaptersHandler = { request ->
+                    dotReads++
+                    check(!conflictingFirst) { "Conflicting source must not reach preview" }
+                    if (slowRival && request.binding.externalWorkId == "mangadot:318") {
+                        delay(30_000)
+                        error("rival preview must time out")
+                    }
+                    if (slowLookup) delay(5_000)
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "mangadot:chapters:111",
+                                    rawLabel = "Chapter 1",
+                                    rawNumber = 1.0,
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            titleNameObservationRepository = names,
+            integrationRegistry = integrations,
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = associations,
+            nativeMangaDotPortfolioResearch = true,
+            researchTitleQueryBatch = batch,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        dotQueries shouldBe expectedQueries
+        if (incompleteDuplicate) dotReads shouldBe 1
+        if (conflictingFirst) {
+            result.partialEvidence shouldBe emptyList()
+            result.cursorProgress shouldBe emptyList()
+            associations.getByTitle(canonicalTitle.id).single().workVerification shouldBe
+                ProviderWorkVerification.AUTHOR_CONFLICT
+        } else {
+            result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:111"
+        }
+        result.snapshots shouldBe emptyList()
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
+    @Test
+    fun `native preview resumes saved cursor without recreating the snapshot`() = runTest {
+        verifyNativePreview("resume")
+    }
+
+    @Test
+    fun `native preview restarts expired generation only after verifying fresh same work coverage`() = runTest {
+        verifyNativePreview("expired")
+    }
+
+    @Test
+    fun `native preview does not restart after malformed cursor response or challenge`() = runTest {
+        verifyNativePreview("malformed")
+        verifyNativePreview("challenge")
+    }
+
+    @Test
+    fun `native preview is reused once and following pages use the actual continuation`() = runTest {
+        verifyNativePreview("multipage")
+    }
+
+    @Test
+    fun `native preview cannot replace a concurrently changed checkpoint`() = runTest {
+        verifyNativePreview("changed")
+    }
+
+    private suspend fun verifyNativePreview(mode: String) {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val ref = ProviderBindingRef(mangaAll, "en", "mangadot:317")
+        val cursor = ProviderCursor("m1:317:en:aaaaaaaaaaaaaaaa:200")
+        val next = ProviderCursor("m1:317:en:aaaaaaaaaaaaaaaa:400")
+        val cursors = mockk<ProviderProvisionalCursorRepository>(relaxed = true)
+        var discarded = false
+        var checkpointReads = 0
+        coEvery { cursors.get(canonicalTitle.id, ref, 11, any()) } answers {
+            checkpointReads++
+            if (discarded) {
+                null
+            } else {
+                ProviderProvisionalCursorCheckpoint(
+                    canonicalTitle.id,
+                    ref,
+                    11L,
+                    arg<String>(3),
+                    if (mode == "changed" && checkpointReads > 1) next else cursor,
+                    if (mode == "changed" && checkpointReads > 1) 2 else 1,
+                )
+            }
+        }
+        coEvery { cursors.discard(any(), any()) } answers {
+            arg<ProviderProvisionalCursorCheckpoint>(0).nextCursor shouldBe cursor
+            discarded = true
+        }
+        val reads = mutableListOf<ProviderCursor?>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll, versionCode = 11),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    if (requireNotNull(request.cursor).value.contains("mangadex")) {
+                        ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
+                    } else {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                listOf(
+                                    ProviderWorkCandidate(
+                                        externalWorkId = ref.externalWorkId,
+                                        title = canonicalTitle.displayTitle,
+                                        url = "https://mangadot.net/manga/317",
+                                        authors = listOf("Arakawa Hiromu"),
+                                        detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    }
+                },
+                chaptersHandler = { request ->
+                    reads += request.cursor
+                    if (request.cursor == cursor && mode in setOf("expired", "malformed", "challenge")) {
+                        ProviderCallResult.Failure(
+                            ProviderError(
+                                code = if (mode == "malformed") {
+                                    ProviderErrorCode.MALFORMED_RESULT
+                                } else {
+                                    ProviderErrorCode.SOURCE_READ_ERROR
+                                },
+                                retryable = false,
+                                sourceFailureCode = if (mode == "challenge") {
+                                    ProviderLookupFailureCode.CHALLENGE_BLOCKED
+                                } else {
+                                    null
+                                },
+                                httpStatus = if (mode == "challenge") 403 else null,
+                            ),
+                        )
+                    } else {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                listOf(
+                                    ProviderChapterObservation(
+                                        providerChapterId = if (request.cursor == next) {
+                                            "mangadot:chapters:202"
+                                        } else {
+                                            "mangadot:chapters:201"
+                                        },
+                                        rawLabel = if (request.cursor == next) "Chapter 2" else "Chapter 1",
+                                        rawNumber = if (request.cursor == next) 2.0 else 1.0,
+                                        language = "en",
+                                    ),
+                                ),
+                                nextCursor = if (mode == "multipage" && request.cursor == cursor) next else null,
+                            ),
+                        )
+                    }
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = MemoryWorkSourceAssociationRepository(),
+            provisionalCursorRepository = cursors,
+            nativeMangaDotPortfolioResearch = true,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        if (mode == "resume") {
+            reads shouldBe listOf(cursor)
+            result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:201"
+            result.cursorProgress.single().expectedCursor shouldBe cursor
+            result.cursorProgress.single().nextCursor shouldBe null
+        } else if (mode == "expired") {
+            reads shouldBe listOf(cursor, null)
+            result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:201"
+            result.cursorProgress.single().expectedCursor shouldBe null
+        } else if (mode == "multipage" || mode == "changed") {
+            reads shouldBe listOf(cursor, next)
+            result.partialEvidence.map { it.externalChapterKey }.toSet() shouldBe if (mode == "multipage") {
+                setOf("mangadot:chapters:201", "mangadot:chapters:202")
+            } else {
+                setOf("mangadot:chapters:202")
+            }
+            result.cursorProgress.single().expectedCursor shouldBe if (mode == "multipage") cursor else next
+            result.cursorProgress.single().nextCursor shouldBe null
+        } else {
+            reads shouldBe listOf(cursor)
+            result.partialEvidence shouldBe emptyList()
+            result.cursorProgress shouldBe emptyList()
+        }
+        coVerify(exactly = if (mode == "expired") 1 else 0) { cursors.discard(any(), any()) }
+    }
+
+    @Test
     fun `MangaAll incomplete lookup retains provisional chapters without binding`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
@@ -3713,14 +4375,18 @@ class CollectProviderReadingEvidenceTest {
         }
     }
 
-    private fun registry(provider: ProviderId = providerId) = DefaultProviderRegistry(
+    private fun registry(
+        provider: ProviderId = providerId,
+        versionCode: Long = 2,
+        configurationFingerprint: String = "",
+    ) = DefaultProviderRegistry(
         registrations = {
             listOf(
                 ProviderRegistration(
                     descriptor = ProviderDescriptor(
                         id = provider,
                         name = "MangaFire",
-                        version = ProviderVersion("0.1.1", 2),
+                        version = ProviderVersion("0.1.1", versionCode),
                         origin = ProviderOrigin.Repository("app.tsuzuki.providers"),
                         runtime = ProviderRuntimeKind.SCRIPT,
                         capabilities = setOf(
@@ -3734,6 +4400,7 @@ class CollectProviderReadingEvidenceTest {
                     ),
                     lifecycleStatus = ProviderLifecycleStatus.ENABLED,
                     facets = listOf(ProviderFacetRef(provider, "en")),
+                    configurationFingerprint = configurationFingerprint,
                 ),
             )
         },
@@ -3770,7 +4437,13 @@ class CollectProviderReadingEvidenceTest {
         ): ProviderCallResult<ProviderReadingDelivery> = error("not used")
     }
 
-    private fun titleRepository(title: CanonicalTitle) = object : CanonicalTitleRepository {
+    private fun titleRepository(
+        title: CanonicalTitle,
+        identities: List<ExternalIdentity> = emptyList(),
+    ) = object : CanonicalTitleRepository {
+        override suspend fun getExternalIdentities(canonicalTitleId: String): List<ExternalIdentity> =
+            identities.filter { it.canonicalTitleId == canonicalTitleId }
+
         override suspend fun getById(id: String): CanonicalTitle? = title.takeIf { it.id == id }
         override fun getByIdAsFlow(id: String): Flow<CanonicalTitle?> = flowOf(title.takeIf { it.id == id })
         override suspend fun getByExternalIdentity(provider: String, externalId: String): CanonicalTitle? = null
@@ -3788,7 +4461,25 @@ class CollectProviderReadingEvidenceTest {
         override suspend fun observe(association: ProviderWorkSourceAssociation): Boolean {
             val current = values[association.ref]
             if (current != null && current.canonicalTitleId != association.canonicalTitleId) return false
-            if (current == null || association.observedAt > current.observedAt) values[association.ref] = association
+            val conflict = ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+            val freshCatalog = association.workVerification == conflict ||
+                association.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED
+            if (current?.workVerification == conflict && !freshCatalog) return true
+            val authorConflict = ProviderWorkVerification.AUTHOR_CONFLICT
+            val freshAuthor = association.workVerification in setOf(
+                authorConflict,
+                ProviderWorkVerification.AUTHOR_CORROBORATED,
+                conflict,
+            )
+            if (current?.workVerification == authorConflict && !freshAuthor) return true
+            if (current == null || association.observedAt > current.observedAt ||
+                (
+                    association.observedAt == current.observedAt &&
+                        association.workVerification in setOf(conflict, authorConflict)
+                    )
+            ) {
+                values[association.ref] = association
+            }
             return true
         }
 

@@ -1,0 +1,10 @@
+-- Chapter-specific user preference, independent of work association and progress.
+CREATE TABLE tsuzuki_mangaall_chapter_releases(
+    canonical_chapter_id TEXT NOT NULL,
+    language TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    provider_chapter_id TEXT NOT NULL,
+    selected_at INTEGER NOT NULL,
+    PRIMARY KEY(canonical_chapter_id, language, external_work_id),
+    FOREIGN KEY(canonical_chapter_id) REFERENCES tsuzuki_canonical_chapters(id) ON DELETE CASCADE
+);

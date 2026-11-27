@@ -11,11 +11,15 @@ data class MangaAllSourceSelection(
     val canonicalTitleId: String,
     val ref: ProviderBindingRef,
     val selectedAt: Long,
+    val catalogIdentityFingerprint: String? = null,
 ) {
     init {
         require(canonicalTitleId.isNotBlank())
         require(selectedAt >= 0)
         require(MangaAllReadingIdentity.supportsRequestedLanguage(ref))
+        if (catalogIdentityFingerprint != null) {
+            require(catalogIdentityFingerprint.matches(Regex("catalog-work-v1:[0-9a-f]{64}")))
+        }
     }
 }
 
@@ -24,6 +28,17 @@ interface MangaAllSourceSelectionRepository {
 
     /** Most recent explicit choice, used only to restore the user's active language. */
     suspend fun getLatest(canonicalTitleId: String): MangaAllSourceSelection? = null
+
+    /** Chapter-scoped release choice; never changes the title-wide source preference. */
+    suspend fun getRelease(canonicalTitleId: String, canonicalChapterId: String, ref: ProviderBindingRef): String? =
+        null
+
+    /** Persist only an already validated release within the exact saved work and facet. */
+    suspend fun selectRelease(
+        canonicalTitleId: String,
+        option: ProviderChapterReadingOption,
+        at: Long,
+    ): Boolean = false
 
     /** Stores an explicit preference only while the selected work is still associated to this title. */
     suspend fun select(choice: MangaAllSourceSelection): Boolean
@@ -39,11 +54,17 @@ enum class MangaAllSourceSelectionResult {
 }
 
 /** Persist source choice separately from the one preferred Provider binding. */
-@Inject
 class SelectMangaAllSource(
     private val associations: ProviderWorkSourceAssociationRepository,
     private val selections: MangaAllSourceSelectionRepository,
+    private val catalogResearch: MangaAllCatalogReaderResearch?,
 ) {
+    @Inject
+    constructor(
+        associations: ProviderWorkSourceAssociationRepository,
+        selections: MangaAllSourceSelectionRepository,
+    ) : this(associations, selections, null)
+
     suspend fun select(
         canonicalTitleId: String,
         ref: ProviderBindingRef,
@@ -60,18 +81,19 @@ class SelectMangaAllSource(
         if (association?.canonicalTitleId != canonicalTitleId) {
             return MangaAllSourceSelectionResult.NOT_ASSOCIATED
         }
-        if (
-            association.workVerification == ProviderWorkVerification.AUTHOR_CONFLICT ||
-            association.workVerification == ProviderWorkVerification.TITLE_UNVERIFIED
-        ) {
-            return MangaAllSourceSelectionResult.BLOCKED
+        val proof = if (association.workVerification == ProviderWorkVerification.CATALOG_CORROBORATED) {
+            catalogResearch?.proof(association) ?: return MangaAllSourceSelectionResult.BLOCKED
+        } else {
+            if (association.workVerification.blocksReadingSource()) return MangaAllSourceSelectionResult.BLOCKED
+            null
         }
         val language = ref.facetId!!.lowercase()
-        if (selections.get(canonicalTitleId, language)?.ref == ref) {
+        val previous = selections.get(canonicalTitleId, language)
+        if (previous?.ref == ref && previous.catalogIdentityFingerprint == proof) {
             return MangaAllSourceSelectionResult.ALREADY_SELECTED
         }
         val selected = selections.select(
-            MangaAllSourceSelection(canonicalTitleId, ref.copy(facetId = language), at),
+            MangaAllSourceSelection(canonicalTitleId, ref.copy(facetId = language), at, proof),
         )
         return if (selected) MangaAllSourceSelectionResult.SELECTED else MangaAllSourceSelectionResult.UNAVAILABLE
     }

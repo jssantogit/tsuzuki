@@ -16,17 +16,21 @@ import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadata
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelection
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCursor
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderProvisionalCursorProgress
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderSourceEditionQualification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkSourceAssociation
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkVerification
+import tachiyomi.domain.tsuzuki.provider.reading.evidenceProducerId
 import java.nio.file.Files
 
 class ProviderReadingBindingRepositoryImplTest {
@@ -194,6 +198,86 @@ class ProviderReadingBindingRepositoryImplTest {
     }
 
     @Test
+    fun `catalog conflict wins equal timestamp races without changing title ownership`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val source = workSource("catalog-race")
+        val conflict = source.copy(workVerification = ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT)
+        portfolio.observe(source) shouldBe true
+        portfolio.observe(conflict) shouldBe true
+        portfolio.observe(source) shouldBe true
+        portfolio.get(source.ref) shouldBe conflict
+        val older = source.copy(observedAt = source.observedAt - 1)
+        portfolio.observe(older) shouldBe true
+        portfolio.get(source.ref) shouldBe conflict
+    }
+
+    @Test
+    fun `catalog conflict survives newer weaker observations until fresh catalog proof`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val conflict = workSource("catalog-review").copy(
+            workVerification = ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT,
+        )
+        portfolio.observe(conflict) shouldBe true
+        for (state in listOf(
+            ProviderWorkVerification.AUTHOR_CORROBORATED,
+            ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE,
+            ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED,
+        )) {
+            portfolio.observe(conflict.copy(workVerification = state, observedAt = 200L)) shouldBe true
+            portfolio.get(conflict.ref) shouldBe conflict
+        }
+        val reviewed = conflict.copy(
+            workVerification = ProviderWorkVerification.CATALOG_CORROBORATED,
+            observedAt = 201L,
+        )
+        portfolio.observe(reviewed) shouldBe true
+        portfolio.get(conflict.ref) shouldBe reviewed
+    }
+
+    @Test
+    fun `catalog proof persists with exact association and is removed by a conflict`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val source = workSource("catalog-proof").copy(
+            workVerification = ProviderWorkVerification.CATALOG_CORROBORATED,
+            catalogIdentityFingerprint = "catalog-work-v1:" + "a".repeat(64),
+        )
+        portfolio.observe(source) shouldBe true
+        ProviderWorkSourceAssociationRepositoryImpl(database).get(source.ref) shouldBe source
+        val conflict = source.copy(
+            workVerification = ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT,
+            observedAt = source.observedAt + 1,
+            catalogIdentityFingerprint = null,
+        )
+        portfolio.observe(conflict) shouldBe true
+        portfolio.get(source.ref) shouldBe conflict
+        portfolio.observe(source) shouldBe true
+        portfolio.get(source.ref) shouldBe conflict
+    }
+
+    @Test
+    fun `creator conflict survives weak refresh until fresh creator evidence`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val source = workSource("creator-review")
+        val conflict = source.copy(workVerification = ProviderWorkVerification.AUTHOR_CONFLICT)
+        portfolio.observe(source) shouldBe true
+        portfolio.observe(conflict) shouldBe true
+        portfolio.observe(source) shouldBe true
+        portfolio.get(source.ref) shouldBe conflict
+        for (state in listOf(
+            ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE,
+            ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED,
+            ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED,
+            ProviderWorkVerification.CATALOG_CORROBORATED,
+        )) {
+            portfolio.observe(conflict.copy(workVerification = state, observedAt = 200L)) shouldBe true
+            portfolio.get(source.ref) shouldBe conflict
+        }
+        val reviewed = source.copy(observedAt = 201L)
+        portfolio.observe(reviewed) shouldBe true
+        portfolio.get(source.ref) shouldBe reviewed
+    }
+
+    @Test
     fun `shadow association cannot take a HID already preferred by another canonical work`() = runBlocking<Unit> {
         database.tsuzuki_titlesQueries.insertTsuzukiTitle(
             id = "other-title",
@@ -261,6 +345,141 @@ class ProviderReadingBindingRepositoryImplTest {
         selections.get("title", "en") shouldBe english
         selections.select(english.copy(selectedAt = 50)) shouldBe true
         selections.get("title", "en") shouldBe english
+    }
+
+    @Test
+    fun `chapter release preference requires exact saved work and mapped chapter evidence`() = runBlocking<Unit> {
+        val ref = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadot:123")
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val selections = MangaAllSourceSelectionRepositoryImpl(database)
+        portfolio.observe(
+            ProviderWorkSourceAssociation(
+                canonicalTitleId = "title",
+                ref = ref,
+                workVerification = ProviderWorkVerification.AUTHOR_CORROBORATED,
+                editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+                observedAt = 10,
+            ),
+        ) shouldBe true
+        driver.execute(
+            null,
+            """
+            INSERT INTO tsuzuki_canonical_chapters
+            (id, canonical_title_id, display_number, type, base_number, confidence, created_at, updated_at)
+            VALUES ('chapter-1', 'title', '1', 'REGULAR', 1, 1.0, 1, 1)
+            """.trimIndent(),
+            0,
+        ).await()
+        val release = ProviderChapterReadingOption(
+            canonicalChapterId = "chapter-1",
+            bindingId = "work-source",
+            providerId = ref.providerId,
+            facetId = ref.facetId,
+            externalWorkId = ref.externalWorkId,
+            providerChapterId = "mangadot:chapters:1",
+        )
+        selections.selectRelease("title", release, 20) shouldBe false
+        selections.select(MangaAllSourceSelection("title", ref, 20)) shouldBe true
+        selections.selectRelease("title", release, 21) shouldBe false
+        driver.execute(
+            null,
+            """
+            INSERT INTO tsuzuki_chapter_evidence
+            (id, canonical_title_id, producer_kind, producer_id, external_chapter_key, raw_label,
+            raw_number, observed_at, confidence, authority_class, mapped_canonical_chapter_id, raw_metadata)
+            VALUES ('evidence-1', 'title', 'PROVIDER', '${ref.evidenceProducerId()}',
+            'mangadot:chapters:1', 'Chapter 1', 1, 1, 1.0, 'PROVIDER_PROVISIONAL', 'chapter-1', X'')
+            """.trimIndent(),
+            0,
+        ).await()
+        selections.selectRelease("title", release, 22) shouldBe true
+        val restored = MangaAllSourceSelectionRepositoryImpl(database)
+        restored.getRelease("title", "chapter-1", ref) shouldBe release.providerChapterId
+        restored.getRelease("other-title", "chapter-1", ref) shouldBe null
+        restored.selectRelease("other-title", release, 23) shouldBe false
+        restored.getRelease("title", "chapter-1", ref.copy(facetId = "pt-br")) shouldBe null
+        restored.getRelease("title", "chapter-1", ref.copy(externalWorkId = "mangadot:999")) shouldBe null
+        restored.selectRelease("title", release.copy(providerChapterId = "mangadot:uploads:999"), 24) shouldBe false
+        restored.getRelease("title", "chapter-1", ref) shouldBe release.providerChapterId
+    }
+
+    @Test
+    fun `catalog source preference cannot reuse an old work proof`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val selections = MangaAllSourceSelectionRepositoryImpl(database)
+        val ref = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadot:123")
+        val proof = "catalog-work-v1:" + "a".repeat(64)
+        val source = ProviderWorkSourceAssociation(
+            canonicalTitleId = "title",
+            ref = ref,
+            workVerification = ProviderWorkVerification.CATALOG_CORROBORATED,
+            editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+            observedAt = 10,
+            catalogIdentityFingerprint = proof,
+        )
+        portfolio.observe(source) shouldBe true
+        selections.select(MangaAllSourceSelection("title", ref, 20)) shouldBe false
+        val choice = MangaAllSourceSelection("title", ref, 20, proof)
+        selections.select(choice) shouldBe true
+        MangaAllSourceSelectionRepositoryImpl(database).get("title", "en") shouldBe choice
+        driver.execute(
+            null,
+            """
+            INSERT INTO tsuzuki_canonical_chapters
+            (id, canonical_title_id, display_number, type, base_number, confidence, created_at, updated_at)
+            VALUES ('chapter-1', 'title', '1', 'REGULAR', 1, 1.0, 1, 1)
+            """.trimIndent(),
+            0,
+        ).await()
+        suspend fun observeChapter(fingerprint: String?) {
+            database.tsuzuki_chapter_evidenceQueries.upsertTsuzukiChapterEvidence(
+                id = "evidence-1",
+                canonicalTitleId = "title",
+                producerKind = "PROVIDER",
+                producerId = ref.evidenceProducerId(),
+                externalChapterKey = "mangadot:chapters:1",
+                rawLabel = "Chapter 1",
+                rawNumber = 1.0,
+                volume = null,
+                title = null,
+                observedAt = 21,
+                confidence = 1.0,
+                authorityClass = "PROVIDER_PROVISIONAL",
+                mappedCanonicalChapterId = "chapter-1",
+                rawMetadata = ProviderEvidenceMetadataCodec.encode(
+                    ProviderEvidenceMetadata(language = "en", catalogWorkFingerprint = fingerprint),
+                ),
+            )
+        }
+        val release = ProviderChapterReadingOption(
+            canonicalChapterId = "chapter-1",
+            bindingId = "catalog-work",
+            providerId = ref.providerId,
+            facetId = ref.facetId,
+            externalWorkId = ref.externalWorkId,
+            providerChapterId = "mangadot:chapters:1",
+            catalogWorkFingerprint = proof,
+        )
+        observeChapter(null)
+        selections.selectRelease("title", release, 22) shouldBe false
+        observeChapter(proof)
+        selections.selectRelease("title", release, 23) shouldBe true
+        val restored = MangaAllSourceSelectionRepositoryImpl(database)
+        restored.getRelease("title", "chapter-1", ref) shouldBe release.providerChapterId
+        val changed = "catalog-work-v1:" + "b".repeat(64)
+        portfolio.observe(source.copy(observedAt = 30, catalogIdentityFingerprint = changed)) shouldBe true
+        // The old preference remains history, but cannot be used as a fresh selection.
+        val fresh = choice.copy(selectedAt = 40, catalogIdentityFingerprint = changed)
+        selections.select(fresh) shouldBe true
+        selections.select(choice.copy(selectedAt = 50)) shouldBe false
+        selections.get("title", "en") shouldBe fresh
+        restored.getRelease("title", "chapter-1", ref) shouldBe null
+        restored.selectRelease("title", release, 51) shouldBe false
+        val freshRelease = release.copy(catalogWorkFingerprint = changed)
+        restored.selectRelease("title", freshRelease, 52) shouldBe false
+        observeChapter(changed)
+        restored.selectRelease("title", freshRelease, 53) shouldBe true
+        restored.getRelease("title", "chapter-1", ref) shouldBe freshRelease.providerChapterId
     }
 
     @Test

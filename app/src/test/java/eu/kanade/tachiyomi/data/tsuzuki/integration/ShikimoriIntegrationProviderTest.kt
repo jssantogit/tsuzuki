@@ -1,11 +1,15 @@
 package eu.kanade.tachiyomi.data.tsuzuki.integration
 
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriCollectionPage
+import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriCollectionQuery
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriIntegrationApi
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.integration.MetadataProvider
 import tachiyomi.domain.tsuzuki.integration.RatingsProvider
 import tachiyomi.domain.tsuzuki.integration.SearchProvider
@@ -75,6 +79,35 @@ class ShikimoriIntegrationProviderTest {
         }
 
         now shouldBe 60_000L
+    }
+
+    @Test
+    fun `public catalog pushes down manhwa kind and advances exact windows`() = runTest {
+        val requests = mutableListOf<ShikimoriCollectionQuery>()
+        val api = object : ShikimoriIntegrationApi {
+            override suspend fun searchPublic(query: String): List<TrackSearch> = error("Unpaged search forbidden")
+            override suspend fun getMangaDetailsPublic(id: Int): TrackSearch? = null
+            override suspend fun collectionSearch(query: ShikimoriCollectionQuery): ShikimoriCollectionPage {
+                requests += query
+                val start = (query.page - 1) * query.limit
+                val rows = (start until minOf(start + query.limit, 26)).map {
+                    track(it.toLong() + 1, "Title $it", 7.0, "2024").apply { publishing_type = "manhwa" }
+                }
+                return ShikimoriCollectionPage(rows, query.page, query.limit, start + rows.size < 26)
+            }
+        }
+        val provider = ShikimoriIntegrationProvider.forTest(api)
+        val query = CatalogQuery(query = "Title", format = CatalogItemFormat.MANHWA, limit = 25)
+        val first = provider.search(query).getOrThrow()
+        val second = provider.search(query.copy(offset = 25)).getOrThrow()
+        first.items.size shouldBe 25
+        first.hasNextPage shouldBe true
+        second.items.single().providerId shouldBe "26"
+        second.hasNextPage shouldBe false
+        requests.map { Triple(it.page, it.limit, it.kind) } shouldBe listOf(
+            Triple(1, 25, "manhwa"),
+            Triple(2, 25, "manhwa"),
+        )
     }
 
     private class FakeShikimoriIntegrationApi(

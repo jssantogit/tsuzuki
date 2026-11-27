@@ -4,6 +4,7 @@ import androidx.core.net.toUri
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.data.track.shikimori.dto.SMCreatorResponse
 import eu.kanade.tachiyomi.data.track.shikimori.dto.SMLibraryIdResponse
 import eu.kanade.tachiyomi.data.track.shikimori.dto.SMOAuth
 import eu.kanade.tachiyomi.data.track.shikimori.dto.SMSearchResult
@@ -31,6 +32,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.domain.tsuzuki.integration.CatalogCreatorAliasEvidence
 import uy.kohesive.injekt.injectLazy
 import tachiyomi.domain.track.model.Track as DomainTrack
 
@@ -128,6 +130,9 @@ class ShikimoriApi(
                 |mangas(search: $query, limit: 20, kind:"!light_novel,!novel") {
                     |id
                     |name
+                    |english
+                    |japanese
+                    |synonyms
                     |chapters
                     |kind
                     |poster {
@@ -164,7 +169,7 @@ class ShikimoriApi(
                 )
                     .awaitSuccess()
                     .parseAs<SMSearchResult>()
-                    .data.mangas
+                    .completeMangas()
                     .map { it.toTrack(trackerId) }
             }
         }
@@ -226,6 +231,9 @@ class ShikimoriApi(
                     |mangas($arguments) {
                         |id
                         |name
+                        |english
+                        |japanese
+                        |synonyms
                         |chapters
                         |kind
                         |poster {
@@ -260,7 +268,7 @@ class ShikimoriApi(
                 )
                     .awaitSuccess()
                     .parseAs<SMSearchResult>()
-                    .data.mangas
+                    .completeMangas()
                     .map { it.toTrack(trackerId) }
             }
             ShikimoriCollectionPage(
@@ -281,6 +289,9 @@ class ShikimoriApi(
                 |mangas(ids: $query, limit: 1, kind:"!light_novel,!novel") {
                     |id
                     |name
+                    |english
+                    |japanese
+                    |synonyms
                     |chapters
                     |kind
                     |poster {
@@ -318,10 +329,24 @@ class ShikimoriApi(
                 )
                     .awaitSuccess()
                     .parseAs<SMSearchResult>()
-                    .data.mangas
-                    .firstOrNull()
+                    .exactManga(id.toLong())
                     ?.toTrack(trackerId)
             }
+        }
+    }
+
+    // Separate best-effort query: a schema or staff failure cannot break
+    // regular catalog details. Only credits nested under the exact manga ID
+    // are eligible, and every alias belongs to the same published person ID.
+    override suspend fun getVerifiedCreatorAliases(id: Int): List<CatalogCreatorAliasEvidence> = withIOContext {
+        val payload = creatorAliasPayload(id)
+        with(json) {
+            publicClient.newCall(
+                POST(GRAPHQL_API_URL, body = payload.toString().toRequestBody(jsonMime)),
+            )
+                .awaitSuccess()
+                .parseAs<SMCreatorResponse>()
+                .verifiedAliases(id.toLong())
         }
     }
 
@@ -430,6 +455,30 @@ class ShikimoriApi(
         private const val GRAPHQL_API_URL = "$BASE_URL/api/graphql"
         private const val OAUTH_URL = "$BASE_URL/oauth/token"
         private const val LOGIN_URL = "$BASE_URL/oauth/authorize"
+
+        internal fun creatorAliasPayload(id: Int): JsonObject {
+            require(id > 0)
+            val query = $$"""
+            |query($id: String) {
+                |mangas(ids: $id, limit: 1, kind:"!light_novel,!novel") {
+                    |id
+                    |personRoles {
+                        |person {
+                            |id
+                            |name
+                            |japanese
+                            |russian
+                        |}
+                        |rolesEn
+                    |}
+                |}
+            |}
+            """.trimMargin()
+            return buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") { put("id", id.toString()) }
+            }
+        }
 
         internal fun userAgent(): String =
             "Tsuzuki v${BuildConfig.VERSION_NAME} (${BuildConfig.APPLICATION_ID})"

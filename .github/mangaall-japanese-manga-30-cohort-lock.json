@@ -1,0 +1,292 @@
+{
+  "cohort": "MANGA_30_FIXED_20261126",
+  "format": "manga",
+  "originalLanguage": "ja",
+  "freezeUntil": "THIRTY_OF_THIRTY_VERIFIED_AND_EXPLICITLY_APPROVED",
+  "status": "BIBLIOGRAPHIC_EXISTENCE_VERIFIED_RUNTIME_NOT_STARTED",
+  "baseline": {
+    "cohort": "MANHWA_30_FIXED_20261123",
+    "functionalSha": "e1fb22b3d182b9029b55f3902310fc5205cb08fa",
+    "canonicalRun": 45909425855,
+    "readerControlledRun": 45911409832
+  },
+  "works": [
+    "High School DxD",
+    "To Love Ru",
+    "Shinmai Maou no Testament",
+    "Gachiakuta",
+    "Date A Live",
+    "Gotoubun no Hanayome",
+    "Pandora Hearts",
+    "Noragami",
+    "Helck",
+    "Houseki no Kuni",
+    "D.Gray-man",
+    "Gleipnir",
+    "Kono Oto Tomare!",
+    "Karakuri Circus",
+    "Sankarea",
+    "Beelzebub",
+    "Soredemo Machi wa Mawatteiru",
+    "Ao Haru Ride",
+    "Kamisama Hajimemashita",
+    "Yamada-kun to 7-nin no Majo",
+    "Ajin",
+    "Hinamatsuri",
+    "Kemono Jihen",
+    "Tengoku Daimakyou",
+    "Orange",
+    "Tomodachi Game",
+    "Kyoukai no Rinne",
+    "Ragna Crimson",
+    "Barakamon",
+    "Kimi no Iru Machi"
+  ],
+  "bibliographicEvidence": [
+    {
+      "index": 1,
+      "title": "High School DxD",
+      "source": "https://yenpress.com/series/high-school-dxd-manga",
+      "origin": "light_novel_adaptation",
+      "creatorHint": "Ichiei Ishibumi; Hiroji Mishima",
+      "editionHint": "Principal manga adaptation, not the light novel or spin-offs"
+    },
+    {
+      "index": 2,
+      "title": "To Love Ru",
+      "source": "https://sevenseasentertainment.com/series/to-love-ru/",
+      "origin": "original_manga",
+      "creatorHint": "Saki Hasemi; Kentaro Yabuki",
+      "editionHint": "Original series, not To Love Ru Darkness"
+    },
+    {
+      "index": 3,
+      "title": "Shinmai Maou no Testament",
+      "source": "https://sevenseasentertainment.com/series/the-testament-of-sister-new-devil/",
+      "origin": "light_novel_adaptation",
+      "creatorHint": "Tetsuto Uesu; Miyakokasiwa",
+      "editionHint": "The Testament of Sister New Devil, not Storm! or novel"
+    },
+    {
+      "index": 4,
+      "title": "Gachiakuta",
+      "source": "https://kodansha.us/series/gachiakuta/",
+      "origin": "original_manga",
+      "creatorHint": "Kei Urana",
+      "editionHint": null
+    },
+    {
+      "index": 5,
+      "title": "Date A Live",
+      "source": "https://comic-walker.com/detail/KC_004784_S",
+      "origin": "light_novel_adaptation",
+      "creatorHint": "Koushi Tachibana; Sekihiko Inui",
+      "editionHint": "2013/2014 Sekihiko Inui adaptation, To(h)ka Dead End; reject Ringo adaptation, light novel and spin-offs"
+    },
+    {
+      "index": 6,
+      "title": "Gotoubun no Hanayome",
+      "source": "https://kodansha.us/series/the-quintessential-quintuplets/",
+      "origin": "original_manga",
+      "creatorHint": "Negi Haruba",
+      "editionHint": "The Quintessential Quintuplets"
+    },
+    {
+      "index": 7,
+      "title": "Pandora Hearts",
+      "source": "https://yenpress.com/series/pandorahearts",
+      "origin": "original_manga",
+      "creatorHint": "Jun Mochizuki",
+      "editionHint": "PandoraHearts"
+    },
+    {
+      "index": 8,
+      "title": "Noragami",
+      "source": "https://kodansha.us/series/noragami-stray-god/volume-1/",
+      "origin": "original_manga",
+      "creatorHint": "Adachitoka",
+      "editionHint": "Noragami: Stray God, not Stray Stories"
+    },
+    {
+      "index": 9,
+      "title": "Helck",
+      "source": "https://www.viz.com/helck",
+      "origin": "original_manga",
+      "creatorHint": "Nanaki Nanao",
+      "editionHint": null
+    },
+    {
+      "index": 10,
+      "title": "Houseki no Kuni",
+      "source": "https://kodansha.us/series/land-of-the-lustrous/",
+      "origin": "original_manga",
+      "creatorHint": "Haruko Ichikawa",
+      "editionHint": "Land of the Lustrous"
+    },
+    {
+      "index": 11,
+      "title": "D.Gray-man",
+      "source": "https://en.wikipedia.org/wiki/D.Gray-man",
+      "origin": "original_manga",
+      "creatorHint": "Katsura Hoshino",
+      "editionHint": null
+    },
+    {
+      "index": 12,
+      "title": "Gleipnir",
+      "source": "https://kodansha.us/series/gleipnir/",
+      "origin": "original_manga",
+      "creatorHint": "Sun Takeda",
+      "editionHint": null
+    },
+    {
+      "index": 13,
+      "title": "Kono Oto Tomare!",
+      "source": "https://www.crunchyroll.com/pt-pt/news/latest/2022/8/4/mang-kono-oto-tomare-sounds-of-life-celebra-aniversrio-de-10-anos-com-exposio-artstica-no-japo",
+      "origin": "original_manga",
+      "creatorHint": "Amyu",
+      "editionHint": "Sounds of Life"
+    },
+    {
+      "index": 14,
+      "title": "Karakuri Circus",
+      "source": "https://en.wikipedia.org/wiki/Karakuri_Circus",
+      "origin": "original_manga",
+      "creatorHint": "Kazuhiro Fujita",
+      "editionHint": null
+    },
+    {
+      "index": 15,
+      "title": "Sankarea",
+      "source": "https://kodansha.us/series/sankarea/",
+      "origin": "original_manga",
+      "creatorHint": "Mitsuru Hattori",
+      "editionHint": null
+    },
+    {
+      "index": 16,
+      "title": "Beelzebub",
+      "source": "https://en.wikipedia.org/wiki/Beelzebub_(manga)",
+      "origin": "original_manga",
+      "creatorHint": "Ryuhei Tamura",
+      "editionHint": "Main serialized manga, not pilot one-shot"
+    },
+    {
+      "index": 17,
+      "title": "Soredemo Machi wa Mawatteiru",
+      "source": "https://anilist.co/manga/33042/Soredemo-Machi-wa-Mawatteiru/",
+      "origin": "original_manga",
+      "creatorHint": "Masakazu Ishiguro",
+      "editionHint": "And Yet the Town Moves"
+    },
+    {
+      "index": 18,
+      "title": "Ao Haru Ride",
+      "source": "https://www.viz.com/ao-haru-ride",
+      "origin": "original_manga",
+      "creatorHint": "Io Sakisaka",
+      "editionHint": null
+    },
+    {
+      "index": 19,
+      "title": "Kamisama Hajimemashita",
+      "source": "https://www.viz.com/kamisama-kiss",
+      "origin": "original_manga",
+      "creatorHint": "Julietta Suzuki",
+      "editionHint": "Kamisama Kiss"
+    },
+    {
+      "index": 20,
+      "title": "Yamada-kun to 7-nin no Majo",
+      "source": "https://www.crunchyroll.com/yamada-kun-and-the-seven-witches",
+      "origin": "original_manga",
+      "creatorHint": "Miki Yoshikawa",
+      "editionHint": "Yamada-kun and the Seven Witches"
+    },
+    {
+      "index": 21,
+      "title": "Ajin",
+      "source": "https://kodansha.us/book/ajin-demi-human/",
+      "origin": "original_manga",
+      "creatorHint": "Gamon Sakurai; Tsuina Miura",
+      "editionHint": "Ajin: Demi-Human; creator-role changes must not be treated as automatic conflict"
+    },
+    {
+      "index": 22,
+      "title": "Hinamatsuri",
+      "source": "https://books.google.com/books/about/Hinamatsuri.html?id=OzrY0QEACAAJ",
+      "origin": "original_manga",
+      "creatorHint": "Masao Ohtake",
+      "editionHint": null
+    },
+    {
+      "index": 23,
+      "title": "Kemono Jihen",
+      "source": "https://sevenseasentertainment.com/series/kemono-jihen/",
+      "origin": "original_manga",
+      "creatorHint": "Sho Aimoto",
+      "editionHint": null
+    },
+    {
+      "index": 24,
+      "title": "Tengoku Daimakyou",
+      "source": "https://www.denpa.pub/book/heavenly-delusion-volume-1",
+      "origin": "original_manga",
+      "creatorHint": "Masakazu Ishiguro",
+      "editionHint": "Heavenly Delusion"
+    },
+    {
+      "index": 25,
+      "title": "Orange",
+      "source": "https://sevenseasentertainment.com/series/orange/",
+      "origin": "original_manga",
+      "creatorHint": "Ichigo Takano",
+      "editionHint": "Title collision control; main manga"
+    },
+    {
+      "index": 26,
+      "title": "Tomodachi Game",
+      "source": "https://www.crunchyroll.com/pt-br/news/latest/2024/5/10/tomodachi-game-manga-final",
+      "origin": "original_manga",
+      "creatorHint": "Mikoto Yamaguchi; Yuki Sato",
+      "editionHint": null
+    },
+    {
+      "index": 27,
+      "title": "Kyoukai no Rinne",
+      "source": "https://www.viz.com/rin-ne",
+      "origin": "original_manga",
+      "creatorHint": "Rumiko Takahashi",
+      "editionHint": "RIN-NE"
+    },
+    {
+      "index": 28,
+      "title": "Ragna Crimson",
+      "source": "https://squareenixmangaandbooks.square-enix-games.com/en-us/series/ragna-crimson",
+      "origin": "original_manga",
+      "creatorHint": "Daiki Kobayashi",
+      "editionHint": null
+    },
+    {
+      "index": 29,
+      "title": "Barakamon",
+      "source": "https://yenpress.com/series/barakamon",
+      "origin": "original_manga",
+      "creatorHint": "Satsuki Yoshino",
+      "editionHint": "Main manga, not Handa-kun"
+    },
+    {
+      "index": 30,
+      "title": "Kimi no Iru Machi",
+      "source": "https://onisaga.com/title/a-town-where-you-live?tab=details",
+      "origin": "original_manga",
+      "creatorHint": "Kouji Seo",
+      "editionHint": "A Town Where You Live"
+    }
+  ],
+  "notes": [
+    "Bibliographic references establish existence only. Creator and edition hints require independent catalog identity and source evidence; never grant a binding based on hints.",
+    "No source availability, chapter inventory, live reader or editorial equivalence is asserted.",
+    "Separate corpus; original Korean cohort and its hashes remain unchanged. Use generic language parameter ja; do not remove language filtering or silently reuse Korean plans."
+  ]
+}

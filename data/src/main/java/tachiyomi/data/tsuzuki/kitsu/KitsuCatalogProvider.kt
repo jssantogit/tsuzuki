@@ -4,6 +4,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CancellationException
 import tachiyomi.data.tsuzuki.kitsu.client.KitsuClient
 import tachiyomi.data.tsuzuki.kitsu.dto.KitsuMangaResource
 import tachiyomi.data.tsuzuki.kitsu.dto.KitsuMappingResource
@@ -121,6 +122,7 @@ class KitsuCatalogProvider(
         resource: KitsuMangaResource,
         included: List<KitsuMappingResource> = emptyList(),
     ): CatalogItem {
+        check(resource.type == "manga" && resource.id.isNotBlank())
         val attr = resource.attributes
         val bestTitle = attr.canonicalTitle?.takeIf { it.isNotBlank() }
             ?: attr.titles?.en?.takeIf { it.isNotBlank() }
@@ -181,28 +183,7 @@ class KitsuCatalogProvider(
             status = mappedStatus,
             format = mappedFormat,
             score = score,
-            externalIds = included
-                .asSequence()
-                .filter { mapping ->
-                    mapping.type == "mappings" &&
-                        mapping.attributes.externalSite == "myanimelist/manga" &&
-                        (
-                            mapping.id in resource.relationships.mappings.data
-                                .asSequence()
-                                .filter { identifier -> identifier.type == "mappings" }
-                                .map { identifier -> identifier.id }
-                                .toSet() ||
-                                mapping.relationships.item.data?.let { item ->
-                                    item.type == "manga" && item.id == resource.id
-                                } == true
-                            )
-                }
-                .mapNotNull { mapping ->
-                    mapping.attributes.externalId
-                        .takeIf(String::isNotBlank)
-                        ?.let { "mal" to it }
-                }
-                .toMap(),
+            externalIds = verifiedMalMapping(resource, included),
             genres = emptyList(),
             tags = emptyList(),
             popularity = attr.userCount?.toLong(),
@@ -212,6 +193,28 @@ class KitsuCatalogProvider(
             chapterCount = attr.chapterCount,
             volumeCount = attr.volumeCount,
         )
+    }
+
+    private fun verifiedMalMapping(
+        resource: KitsuMangaResource,
+        included: List<KitsuMappingResource>,
+    ): Map<String, String> {
+        val linked = resource.relationships.mappings.data
+            .filter { it.type == "mappings" }
+            .map { it.id }
+            .toSet()
+        val ids = included.filter { mapping ->
+            if (mapping.type != "mappings" || mapping.attributes.externalSite != "myanimelist/manga") {
+                return@filter false
+            }
+            val item = mapping.relationships.item.data
+            val sameItem = item?.let { it.type == "manga" && it.id == resource.id }
+            // A contradictory explicit item backlink is never proof even if
+            // the manga's relationship list mentions this mapping.
+            sameItem != false && (mapping.id in linked || sameItem == true)
+        }.map { it.attributes.externalId }.distinct()
+        val id = ids.singleOrNull()?.takeIf { it.matches(Regex("[1-9][0-9]*")) }
+        return id?.let { mapOf("mal" to it) }.orEmpty()
     }
 
     private fun CatalogItemFormat.toKitsuSubtype(): String? = when (this) {
@@ -231,6 +234,8 @@ class KitsuCatalogProvider(
             onSuccess = { value ->
                 try {
                     Result.success(transform(value))
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     if (e is CatalogError) {
                         Result.failure(e)
@@ -240,6 +245,7 @@ class KitsuCatalogProvider(
                 }
             },
             onFailure = { error ->
+                if (error is CancellationException) throw error
                 if (error is CatalogError) {
                     Result.failure(error)
                 } else {
