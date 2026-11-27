@@ -1,11 +1,17 @@
 package eu.kanade.tachiyomi.data.tsuzuki.integration
 
+import eu.kanade.tachiyomi.data.track.kitsu.KitsuPublicCreatorApi
+import eu.kanade.tachiyomi.data.track.kitsu.KitsuPublicMangaCredits
+import eu.kanade.tachiyomi.data.track.kitsu.KitsuPublicStaffConnection
+import eu.kanade.tachiyomi.data.track.kitsu.KitsuPublicStaffPageInfo
 import eu.kanade.tachiyomi.data.track.kitsu.KitsuUserLibraryApi
 import eu.kanade.tachiyomi.data.track.kitsu.KitsuUserListEntry
 import eu.kanade.tachiyomi.data.track.kitsu.dto.KitsuManga
 import eu.kanade.tachiyomi.data.track.kitsu.dto.KitsuMangaPoster
 import eu.kanade.tachiyomi.data.track.kitsu.dto.KitsuMangaPosters
+import eu.kanade.tachiyomi.data.track.kitsu.dto.KitsuMangaStaff
 import eu.kanade.tachiyomi.data.track.kitsu.dto.KitsuMangaStaffData
+import eu.kanade.tachiyomi.data.track.kitsu.dto.KitsuMangaStaffPerson
 import eu.kanade.tachiyomi.data.track.kitsu.dto.KitsuMangaTitles
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
@@ -280,6 +286,47 @@ class KitsuIntegrationProviderTest {
 
         match?.rating?.value shouldBe 79.88
         match?.verifiedIdentity shouldBe false
+    }
+
+    @Test
+    fun `kitsu public credits require same exact manga id format and terminal staff page`() = runTest {
+        val detail = KitsuSingleMangaResponse(
+            data = KitsuMangaResource(
+                id = "42",
+                type = "manga",
+                attributes = KitsuMangaAttributes(canonicalTitle = "Work", subtype = "manga"),
+            ),
+        )
+        val staff = KitsuPublicStaffConnection(
+            nodes = listOf(
+                KitsuMangaStaff("Story", KitsuMangaStaffPerson("Author")),
+                KitsuMangaStaff("Art", KitsuMangaStaffPerson("Artist")),
+                KitsuMangaStaff("Cover Art", KitsuMangaStaffPerson("Cover contributor")),
+            ),
+            pageInfo = KitsuPublicStaffPageInfo(false),
+        )
+        val verified = KitsuPublicMangaCredits("42", "MANGA", staff)
+        suspend fun detailWith(credits: KitsuPublicMangaCredits?): CatalogItem {
+            val provider = KitsuIntegrationProvider.forTest(
+                delegate = KitsuCatalogProvider(FakeKitsuClient(detailResult = Result.success(detail))),
+                userLibraryApi = object : KitsuUserLibraryApi {
+                    override suspend fun getUserMangaList(): List<KitsuUserListEntry> = emptyList()
+                },
+                publicCreatorApi = KitsuPublicCreatorApi { id ->
+                    id shouldBe "42"
+                    credits
+                },
+            )
+            return provider.getDetails("42").getOrThrow()
+        }
+        val accepted = detailWith(verified)
+        accepted.authors shouldBe listOf("Author")
+        accepted.artists shouldBe listOf("Artist")
+        detailWith(verified.copy(id = "43")).authors shouldBe emptyList()
+        detailWith(verified.copy(subtype = "NOVEL")).artists shouldBe emptyList()
+        detailWith(verified.copy(staff = staff.copy(pageInfo = KitsuPublicStaffPageInfo(true))))
+            .authors shouldBe emptyList()
+        detailWith(null).authors shouldBe emptyList()
     }
 
     @Test

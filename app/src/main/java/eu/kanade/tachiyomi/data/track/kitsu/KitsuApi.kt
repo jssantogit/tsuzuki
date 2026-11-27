@@ -36,7 +36,7 @@ class KitsuApi(
     private val trackerId: Long,
     private val client: OkHttpClient,
     interceptor: KitsuInterceptor,
-) : KitsuUserLibraryApi {
+) : KitsuUserLibraryApi, KitsuPublicCreatorApi {
 
     private val json: Json by injectLazy()
 
@@ -473,6 +473,41 @@ class KitsuApi(
                     .awaitSuccess()
                     .parseAs<KitsuCurrentAccountResult>()
                     .data.currentAccount
+            }
+        }
+    }
+
+    override suspend fun getPublicCreatorCredits(id: String): KitsuPublicMangaCredits? {
+        require(id.matches(Regex("[1-9][0-9]*")))
+        val query = $"""
+            |query Credits($id: ID!) {
+              |findMangaById(id: $id) {
+                |id
+                |subtype
+                |staff(first: 32) {
+                  |nodes { role person { name } }
+                  |pageInfo { hasNextPage }
+                |}
+              |}
+            |}
+        """.trimMargin()
+        val payload = buildJsonObject {
+            put("query", query)
+            putJsonObject("variables") { put("id", id) }
+        }
+        // Catalog enrichment never requires the user's account or OAuth token.
+        return withIOContext {
+            with(json) {
+                val response = client.newCall(
+                    POST(GRAPHQL_API_URL, body = payload.toString().toRequestBody(jsonMime)),
+                )
+                    .awaitSuccess()
+                    .parseAs<KitsuPublicCreatorResponse>()
+                check(response.errors.isEmpty())
+                val credits = response.data?.findMangaById ?: return@withIOContext null
+                check(credits.id == id && !credits.staff.pageInfo.hasNextPage)
+                check(credits.staff.nodes.size <= 32)
+                credits
             }
         }
     }

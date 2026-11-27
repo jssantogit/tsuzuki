@@ -32,7 +32,7 @@ class KitsuHttpClient(
         json: Json,
     ) : this(network.client, json)
 
-    private val baseUrl: HttpUrl = "https://kitsu.io/api/edge/".toHttpUrl()
+    private val baseUrl: HttpUrl = "https://kitsu.app/api/edge/".toHttpUrl()
 
     private val kitsuJson: Json = Json(json) {
         ignoreUnknownKeys = true

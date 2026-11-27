@@ -6,6 +6,7 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.track.kitsu.KitsuPublicCreatorApi
 import eu.kanade.tachiyomi.data.track.kitsu.KitsuUserLibraryApi
 import eu.kanade.tachiyomi.data.track.kitsu.KitsuUserListEntry
 import eu.kanade.tachiyomi.data.track.kitsu.dto.KitsuManga
@@ -51,6 +52,7 @@ class KitsuIntegrationProvider private constructor(
     private val delegate: KitsuCatalogProvider,
     private val userLibraryApi: KitsuUserLibraryApi,
     override val connection: Flow<Boolean>,
+    private val publicCreatorApi: KitsuPublicCreatorApi? = null,
 ) : SearchProvider, DiscoveryProvider, MetadataProvider, RatingsProvider, UserListProvider {
 
     @Inject
@@ -61,6 +63,7 @@ class KitsuIntegrationProvider private constructor(
         delegate = delegate,
         userLibraryApi = trackerManager.kitsu.integrationApi,
         connection = trackerManager.kitsu.isLoggedInFlow,
+        publicCreatorApi = trackerManager.kitsu.publicCreatorApi,
     )
 
     internal constructor(
@@ -90,7 +93,38 @@ class KitsuIntegrationProvider private constructor(
             ),
         )
 
-    override suspend fun getDetails(externalId: String) = delegate.getDetails(externalId)
+    override suspend fun getDetails(externalId: String): Result<CatalogItem> = captureResult {
+        val item = delegate.getDetails(externalId).getOrThrow()
+        val api = publicCreatorApi ?: return@captureResult item
+        if (item.provider != integrationId.value || item.providerId != externalId) {
+            return@captureResult item
+        }
+        val credits = try {
+            api.getPublicCreatorCredits(externalId)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // Preserve ordinary metadata availability; no fabricated creator
+            // evidence is returned when the public staff query fails.
+            null
+        } ?: return@captureResult item
+        if (credits.id != externalId || credits.subtype.toCatalogFormat() != item.format ||
+            item.format == CatalogItemFormat.UNKNOWN || credits.staff.pageInfo.hasNextPage ||
+            credits.staff.nodes.size > 32
+        ) {
+            return@captureResult item
+        }
+        val nodes = credits.staff.nodes
+        fun names(vararg roles: String): List<String> = nodes
+            .filter { it.role.trim().lowercase() in roles }
+            .map { it.person.name.trim() }
+            .filter { it.isNotBlank() && it.length <= 128 }
+            .distinct()
+        item.copy(
+            authors = names("story", "story & art"),
+            artists = names("art", "story & art"),
+        )
+    }
 
     override suspend fun ratings(externalId: String): Result<List<ExternalRating>> =
         delegate.getDetails(externalId).map { item ->
@@ -341,10 +375,12 @@ class KitsuIntegrationProvider private constructor(
             delegate: KitsuCatalogProvider,
             userLibraryApi: KitsuUserLibraryApi,
             connection: Flow<Boolean> = flowOf(true),
+            publicCreatorApi: KitsuPublicCreatorApi? = null,
         ): KitsuIntegrationProvider = KitsuIntegrationProvider(
             delegate = delegate,
             userLibraryApi = userLibraryApi,
             connection = connection,
+            publicCreatorApi = publicCreatorApi,
         )
     }
 }
