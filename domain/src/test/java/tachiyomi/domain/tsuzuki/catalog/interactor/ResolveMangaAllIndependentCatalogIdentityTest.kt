@@ -3,6 +3,7 @@ package tachiyomi.domain.tsuzuki.catalog.interactor
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
@@ -567,6 +568,36 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
         }
     }
 
+    @Test
+    fun `catalog search failures preserve closed reasons without authorizing identity`() = runTest {
+        val timeout = source("mal", searchResult = {
+            delay(30_000)
+            Result.success(CatalogPage(emptyList(), false))
+        })
+        val failed = source("kitsu", searchResult = {
+            Result.failure(IllegalStateException("unavailable"))
+        })
+        val invalid = source("shikimori", search = {
+            CatalogPage(listOf(item("mal", "42", "Work")), false)
+        })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(timeout, failed, invalid)).execute("Work")
+        result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_UNAVAILABLE
+        result.identity shouldBe null
+        result.catalogsFailed shouldBe 3
+        result.searchFailures shouldBe mapOf(
+            MangaAllCatalogSearchFailure.TIMEOUT to 1,
+            MangaAllCatalogSearchFailure.REQUEST_FAILED to 1,
+            MangaAllCatalogSearchFailure.INVALID_RESPONSE to 1,
+        )
+        val available = source("mangaupdates", search = {
+            CatalogPage(listOf(item("mangaupdates", "42", "Work")), false)
+        }, detail = { error("Partial search cannot authorize identity") })
+        val partial = ResolveMangaAllIndependentCatalogIdentity(registry(available, invalid)).execute("Work")
+        partial.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE
+        partial.identity shouldBe null
+        partial.searchFailures shouldBe mapOf(MangaAllCatalogSearchFailure.INVALID_RESPONSE to 1)
+    }
+
     private fun item(
         provider: String,
         id: String,
@@ -585,7 +616,7 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
         id: String,
         search: (CatalogQuery) -> CatalogPage = { CatalogPage(emptyList(), false) },
         detail: (String) -> CatalogItem = { item(id, it, "Work") },
-        searchResult: ((CatalogQuery) -> Result<CatalogPage>)? = null,
+        searchResult: (suspend (CatalogQuery) -> Result<CatalogPage>)? = null,
     ) = object : SearchProvider, MetadataProvider {
         override val integrationId = IntegrationId(id)
         override suspend fun search(query: CatalogQuery): Result<CatalogPage> =

@@ -141,6 +141,20 @@ def parse_reader(log, shard, restored, process_ok, catalog, owners, focused=Fals
                        "status": rows.get(i, "NOT_OBSERVED")} for i in sorted(indices)]}
 
 
+def collect_catalog_search_failures(log, shard, focused=False):
+    pattern = (r"MANGAALL_CATALOG_SEARCH_FAILURE\|index=(\d+)\|attempt=([123])"
+               r"\|reason=(REQUEST_FAILED|INVALID_RESPONSE|TIMEOUT)\|count=(\d{1,2})(?=\s|$)")
+    rows = {}
+    for match in re.finditer(pattern, log):
+        index, attempt, reason, count = match.groups()
+        index, attempt, count = int(index), int(attempt), int(count)
+        key = (index, attempt, reason)
+        if index not in expected_indices(shard, focused) or key in rows or not 0 < count <= 32:
+            return []
+        rows[key] = dict(index=index, attempt=attempt, reason=reason, count=count)
+    return [rows[k] for k in sorted(rows)]
+
+
 def collect_diagnostics(log, shard, focused=False):
     fields = ("chapters", "chapterOne", "evidence", "associations", "verified",
               "dexOptions", "dotOptions", "rivalReleaseRefs")
@@ -322,6 +336,7 @@ def invoke(shard, phase, catalog, reader=False, focused=False, cohort=None):
         log, ok = "", False
     parsed = parse_phase(log,shard,phase,ok,catalog,owners,focused)
     if phase == "COLLECT":
+        parsed["catalogSearchFailures"] = collect_catalog_search_failures(log, shard, focused)
         parsed["diagnostics"] = collect_diagnostics(log, shard, focused)
         parsed["ranges"] = collect_ranges(log, shard, focused)
         parsed["acquisition"] = collect_acquisition(log, shard, focused)
@@ -376,6 +391,8 @@ def run(shard, catalog, reader=False, focused=False, cohort=None):
         for phase in ("collect", "restore"):
             for row in report[phase]["works"]:
                 print(f"MANGAALL_CANONICAL_PERSISTENCE|phase={phase.upper()}|index={row['index']}|outcome={row['status']}")
+        for row in report["collect"].get("catalogSearchFailures", []):
+            print("MANGAALL_CATALOG_SEARCH_FAILURE|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("diagnostics", []):
             print("MANGAALL_CANONICAL_DIAGNOSTIC|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("ranges", []):
@@ -451,6 +468,13 @@ def aggregate(catalog, reader=False, focused=False, cohort=None):
 
 
 def selftest():
+    failure = "MANGAALL_CATALOG_SEARCH_FAILURE|index=1|attempt=1|reason=TIMEOUT|count=1"
+    assert collect_catalog_search_failures(failure, 0) == [
+        dict(index=1, attempt=1, reason="TIMEOUT", count=1)]
+    assert collect_catalog_search_failures(failure + "\n" + failure, 0) == []
+    assert collect_catalog_search_failures(failure, 1) == []
+    assert collect_catalog_search_failures(failure.replace("TIMEOUT", "OTHER"), 0) == []
+
     rejected = ("MANGAALL_CANONICAL_OPTION_REJECTION|index=1|source=mangadot"
                 "|reason=SOURCE_LANGUAGE_MISSING|identity=NONE|count=2")
     assert collect_option_rejections(rejected, 0) == [

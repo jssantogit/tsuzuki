@@ -563,8 +563,23 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 requiredCreatorNames = required,
                 requiredCreatorAliases = creatorAliases,
             )
-            // Retry only transient catalog unavailability against the same
-            // independent owner. Ambiguous or unverified identities stay red.
+            fun reportCatalogSearchFailures(attempt: Int) {
+                for ((reason, count) in identity.searchFailures) {
+                    instrument.sendStatus(
+                        1,
+                        Bundle().apply {
+                            putString(
+                                "stream",
+                                "MANGAALL_CATALOG_SEARCH_FAILURE|index=$index|attempt=$attempt" +
+                                    "|reason=${reason.name}|count=$count",
+                            )
+                        },
+                    )
+                }
+            }
+            reportCatalogSearchFailures(1)
+            // Retry unavailable searches against the same independent owner.
+            // Ambiguous or unverified identities stay red.
             for (attempt in 1..2) {
                 if (identity.status != MangaAllCatalogIdentityStatus.CATALOG_UNAVAILABLE) break
                 delay(attempt * 2_000L)
@@ -575,6 +590,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     requiredCreatorNames = required,
                     requiredCreatorAliases = creatorAliases,
                 )
+                reportCatalogSearchFailures(attempt + 1)
             }
             if (identity.status != MangaAllCatalogIdentityStatus.RESOLVED) return identity.status.name
             val owner = requireNotNull(identity.identity)
