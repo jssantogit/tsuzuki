@@ -205,7 +205,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
 
         fun ownerScope(index: Int): String = if (catalogScope == "explicit_plan") {
             plan[index - 1].getValue("catalog").jsonPrimitive.content.also {
-                require(it in setOf("mangaupdates", "shikimori") || japanese && it in setOf("mal", "kitsu"))
+                require(it in setOf("mangaupdates", "shikimori") || (japanese && it in setOf("mal", "kitsu")))
             }
         } else {
             catalogScope

@@ -234,3 +234,5 @@ jobs:
 # Re-run native catalog contract regressions after exact Spotless formatting correction.
 
 # Retry after auditing the instrumentation line-length violations in both corpus runners.
+
+# Retry after clarifying canonical owner scope condition.
