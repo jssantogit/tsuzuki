@@ -222,3 +222,5 @@ jobs:
 # The live marker is intentionally absent from this commit message.
 
 # Run the exact frozen 30-work canonical gate after the successful strict catalog receipt.
+
+# Bind the opt-in to strict catalog run 46068650846; no source tree changes.
