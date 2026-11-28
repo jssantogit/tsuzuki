@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FV30 eight-case comparative diagnostic; not an independent holdout rerun."""
+"""FV30 remaining-case comparative diagnostic; not an independent holdout rerun."""
 import argparse
 import base64
 import json
@@ -10,7 +10,8 @@ from pathlib import Path
 from run_mangaall_fv30_first_pass import locked, parse, selftest, SCOPES
 from run_mangaall_frozen30_independent_catalog import APP, RUNNER, TEST, adb
 
-PENDING = (2, 4, 14, 22, 27, 28, 29, 30)
+PENDING = (2, 14, 22, 29)
+EXPECTED_OBSERVATIONS = len(PENDING) * len(SCOPES)
 OUT = Path("fv30-focused-results")
 DIAGNOSTIC = re.compile(
     r"MANGAALL_CATALOG_DIAGNOSTIC\|index=(\d+)\|offset=(\d+)\|"
@@ -93,11 +94,11 @@ def aggregate(rows, digest):
     resolved = {w["index"] for w in reports if w.get("status") == "CATALOG_IDENTITY_ATTESTED"}
     OUT.mkdir(exist_ok=True)
     (OUT / "summary.json").write_text(json.dumps(dict(scope="FV30_FOCUSED_CATALOG_DIAGNOSTIC",
-        corpusSha256=digest, complete=valid, observed=len(reports), expected=16,
+        corpusSha256=digest, complete=valid, observed=len(reports), expected=EXPECTED_OBSERVATIONS,
         candidateWorks=len(resolved), independentEditionOracle="PENDING", reading="NOT_RUN",
         works=reports), indent=2) + "\n")
-    print(f"FV30_FOCUSED|diagnosticComplete={valid}|observations={len(reports)}/16|candidateWorks={len(resolved)}/8|reading=NOT_RUN")
-    return valid and len(reports) == 16
+    print(f"FV30_FOCUSED|diagnosticComplete={valid}|observations={len(reports)}/{EXPECTED_OBSERVATIONS}|candidateWorks={len(resolved)}/{len(PENDING)}|reading=NOT_RUN")
+    return valid and len(reports) == EXPECTED_OBSERVATIONS
 
 
 def main():
