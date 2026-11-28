@@ -242,3 +242,5 @@ jobs:
 # Repeat the strict gate after the exact Spotless formatting correction.
 
 # Workflow-only opt-in on the corrected source tree.
+
+# Reattest the integrated creator-only MangaDex patch and bounded chapter grammar.
