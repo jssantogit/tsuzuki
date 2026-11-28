@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemStatus
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider
@@ -140,6 +141,76 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
             result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS
             result.identity shouldBe null
         }
+    }
+
+    @Test
+    fun `edition extent distinguishes a completed short work from serial with same title and credits`() = runTest {
+        val serial = item("shikimori", "42", "Work", authors = listOf("Creator")).copy(
+            format = CatalogItemFormat.MANGA,
+            chapterCount = 120,
+            volumeCount = 12,
+            status = CatalogItemStatus.COMPLETED,
+        )
+        val short = serial.copy(providerId = "43", chapterCount = 1, volumeCount = 1)
+        val catalog = source("shikimori", search = {
+            CatalogPage(listOf(short.copy(chapterCount = 120), serial.copy(chapterCount = 1)), false)
+        }, detail = { id -> if (id == serial.providerId) serial else short })
+        val resolver = ResolveMangaAllIndependentCatalogIdentity(registry(catalog))
+        resolver.execute("Work", CatalogItemFormat.MANGA, requiredCreatorNames = listOf("Creator"))
+            .status shouldBe MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS
+        val result = resolver.execute(
+            "Work",
+            CatalogItemFormat.MANGA,
+            requiredCreatorNames = listOf("Creator"),
+            editionExtent = MangaAllEditionExtent(minimumChapters = 2, minimumVolumes = 2),
+        )
+        result.status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
+        result.identity?.providerId shouldBe "42"
+    }
+
+    @Test
+    fun `missing extent or an unfinished rival cannot prove a different edition`() = runTest {
+        val serial = item("shikimori", "42", "Work", authors = listOf("Creator")).copy(
+            chapterCount = 120,
+            status = CatalogItemStatus.COMPLETED,
+        )
+        val short = serial.copy(providerId = "43")
+        for (rival in listOf(
+            short.copy(chapterCount = null),
+            short.copy(chapterCount = 0),
+            short.copy(chapterCount = 1, status = CatalogItemStatus.ONGOING),
+            short.copy(chapterCount = 1, status = CatalogItemStatus.UNKNOWN),
+            short.copy(chapterCount = 120),
+        )) {
+            val catalog = source("shikimori", search = {
+                CatalogPage(listOf(serial, rival), false)
+            }, detail = { id -> if (id == serial.providerId) serial else rival })
+            val result = ResolveMangaAllIndependentCatalogIdentity(registry(catalog)).execute(
+                "Work",
+                editionExtent = MangaAllEditionExtent(minimumChapters = 2),
+            )
+            result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS
+            result.identity shouldBe null
+        }
+    }
+
+    @Test
+    fun `extent alone cannot override incomplete search or select incompatible single candidate`() = runTest {
+        val short = item("shikimori", "42", "Work").copy(
+            chapterCount = 1,
+            status = CatalogItemStatus.COMPLETED,
+        )
+        val complete = source("shikimori", search = { CatalogPage(listOf(short), false) }, detail = { short })
+        val extent = MangaAllEditionExtent(minimumChapters = 2)
+        ResolveMangaAllIndependentCatalogIdentity(registry(complete))
+            .execute("Work", editionExtent = extent).status shouldBe MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+        val incomplete = source("shikimori", search = {
+            CatalogPage(listOf(short), true, totalCount = 400)
+        }, detail = { error("Incomplete inventory cannot authorize an edition") })
+        ResolveMangaAllIndependentCatalogIdentity(registry(incomplete))
+            .execute("Work", editionExtent = extent).status shouldBe MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE
+        shouldThrow<IllegalArgumentException> { MangaAllEditionExtent() }
+        shouldThrow<IllegalArgumentException> { MangaAllEditionExtent(minimumChapters = 0) }
     }
 
     @Test
