@@ -1364,10 +1364,12 @@ class CollectProviderReadingEvidence private constructor(
     }
 
     private data class NativeChapterPreview(
-        val cursor: ProviderCursor?,
+        val checkpoint: ProviderProvisionalCursorCheckpoint?,
         val page: ProviderPage<ProviderChapterObservation>,
         val observedAt: Long,
-    )
+    ) {
+        val cursor: ProviderCursor? get() = checkpoint?.nextCursor
+    }
 
     /**
      * Native coverage requires either the isolated research contract or an
@@ -1533,7 +1535,7 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 nativePreviews?.set(
                     assessment.ref,
-                    NativeChapterPreview(if (restart) null else saved?.nextCursor, page, previewObservedAt),
+                    NativeChapterPreview(if (restart) null else saved, page, previewObservedAt),
                 )
                 previews += preview
             }
@@ -1898,10 +1900,11 @@ class CollectProviderReadingEvidence private constructor(
             var activePage = 0
             var lastAcceptedCursor: ProviderCursor? = saved?.nextCursor
             var acceptedPages = 0
-            // The preview belongs to this invocation, exact HID/facet and request cursor.
-            // If a concurrent checkpoint changed, fetch its current page instead.
+            // The preview belongs to this invocation and exact checkpoint, not
+            // just its opaque cursor string. A changed page count can indicate
+            // a new generation even if the source reuses the same cursor.
             // Reuse the original observation timestamp, not the later collection time.
-            val preview = nativePreviews[source.ref]?.takeIf { it.cursor == saved?.nextCursor }
+            val preview = nativePreviews[source.ref]?.takeIf { it.checkpoint == saved }
             val chapterGateway = object : ProviderReadingGateway by gateway {
                 private var firstRequest = true
 

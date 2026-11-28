@@ -4461,6 +4461,11 @@ class CollectProviderReadingEvidenceTest {
         verifyNativePreview("changed")
     }
 
+    @Test
+    fun `native preview cannot reuse a cursor from a changed page count`() = runTest {
+        verifyNativePreview("same-cursor-changed")
+    }
+
     private suspend fun verifyNativePreview(mode: String) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
@@ -4491,7 +4496,7 @@ class CollectProviderReadingEvidenceTest {
                     11L,
                     arg<String>(3),
                     if (mode == "changed" && checkpointReads > 1) next else cursor,
-                    if (mode == "changed" && checkpointReads > 1) 2 else 1,
+                    if (mode in setOf("changed", "same-cursor-changed") && checkpointReads > 1) 2 else 1,
                 )
             }
         }
@@ -4583,6 +4588,12 @@ class CollectProviderReadingEvidenceTest {
             reads shouldBe listOf(cursor, null)
             result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:201"
             result.cursorProgress.single().expectedCursor shouldBe null
+        } else if (mode == "same-cursor-changed") {
+            reads shouldBe listOf(cursor, cursor)
+            result.partialEvidence.single().externalChapterKey shouldBe "mangadot:chapters:201"
+            result.cursorProgress.single().expectedCursor shouldBe cursor
+            result.cursorProgress.single().completedPages shouldBe 3
+            result.cursorProgress.single().nextCursor shouldBe null
         } else if (mode == "multipage" || mode == "changed") {
             reads shouldBe listOf(cursor, next)
             result.partialEvidence.map { it.externalChapterKey }.toSet() shouldBe if (mode == "multipage") {
