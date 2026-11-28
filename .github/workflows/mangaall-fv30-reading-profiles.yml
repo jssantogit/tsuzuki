@@ -40,6 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/mangaall_fv30_reading_profile_plan.py
+          python3 .github/scripts/run_mangaall_fv30_reading.py --selftest
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
         with:
