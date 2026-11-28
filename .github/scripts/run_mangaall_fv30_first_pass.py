@@ -33,14 +33,7 @@ def locked():
 
 
 def classify_exact(record, row):
-    # Reuse the existing owner/provenance checks. MANHUA needs the same
-    # checks but must first prove its own exact format, never infer from title.
-    expected = row["format"].upper()
-    if expected != "MANHUA":
-        return classify(record, row["catalog"], expected)
-    if record.get("status") == "RESOLVED" and record.get("format") != expected:
-        return "FORMAT_UNVERIFIED", None
-    return classify(dict(record, format="MANGA"), row["catalog"], "MANGA")
+    return classify(record, row["catalog"], row["format"].upper())
 
 
 def parse(raw, group):
