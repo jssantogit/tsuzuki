@@ -4239,6 +4239,18 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `mangadex retains creator conflict across aliases even without first page coverage`() = runTest {
+        verifyResearchAliasBatch(
+            0,
+            listOf("Verified Alias"),
+            "Verified Alias",
+            listOf(canonicalTitle.displayTitle, "Verified Alias"),
+            conflictingFirst = true,
+            source = "mangadex",
+        )
+    }
+
+    @Test
     fun `native preview uses corroborated duplicate once despite missing credit in earlier row`() = runTest {
         verifyResearchAliasBatch(
             0,
@@ -4258,6 +4270,7 @@ class CollectProviderReadingEvidenceTest {
         slowRival: Boolean = false,
         conflictingFirst: Boolean = false,
         incompleteDuplicate: Boolean = false,
+        source: String = "mangadot",
     ) {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
@@ -4279,11 +4292,17 @@ class CollectProviderReadingEvidenceTest {
         every {
             integrations.isGlobalCapabilityActive(metadataId, IntegrationCapability.METADATA_BASIC)
         } returns true
+        val workId = if (source == "mangadex") {
+            "mangadex:12345678-1234-1234-1234-123456789abc"
+        } else {
+            "mangadot:317"
+        }
+        val otherSource = if (source == "mangadex") "mangadot" else "mangadex"
         val dotQueries = mutableListOf<String>()
         var dotReads = 0
         val incomplete = if (incompleteDuplicate) {
             ProviderWorkCandidate(
-                externalWorkId = "mangadot:317",
+                externalWorkId = workId,
                 title = desiredAlias,
                 url = "https://mangadot.net/manga/317",
                 authors = emptyList(),
@@ -4300,7 +4319,7 @@ class CollectProviderReadingEvidenceTest {
             gateway = gateway(
                 lookupHandler = { request ->
                     val cursor = requireNotNull(request.cursor).value
-                    if (cursor.contains("mangadex")) {
+                    if (cursor.contains(otherSource)) {
                         ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
                     } else {
                         val query = request.titles.single()
@@ -4312,7 +4331,7 @@ class CollectProviderReadingEvidenceTest {
                                     items = if (conflictingFirst) {
                                         listOf(
                                             ProviderWorkCandidate(
-                                                externalWorkId = "mangadot:317",
+                                                externalWorkId = workId,
                                                 title = query,
                                                 url = "https://mangadot.net/manga/317",
                                                 authors = listOf("Different Creator"),
@@ -4331,11 +4350,19 @@ class CollectProviderReadingEvidenceTest {
                                     listOfNotNull(
                                         incomplete,
                                         ProviderWorkCandidate(
-                                            externalWorkId = "mangadot:317",
+                                            externalWorkId = workId,
                                             title = desiredAlias,
                                             url = "https://mangadot.net/manga/317",
                                             authors = listOf("Yonghwan Kim"),
                                             detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                            coverageOutcome = if (source == "mangadex") {
+                                                ProviderCoverageOutcome.OBSERVED
+                                            } else {
+                                                null
+                                            },
+                                            coverageObservedCount = if (source == "mangadex") 1 else null,
+                                            coverageMinMilli = if (source == "mangadex") 1000 else null,
+                                            coverageMaxMilli = if (source == "mangadex") 1000 else null,
                                         ),
                                     ) + if (slowRival) {
                                         listOf(
@@ -4396,6 +4423,7 @@ class CollectProviderReadingEvidenceTest {
         dotQueries shouldBe expectedQueries
         if (incompleteDuplicate) dotReads shouldBe 1
         if (conflictingFirst) {
+            dotReads shouldBe 0
             result.partialEvidence shouldBe emptyList()
             result.cursorProgress shouldBe emptyList()
             associations.getByTitle(canonicalTitle.id).single().workVerification shouldBe

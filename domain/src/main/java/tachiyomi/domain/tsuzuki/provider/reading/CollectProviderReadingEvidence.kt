@@ -810,16 +810,16 @@ class CollectProviderReadingEvidence private constructor(
                                         DiagnosticOutcome.CANDIDATES,
                                     )
                                 }
+                                assessments.filter {
+                                    it.workVerification == ProviderWorkVerification.AUTHOR_CONFLICT
+                                }.forEach {
+                                    workConflicts += it.ref.externalWorkId
+                                    recordResearchWorkAssessment(canonicalTitleId, target, it)
+                                }
+                                assessments.filter {
+                                    it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
+                                }.forEach { workConflicts += it.ref.externalWorkId }
                                 if (source == "mangadot") {
-                                    assessments.filter {
-                                        it.workVerification == ProviderWorkVerification.AUTHOR_CONFLICT
-                                    }.forEach {
-                                        workConflicts += it.ref.externalWorkId
-                                        recordResearchWorkAssessment(canonicalTitleId, target, it)
-                                    }
-                                    assessments.filter {
-                                        it.workVerification == ProviderWorkVerification.CATALOG_REFERENCE_CONFLICT
-                                    }.forEach { workConflicts += it.ref.externalWorkId }
                                     // Durable work observation only: never a creator credit,
                                     // chapter map or Reader permission.
                                     if (independentCatalogId != null) {
@@ -863,7 +863,7 @@ class CollectProviderReadingEvidence private constructor(
                                         title,
                                         target,
                                         canonicalCreators,
-                                        exact,
+                                        exact.filterNot { it.externalWorkId in workConflicts },
                                         nativePreviews,
                                     )
                                         .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
