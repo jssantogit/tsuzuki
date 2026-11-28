@@ -220,6 +220,9 @@ export async function observeMangaDotCreators(candidate, host = globalThis.tsuzu
   // mismatch. It supplies no author authority and cannot pass the portfolio.
   const authors = record.authors.length ? record.authors : await observeExactMicrodataCredits(host, handle, match[1]);
   const ids = includeCatalogReferences ? catalogReferenceIds(record) : null;
+  // Malformed relevant crosswalk claims cannot disappear behind otherwise
+  // valid creator credits. No positive identity evidence leaves this detail.
+  if (includeCatalogReferences && ids === null) return {detailOutcome: "INVALID_RESPONSE", authors: []};
   return {detailOutcome: record.aliases.length ? "VERIFIED_WITH_ALIASES" : "VERIFIED_NO_ALIASES",
     authors, ...(record.aliases.length ? {aliases:record.aliases} : {}),
     ...(ids?.length ? {mangaUpdatesReferenceIds:ids} : {})};
@@ -254,6 +257,10 @@ export async function enrichMangaDotLookupCandidates(items, title, host, include
     if (mangaDotExactTitle(item, title) ||
         (detail.detailOutcome === "VERIFIED_WITH_ALIASES" &&
          detail.aliases.some(alias => exactName(alias) === exactName(title)))) {
+      // Replace the whole enrichment result, never keep stale positive
+      // creator or crosswalk fields when the exact detail has been rejected.
+      delete item.authors;
+      delete item.mangaUpdatesReferenceIds;
       Object.assign(item, detail);
     }
   }

@@ -138,6 +138,19 @@ assert.deepEqual(await observeMangaDotCreators(linkedCandidate,linkedNoAuthor),
   {detailOutcome:"VERIFIED_NO_ALIASES",authors:[]});
 assert.deepEqual(await observeMangaDotCreators(linkedCandidate,linkedNoAuthor,true),
   {detailOutcome:"VERIFIED_NO_ALIASES",authors:[],mangaUpdatesReferenceIds:[muId]});
+const invalidReferencesHost = {http:host.http,dom:{selectText:async()=>raw({
+  ...series, sameAs:[mu,"https://www.mangaupdates.com/series.html?id=42"]
+})}};
+assert.deepEqual(await observeMangaDotCreators(linkedCandidate,invalidReferencesHost,true),
+  {detailOutcome:"INVALID_RESPONSE",authors:[]});
+assert.deepEqual(await observeMangaDotCreators(linkedCandidate,invalidReferencesHost,false),
+  {detailOutcome:"VERIFIED_NO_ALIASES",authors:["Example Creator"]});
+const staleCandidate = {...linkedCandidate,authors:["Example Creator"],
+  mangaUpdatesReferenceIds:[muId],detailOutcome:"VERIFIED_NO_ALIASES"};
+await enrichMangaDotLookupCandidates([staleCandidate],series.name,invalidReferencesHost,true);
+assert.equal(staleCandidate.detailOutcome,"INVALID_RESPONSE");
+assert.deepEqual(staleCandidate.authors,[]);
+assert.equal(staleCandidate.mangaUpdatesReferenceIds,undefined);
 const semanticCalls = [];
 const microdataHost = {http:host.http,dom:{selectText:async(handle,selector)=>{
   assert.equal(handle,"res:opaque");
