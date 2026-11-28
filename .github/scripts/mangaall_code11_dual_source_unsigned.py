@@ -35,7 +35,7 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False,
                     mangadot_creators: bool = False,
                     original_language: str | None = None,
                     mangadex_internal_reading: bool = False) -> bytes:
-    if original_language not in (None, "ko", "ja"):
+    if original_language not in (None, "ko", "ja", "zh"):
         raise ValueError("INVALID_RESEARCH_ORIGINAL_LANGUAGE")
     if manhwa_only and original_language not in (None, "ko"):
         raise ValueError("CONFLICTING_RESEARCH_ORIGINAL_LANGUAGE")
@@ -202,6 +202,7 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False,
     manifest["name"] = ({
         "ko": "MangaAll — frozen 30 manhwa source research",
         "ja": "MangaAll — frozen 30 manga source research",
+        "zh": "MangaAll — manhua source research",
     }.get(language, "MangaAll — two-source unsigned research"))
     files["manifest.json"] = json.dumps(
         manifest, ensure_ascii=False, indent=2
@@ -232,7 +233,7 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--manhwa-only", action="store_true",
                         help="CI-only original-ko and scoped search for frozen manhwa cohort")
-    parser.add_argument("--original-language", choices=("ko", "ja"),
+    parser.add_argument("--original-language", choices=("ko", "ja", "zh"),
                         help="Explicit original-language constraint for unsigned research")
     parser.add_argument("--mangadot-creators", action="store_true",
                         help="Research-only exact MangaDot JSON-LD creator evidence")
