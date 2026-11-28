@@ -207,10 +207,13 @@ class MangaUpdatesIntegrationProviderTest {
         last.hasNextPage shouldBe false
         provider.search(CatalogQuery(query = "Title", format = CatalogItemFormat.MANGA, offset = 0, limit = 25))
             .getOrThrow()
+        provider.search(CatalogQuery(query = "Title", format = CatalogItemFormat.MANHUA, offset = 0, limit = 25))
+            .getOrThrow()
         calls shouldBe listOf(
             listOf("Title", 25, 25, "Manhwa"),
             listOf("Title", 50, 25, "Manhwa"),
             listOf("Title", 0, 25, "Manga"),
+            listOf("Title", 0, 25, "Manhua"),
         )
     }
 
