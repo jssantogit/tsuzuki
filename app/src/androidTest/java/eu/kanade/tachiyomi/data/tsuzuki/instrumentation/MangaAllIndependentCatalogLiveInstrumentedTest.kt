@@ -33,6 +33,7 @@ import tachiyomi.data.tsuzuki.kitsu.KitsuCatalogProvider
 import tachiyomi.data.tsuzuki.kitsu.client.KitsuHttpClient
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityResult
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
+import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllEditionExtent
 import tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentity
 import tachiyomi.domain.tsuzuki.catalog.interactor.mangaAllCatalogCreatorGroups
 import tachiyomi.domain.tsuzuki.catalog.interactor.mangaAllCatalogCreatorKey
@@ -215,6 +216,13 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 }
         }.orEmpty()
         require(creatorAliases.keys.all { it in requiredCredits })
+        val editionExtents = args.getString("catalogMinimumVolumesBase64")?.let { encoded ->
+            Json.parseToJsonElement(Base64.decode(encoded, Base64.NO_WRAP).toString(Charsets.UTF_8))
+                .jsonObject.mapValues { (_, value) ->
+                    MangaAllEditionExtent(minimumVolumes = value.jsonPrimitive.content.toInt())
+                }
+        }.orEmpty()
+        require(editionExtents.keys.all { title -> works.any { parseWork(it).title == title } })
         val selected = works.withIndex().filter { it.index % shardCount == shardIndex }
         var conclusive = 0
         for ((index, line) in selected) {
@@ -234,7 +242,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                     // three bounded detail waves after a 24-second search.
                     // Do not turn a valid complete search into an artificial
                     // timeout at the old single-candidate deadline.
-                    val timeout = if (work.title in requiredCredits) 60_000L else 35_000L
+                    val timeout = if (work.title in requiredCredits || work.title in editionExtents) 60_000L else 35_000L
                     withTimeout(timeout) {
                         bootstrap.execute(
                             work.title,
@@ -242,6 +250,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                             searchTitle = searchHints[work.title],
                             requiredCreatorNames = requiredCredits[work.title].orEmpty(),
                             requiredCreatorAliases = creatorAliases[work.title].orEmpty(),
+                            editionExtent = editionExtents[work.title],
                         )
                     }
                 } catch (_: TimeoutCancellationException) {
@@ -280,6 +289,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 put("retrievalHintUsed", work.title in searchHints)
                 put("creatorConstraintUsed", work.title in requiredCredits)
                 put("creatorAliasesUsed", work.title in creatorAliases)
+                put("editionExtentUsed", work.title in editionExtents)
                 put("status", attested.status.name)
                 put("catalogSource", catalogName)
                 put("provider", attested.identity?.provider.orEmpty())
