@@ -37,7 +37,12 @@ class RefreshProviderReadingChapters internal constructor(
         binding: ProviderReadingBinding,
         startingCursor: ProviderCursor? = null,
         allowPartialPageLimit: Boolean = false,
+        remainingPageBudget: Int = MAX_PAGES,
     ): ProviderCallResult<Int> {
+        require(remainingPageBudget > 0) { "Provider page budget must be positive" }
+        require(remainingPageBudget >= MAX_PAGES || allowPartialPageLimit) {
+            "Only provisional sources can use a reduced remaining page budget"
+        }
         require(startingCursor == null || publishSnapshot == null) {
             "An authoritative snapshot cannot resume without its preceding pages"
         }
@@ -63,7 +68,7 @@ class RefreshProviderReadingChapters internal constructor(
         startingCursor?.let { seenCursors += it.value }
         var cursor: ProviderCursor? = startingCursor
 
-        repeat(MAX_PAGES) {
+        repeat(minOf(MAX_PAGES, remainingPageBudget)) {
             val pageIndex = it + 1
             onPageStarted(pageIndex)
             val startedNanos = System.nanoTime()

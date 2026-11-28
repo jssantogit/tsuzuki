@@ -334,6 +334,37 @@ class RefreshProviderReadingChaptersTest {
     }
 
     @Test
+    fun `provisional continuation respects remaining durable page budget`() = runBlocking {
+        for (terminal in listOf(false, true)) {
+            val requested = mutableListOf<String?>()
+            val accepted = mutableListOf<String?>()
+            val refresher = RefreshProviderReadingChapters(
+                gateway = gateway { request ->
+                    requested += request.cursor?.value
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("last-chapter", "Chapter 256")),
+                            nextCursor = if (terminal) null else ProviderCursor("page-257"),
+                        ),
+                    )
+                },
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                publishSnapshot = null,
+                onPageAccepted = { accepted += it?.value },
+            )
+
+            refresher.execute(
+                binding,
+                startingCursor = ProviderCursor("page-256"),
+                allowPartialPageLimit = true,
+                remainingPageBudget = 1,
+            ) shouldBe ProviderCallResult.Success(1)
+            requested shouldBe listOf("page-256")
+            accepted shouldBe listOf(if (terminal) null else "page-257")
+        }
+    }
+
+    @Test
     fun `provisional MangaAll source scans 4341 unique chapters without a complete snapshot`() = runBlocking {
         val pageSizes = List(16) { 256 } + 245
         val accepted = mutableListOf<String?>()

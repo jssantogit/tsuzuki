@@ -1471,6 +1471,7 @@ class CollectProviderReadingEvidence private constructor(
                     descriptor.version.code,
                     fingerprint,
                 )
+                if (saved != null && saved.completedPages >= MAX_PROVISIONAL_CURSOR_PAGES) continue
                 val previewObservedAt = clock()
                 val initial = fetchPreview(assessment.ref, saved?.nextCursor)
                 val restart = saved != null && initial is ProviderCallResult.Failure &&
@@ -1849,7 +1850,17 @@ class CollectProviderReadingEvidence private constructor(
                     pageCount = saved.completedPages,
                 )
             }
-            if (saved != null && saved.completedPages >= MAX_PROVISIONAL_CURSOR_PAGES) continue
+            val remainingPageBudget = MAX_PROVISIONAL_CURSOR_PAGES - (saved?.completedPages ?: 0)
+            if (remainingPageBudget <= 0) {
+                trace(
+                    canonicalTitleId,
+                    target,
+                    DiagnosticStage.READ,
+                    DiagnosticOutcome.FAILED,
+                    errorCode = ProviderErrorCode.RESOURCE_LIMIT,
+                )
+                continue
+            }
             val observedAt = clock()
             val sourceBinding = ProviderReadingBinding(
                 // Only an ephemeral transport to the existing paginated fetcher.
@@ -1945,6 +1956,7 @@ class CollectProviderReadingEvidence private constructor(
                     sourceBinding,
                     startingCursor = saved?.nextCursor,
                     allowPartialPageLimit = true,
+                    remainingPageBudget = remainingPageBudget,
                 )
             }
             if (result is ProviderCallResult.Failure && !canRetainProvisionalPages(result.error)) {
