@@ -299,6 +299,8 @@ class MangaUpdatesApi(
         suspend fun fetchPage(page: Int): MUSearchResult {
             val body = buildJsonObject {
                 put("search", query)
+                put("stype", "title")
+                put("orderby", "score")
                 put("page", page)
                 put("perpage", requestedSize)
                 type?.let { put("type", buildJsonArray { add(it) }) }
