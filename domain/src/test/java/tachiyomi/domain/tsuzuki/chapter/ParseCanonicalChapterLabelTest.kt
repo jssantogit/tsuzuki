@@ -66,6 +66,24 @@ class ParseCanonicalChapterLabelTest {
     }
 
     @Test
+    fun `decorated repeated chapter numbers corroborate rather than override explicit numbering`() {
+        val expected = parse.execute("Ch. 1").identity
+        for (label in listOf("Ch. 1 - ♯1: Beginning", "Ch. 1 #1", "Ch. 1 - ※ The beginning")) {
+            parse.execute(label, numericHint = 1.0).identity shouldBe expected
+        }
+        for (label in listOf(
+            "Ch. 1 - ♯2: Beginning",
+            "Ch. 1 - #1.5",
+            "Ch. 1 - [2]",
+            "Ch. 1 - (Part 2)",
+            "Ch. 1.5 - #1",
+            "1 - #1",
+        )) {
+            parse.execute(label, numericHint = 1.0).type shouldBe CanonicalChapterType.UNKNOWN
+        }
+    }
+
+    @Test
     fun `decimal label preserves part as a structured component`() {
         val chapter = parse.execute("12.5")
 

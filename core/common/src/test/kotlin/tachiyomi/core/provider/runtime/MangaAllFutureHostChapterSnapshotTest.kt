@@ -550,6 +550,26 @@ class MangaAllFutureHostChapterSnapshotTest {
     }
 
     @Test
+    fun punctuation_led_titles_keep_the_structured_number_and_title_boundary(): Unit = runBlocking {
+        val raw = """
+            [
+              {"id":101,"chapter_number":1,"language":"en","chapter_title":"♯1: Beginning"},
+              {"id":102,"chapter_number":2,"language":"en","chapter_title":"※ The next day"},
+              {"id":103,"chapter_number":0,"language":"en","chapter_title":": Special"}
+            ]
+        """.trimIndent()
+        val (service, _) = fixture { raw }
+        val page = service.start("mangadot:131", "en")
+        page.items.map { it["rawLabel"]!!.jsonPrimitive.content } shouldBe listOf(
+            "Ch. 1 - ♯1: Beginning",
+            "Ch. 2 - ※ The next day",
+            "Ch. 0 : Special",
+        )
+        page.items[0]["title"]!!.jsonPrimitive.content shouldBe "♯1: Beginning"
+        page.items[0]["rawNumber"]!!.jsonPrimitive.content.toDouble() shouldBe 1.0
+    }
+
+    @Test
     fun page_budget_matches_reference_serialization_at_utf8_and_row_boundaries(): Unit = runBlocking {
         for (title in listOf("Plain", "界".repeat(90), "Quote \\" + '"' + " newline\n")) {
             val (service, calls) = fixture { source(601, padding = 0, title = title) }

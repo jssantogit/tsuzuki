@@ -237,15 +237,12 @@ class ParseCanonicalChapterLabel {
     private fun parseNumberForm(normalized: String, hasExplicitChapterPrefix: Boolean): NumericParse? {
         val match = NUMBER_FORM.find(normalized) ?: return null
         val remainder = normalized.substring(match.range.last + 1).trim()
-        if (!isAllowedRemainder(remainder) &&
-            !(hasExplicitChapterPrefix && isQuotedTitle(remainder))
-        ) {
-            return null
-        }
-
         val baseNumber = match.groupValues[1].toIntOrNull() ?: return null
         val decimalPart = match.groupValues[2].takeIf(String::isNotEmpty)
         val suffix = match.groupValues[3].takeIf(String::isNotEmpty)
+        if (!isAllowedNumberRemainder(remainder, hasExplicitChapterPrefix, baseNumber, decimalPart, suffix)) {
+            return null
+        }
         // ChapterIdentity persists only the integer part, not its decimal scale.
         // "12.05" and "12.5" would both map to part=5. Reject scale-sensitive
         // labels until decimal precision can be stored and migrated losslessly.
@@ -311,6 +308,37 @@ class ParseCanonicalChapterLabel {
         // or a malformed second part is ambiguous and must not be discarded.
         if (remainder.matches(AMBIGUOUS_PART_REMAINDER)) return false
         return remainder.matches(TRAILING_TITLE)
+    }
+
+    /**
+     * A decorated second chapter number is evidence, not arbitrary title text.
+     * A structured adapter may insert a separator before the title. Preserve
+     * contradictory numeric tokens even when they follow that separator.
+     */
+    private fun isAllowedNumberRemainder(
+        remainder: String,
+        explicit: Boolean,
+        base: Int,
+        decimal: String?,
+        suffix: String?,
+    ): Boolean {
+        val title = remainder.removePrefix("-").removePrefix(":").trimStart()
+        val decorated = DECORATED_CHAPTER_NUMBER.find(title)
+        if (decorated != null) {
+            if (!explicit || decimal != null || suffix != null || decorated.groupValues[1].toIntOrNull() != base) {
+                return false
+            }
+            val tail = title.substring(decorated.range.last + 1).trim()
+            return isAllowedRemainder(tail)
+        }
+        // Other punctuation-wrapped bare numbers are not ordinary title text.
+        if (PUNCTUATED_NUMBER.containsMatchIn(title)) return false
+        if (TITLE_OPENING_PUNCTUATION.containsMatchIn(title) &&
+            RESERVED_WRAPPED_TITLE.containsMatchIn(title.replaceFirst(TITLE_OPENING_PUNCTUATION, "").trimStart())
+        ) {
+            return false
+        }
+        return isAllowedRemainder(remainder) || (explicit && isQuotedTitle(remainder))
     }
 
     /**
@@ -423,6 +451,8 @@ class ParseCanonicalChapterLabel {
         val AMBIGUOUS_PART_REMAINDER = Regex("^(?:part|pt)\\s+\\d+.*")
         val TRAILING_TITLE = Regex("^(?:[-:–—:]\\s*[^\\s\\p{N}].*|\\p{L}.*)$")
         val TITLE_OPENING_PUNCTUATION = Regex("^[\\p{Ps}\\p{Pi}\"']+")
+        val DECORATED_CHAPTER_NUMBER = Regex("^[#♯♪♫♬№]\\s*(\\d+)(?=$|\\s|[-:])")
+        val PUNCTUATED_NUMBER = Regex("^[\\p{P}\\p{S}][\\p{P}\\p{S}\\s]*\\p{N}")
         val RESERVED_WRAPPED_TITLE = Regex(
             "^(?:part|pt|chapter|ch|capitulo|volume|vol|extra|special|especial|" +
                 "prologue|prologo|epilogue|epilogo|one[- ]?shot|deleted)(?:\\b|\\.)",

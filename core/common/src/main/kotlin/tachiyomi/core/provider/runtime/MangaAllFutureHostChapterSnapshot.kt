@@ -375,10 +375,19 @@ internal class MangaAllFutureHostChapterSnapshot(
             number.toString()
         }
         val chapterId = "mangadot:" + (if (source == 0L) "uploads:" else "chapters:") + id
+        // The source supplies chapter_number and chapter_title independently.
+        // Use an explicit title boundary for punctuation-led positive numbers;
+        // retain the old representation for zero placeholders and other labels.
+        val label = "Ch. " + numberText + (
+            title?.let {
+                val separator = if (number > 0.0 && !it.first().isLetterOrDigit()) " - " else " "
+                separator + it
+            } ?: ""
+            )
         return JsonObject(
             mapOf(
                 "providerChapterId" to JsonPrimitive(chapterId),
-                "rawLabel" to JsonPrimitive("Ch. " + numberText + (title?.let { " " + it } ?: "")),
+                "rawLabel" to JsonPrimitive(label),
                 "rawNumber" to JsonPrimitive(number),
                 "title" to (title?.let(::JsonPrimitive) ?: JsonNull),
                 "language" to (lang?.let(::JsonPrimitive) ?: JsonNull),
