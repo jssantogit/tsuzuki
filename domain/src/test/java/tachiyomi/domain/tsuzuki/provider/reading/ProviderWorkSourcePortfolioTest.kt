@@ -67,7 +67,9 @@ class ProviderWorkSourcePortfolioTest {
         assess(required, listOf("Kui", "Manga Artist")).canCollectProvisionalChapters shouldBe false
         val competing = listOf("Ryouko Kui", "Ryoko Kui")
         assess(competing, listOf("Ryoko Kui")).canCollectProvisionalChapters shouldBe false
-        assess(competing, listOf("Ryoko Kui", "Ryouko Kui")).canCollectProvisionalChapters shouldBe true
+        assess(competing, listOf("Ryoko Kui", "Ryouko Kui")).workVerification shouldBe
+            ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED
+        assess(competing, listOf("Ryoko Kui", "Ryouko Kui")).canCollectProvisionalChapters shouldBe false
     }
 
     @Test

@@ -74,8 +74,16 @@ object ProviderWorkSourcePortfolio {
         require(requiredCreatorGroups.all { it.isNotEmpty() && it.size <= 9 && it.none(String::isBlank) })
         require(requiredCreatorGroups.flatten().distinct().size == requiredCreatorGroups.sumOf { it.size })
         val canonicalKeys = independentlyVerifiedAuthors.orEmpty().map(::mangaAllCatalogCreatorKey).toSet()
-        val constraintsVerified = requiredCreatorGroups.all { group -> group.any(canonicalKeys::contains) }
         val normalizedRequiredGroups = requiredCreatorGroups.map { group -> group.flatMap(::creatorKeys).toSet() }
+        // A flat credit list cannot distinguish two people whose full-name
+        // keys overlap. Require independent disjoint groups before using
+        // either exact or normalized spellings as adaptation evidence.
+        val constraintsVerified = requiredCreatorGroups.all { group -> group.any(canonicalKeys::contains) } &&
+            normalizedRequiredGroups.indices.all { index ->
+                (0 until index).none { previous ->
+                    normalizedRequiredGroups[index].any(normalizedRequiredGroups[previous]::contains)
+                }
+            }
 
         val observations = candidates.map { candidate ->
             val exactTitle = sequenceOf(candidate.title)
