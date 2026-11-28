@@ -74,6 +74,7 @@ object ProviderWorkSourcePortfolio {
         require(requiredCreatorGroups.flatten().distinct().size == requiredCreatorGroups.sumOf { it.size })
         val canonicalKeys = independentlyVerifiedAuthors.orEmpty().map(::mangaAllCatalogCreatorKey).toSet()
         val constraintsVerified = requiredCreatorGroups.all { group -> group.any(canonicalKeys::contains) }
+        val normalizedRequiredGroups = requiredCreatorGroups.map { group -> group.flatMap(::creatorKeys).toSet() }
 
         val observations = candidates.map { candidate ->
             val exactTitle = sequenceOf(candidate.title)
@@ -93,8 +94,17 @@ object ProviderWorkSourcePortfolio {
             val catalogConflict = catalogId != null && references.isNotEmpty() &&
                 references != listOf(catalogId)
             val catalogMatch = catalogId != null && references == listOf(catalogId)
-            val exactCreditKeys = candidate.authors.map(::mangaAllCatalogCreatorKey).toSet()
-            val matchedGroups = requiredCreatorGroups.count { group -> group.any(exactCreditKeys::contains) }
+            // Use the same bounded full-name normalization as ordinary
+            // corroboration, but do not let a normalized spelling satisfy
+            // more than one independently required creator.
+            val matchedGroups = candidate.authors.mapNotNull { credit ->
+                val exact = mangaAllCatalogCreatorKey(credit)
+                val exactGroup = requiredCreatorGroups.indices.singleOrNull { exact in requiredCreatorGroups[it] }
+                val keys = creatorKeys(credit)
+                exactGroup ?: normalizedRequiredGroups.indices.singleOrNull { index ->
+                    normalizedRequiredGroups[index].any(keys::contains)
+                }
+            }.toSet().size
             val verification = when {
                 !exactTitle -> ProviderWorkVerification.TITLE_UNVERIFIED
                 expectedAuthors == null || !constraintsVerified ->

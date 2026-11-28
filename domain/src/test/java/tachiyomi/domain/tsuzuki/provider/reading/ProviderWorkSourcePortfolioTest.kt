@@ -49,6 +49,28 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
+    fun `required creator groups accept bounded full name spellings without merging people`() {
+        val provider = ProviderId("app.tsuzuki.mangaall")
+        val work = original.copy(externalWorkId = "mangadot:42", title = "Adaptation")
+        fun assess(required: List<String>, source: List<String>) = ProviderWorkSourcePortfolio.assess(
+            provider,
+            "en",
+            work.title,
+            required.toSet(),
+            listOf(work.copy(authors = source)),
+            requiredCreatorGroups = mangaAllCatalogCreatorGroups(required),
+        ).single()
+
+        val required = listOf("Ryouko Kui", "Manga Artist")
+        assess(required, listOf("Kui Ryoko", "Manga Artist")).canCollectProvisionalChapters shouldBe true
+        assess(required, listOf("Kui Ryoko")).canCollectProvisionalChapters shouldBe false
+        assess(required, listOf("Kui", "Manga Artist")).canCollectProvisionalChapters shouldBe false
+        val competing = listOf("Ryouko Kui", "Ryoko Kui")
+        assess(competing, listOf("Ryoko Kui")).canCollectProvisionalChapters shouldBe false
+        assess(competing, listOf("Ryoko Kui", "Ryouko Kui")).canCollectProvisionalChapters shouldBe true
+    }
+
+    @Test
     fun `catalog work attestation is scoped to title source facet version and configuration`() {
         val ref = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadot:42")
         val original = MangaAllCatalogWorkIdentityProof.fingerprint("title", ref, "123", 11, "config")
