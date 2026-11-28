@@ -1,0 +1,46 @@
+name: MangaALL native catalog diagnostics contract
+on:
+  push:
+    branches: ['research/mangaall-fv30-parallel-20261128']
+    paths: ['.github/workflows/mangaall-fv30-native-diagnostics.yml']
+permissions:
+  contents: read
+jobs:
+  compile-diagnostics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          cache-read-only: true
+      - name: Check and compile native diagnostic instrumentation without live calls
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          if ./gradlew :app:spotlessKotlinCheck :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+            cat "$log"
+            exit 0
+          fi
+          if ! grep -Eiq 'no cached version|offline mode|not available for offline' "$log"; then
+            cat "$log"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if ./gradlew :app:spotlessKotlinCheck :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+              cat "$log"
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log" || [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
