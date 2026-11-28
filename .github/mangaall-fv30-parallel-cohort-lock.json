@@ -1,0 +1,440 @@
+{
+  "schemaVersion": 1,
+  "baselineSha": "c17347072ff8d4445cdbc905173289c0cd0c760b",
+  "purpose": "PARALLEL_CALIBRATION_FIRST_PASS",
+  "oracleStatus": "EDITION_AND_CREDIT_REVIEW_PENDING",
+  "cohorts": [
+    {
+      "key": "fv30b",
+      "cohort": "FV30B_FIXED_20261128",
+      "works": [
+        {
+          "index": 1,
+          "title": "Kokoro Connect",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 2,
+          "title": "Tasogare Otome x Amnesia",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 3,
+          "title": "Mayo Chiki!",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 4,
+          "title": "Boku wa Tomodachi ga Sukunai",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 5,
+          "title": "Hataraku Maou-sama!",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 6,
+          "title": "Inu x Boku SS",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 7,
+          "title": "Darker than Black: Shikkoku no Hana",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 8,
+          "title": "Kuroshitsuji",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 9,
+          "title": "Magi",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 10,
+          "title": "Ushio to Tora",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 11,
+          "title": "Zetsuen no Tempest",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 12,
+          "title": "Kekkaishi",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 13,
+          "title": "Katekyo Hitman Reborn!",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 14,
+          "title": "Yowamushi Pedal",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 15,
+          "title": "Chihayafuru",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 16,
+          "title": "Kimi ni Todoke",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 17,
+          "title": "Lovely Complex",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 18,
+          "title": "Kaichou wa Maid-sama!",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 19,
+          "title": "Skip Beat!",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 20,
+          "title": "Bakuman.",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 21,
+          "title": "Mushishi",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 22,
+          "title": "Natsume Yuujinchou",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 23,
+          "title": "Bokurano",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 24,
+          "title": "Hoshi no Samidare",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 25,
+          "title": "Hardcore Leveling Warrior",
+          "format": "manhwa",
+          "originalLanguage": "ko",
+          "catalog": "mangaupdates"
+        },
+        {
+          "index": 26,
+          "title": "The Sound of Your Heart",
+          "format": "manhwa",
+          "originalLanguage": "ko",
+          "catalog": "mangaupdates"
+        },
+        {
+          "index": 27,
+          "title": "A Good Day to Be a Dog",
+          "format": "manhwa",
+          "originalLanguage": "ko",
+          "catalog": "mangaupdates"
+        },
+        {
+          "index": 28,
+          "title": "Annarasumanara",
+          "format": "manhwa",
+          "originalLanguage": "ko",
+          "catalog": "mangaupdates"
+        },
+        {
+          "index": 29,
+          "title": "The Ravages of Time",
+          "format": "manhua",
+          "originalLanguage": "zh",
+          "catalog": "mangaupdates"
+        },
+        {
+          "index": 30,
+          "title": "Hitori no Shita: The Outcast",
+          "format": "manhua",
+          "originalLanguage": "zh",
+          "catalog": "mangaupdates"
+        }
+      ]
+    },
+    {
+      "key": "fv30c",
+      "cohort": "FV30C_FIXED_20261128",
+      "works": [
+        {
+          "index": 1,
+          "title": "No Game No Life",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 2,
+          "title": "Log Horizon",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 3,
+          "title": "Spice and Wolf",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 4,
+          "title": "Zero no Tsukaima",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 5,
+          "title": "Shakugan no Shana",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 6,
+          "title": "A Certain Scientific Railgun",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 7,
+          "title": "Bungou Stray Dogs",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 8,
+          "title": "Deadman Wonderland",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 9,
+          "title": "Tokyo Ravens",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 10,
+          "title": "The Sacred Blacksmith",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 11,
+          "title": "Claymore",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 12,
+          "title": "Dorohedoro",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 13,
+          "title": "Soul Eater",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 14,
+          "title": "Air Gear",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 15,
+          "title": "Medaka Box",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 16,
+          "title": "Sket Dance",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 17,
+          "title": "Oresama Teacher",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 18,
+          "title": "Gekkan Shoujo Nozaki-kun",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 19,
+          "title": "Wotaku ni Koi wa Muzukashii",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 20,
+          "title": "Kobato.",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 21,
+          "title": "xxxHOLiC",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 22,
+          "title": "Kuroko no Basket",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 23,
+          "title": "Gin no Saji",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 24,
+          "title": "Karakai Jouzu no Takagi-san",
+          "format": "manga",
+          "originalLanguage": "ja",
+          "catalog": "shikimori"
+        },
+        {
+          "index": 25,
+          "title": "The Girl from Random Chatting!",
+          "format": "manhwa",
+          "originalLanguage": "ko",
+          "catalog": "mangaupdates"
+        },
+        {
+          "index": 26,
+          "title": "Spirit Fingers",
+          "format": "manhwa",
+          "originalLanguage": "ko",
+          "catalog": "mangaupdates"
+        },
+        {
+          "index": 27,
+          "title": "Dr. Frost",
+          "format": "manhwa",
+          "originalLanguage": "ko",
+          "catalog": "mangaupdates"
+        },
+        {
+          "index": 28,
+          "title": "Her Tale of Shim Chong",
+          "format": "manhwa",
+          "originalLanguage": "ko",
+          "catalog": "mangaupdates"
+        },
+        {
+          "index": 29,
+          "title": "Feng Shen Ji",
+          "format": "manhua",
+          "originalLanguage": "zh",
+          "catalog": "mangaupdates"
+        },
+        {
+          "index": 30,
+          "title": "Soul Land",
+          "format": "manhua",
+          "originalLanguage": "zh",
+          "catalog": "mangaupdates"
+        }
+      ]
+    }
+  ]
+}
