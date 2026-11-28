@@ -1,4 +1,4 @@
-name: MangaALL FV30 focused eight-case catalog diagnostic
+name: MangaALL FV30 focused four-case catalog diagnostic
 on:
   push:
     branches: ['research/mangaall-fv30-20261128']
@@ -32,12 +32,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
         with:
           cache-read-only: true
-      - name: Build exact baseline Android and instrumentation APKs
+      - name: Build corrected Android and instrumentation APKs
         run: |
           set -euo pipefail
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
-          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :app:testDebugUnitTest --tests '*MangaUpdatesIntegrationProviderTest' :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :app:testDebugUnitTest --tests '*MangaUpdatesIntegrationProviderTest' --tests '*MangaUpdatesPaginationTest' :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
             cat "$log"
             exit 0
           fi
@@ -46,7 +46,7 @@ jobs:
             exit 1
           fi
           for attempt in 1 2 3; do
-            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :app:testDebugUnitTest --tests '*MangaUpdatesIntegrationProviderTest' :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :app:testDebugUnitTest --tests '*MangaUpdatesIntegrationProviderTest' --tests '*MangaUpdatesPaginationTest' :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
               cat "$log"
               exit 0
             fi
@@ -83,7 +83,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Observe eight unresolved titles through each production catalog resolver
+      - name: Observe four unresolved titles through each production catalog resolver
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 35
