@@ -259,6 +259,54 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `invalidated preferred binding cannot publish terminal or timed out inventory`() = runTest {
+        for (timeout in listOf(false, true)) {
+            val bindings = MemoryBindingRepository()
+            val original = registry().providers().single()
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(canonicalTitle),
+                providerRegistry = registry(),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(ProviderWorkCandidate("work-1", "Dandadan", language = "en")),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = { request ->
+                        if (request.cursor != null) {
+                            delay(30_000)
+                            error("Collector deadline must cancel this request")
+                        }
+                        val binding = checkNotNull(bindings.get(canonicalTitle.id, original.descriptor.id, "en"))
+                        bindings.markUnavailable(binding.id, 43L)
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(ProviderChapterObservation("chapter-one", "Chapter 1")),
+                                nextCursor = if (timeout) ProviderCursor("next") else null,
+                            ),
+                        )
+                    },
+                ),
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+            )
+
+            val result = collector.execute(canonicalTitle.id)
+            result.complete shouldBe false
+            result.bindingCount shouldBe 0
+            result.snapshots shouldBe emptyList()
+            result.partialEvidence shouldBe emptyList()
+            result.cursorProgress shouldBe emptyList()
+            bindings.getByTitle(canonicalTitle.id).single().availability shouldBe
+                ProviderBindingAvailability.UNAVAILABLE
+        }
+    }
+
+    @Test
     fun `late revocation discards only the earlier completed provider lane`() = runTest {
         val first = registry().providers().single()
         val secondId = ProviderId("app.tsuzuki.other")

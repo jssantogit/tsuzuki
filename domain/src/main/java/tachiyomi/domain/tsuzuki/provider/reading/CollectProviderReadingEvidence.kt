@@ -343,7 +343,7 @@ class CollectProviderReadingEvidence private constructor(
                         // Retain it only after those pages entered the provisional evidence buffer.
                         val readyCursors = mutableListOf<ProviderProvisionalCursorProgress>()
                         var activeStage = DiagnosticStage.LOOKUP
-                        var preferredBindingSelected = false
+                        var preferredBinding: ProviderReadingBinding? = null
                         val finished = withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
                             collectTarget(
                                 canonicalTitleId = canonicalTitleId,
@@ -351,7 +351,7 @@ class CollectProviderReadingEvidence private constructor(
                                 target = target,
                                 canonicalCreators = canonicalCreators,
                                 onStageChanged = { activeStage = it },
-                                onPreferredBindingSelected = { preferredBindingSelected = true },
+                                onPreferredBindingSelected = { preferredBinding = it },
                                 onProvisionalCursorReady = { readyCursors += it },
                                 onPageCollected = { binding, page, observedAt, catalogProof ->
                                     evidenceAdapter.toEvidence(
@@ -374,18 +374,19 @@ class CollectProviderReadingEvidence private constructor(
                         }
                         // Preserve valid pages only for a genuine timeout. A malformed result,
                         // identity error or resource violation must not salvage untrusted pages.
-                        if (!targetStillAuthorized(canonicalTitleId, target)) {
+                        val result = if (!targetStillAuthorized(canonicalTitleId, target, preferredBinding)) {
                             ProviderReadingEvidenceCollection(complete = false)
                         } else {
                             finished ?: ProviderReadingEvidenceCollection(
                                 // READ is entered only after a verified binding was selected
                                 // and persisted. A later timeout cannot erase that fact.
-                                bindingCount = if (preferredBindingSelected) 1 else 0,
+                                bindingCount = if (preferredBinding != null) 1 else 0,
                                 complete = false,
                                 partialEvidence = partial.toList(),
                                 cursorProgress = readyCursors.toList(),
                             )
                         }
+                        preferredBinding to result
                     }
                 }
             }.awaitAll()
@@ -393,8 +394,9 @@ class CollectProviderReadingEvidence private constructor(
 
         // Another lane may have been waiting on a slow source after this lane finished.
         // Recheck at the aggregate boundary, before handing any inventory to reconciliation.
-        val authorizedResults = targets.zip(results).map { (target, result) ->
-            if (targetStillAuthorized(canonicalTitleId, target)) {
+        val authorizedResults = targets.zip(results).map { (target, lane) ->
+            val (preferredBinding, result) = lane
+            if (targetStillAuthorized(canonicalTitleId, target, preferredBinding)) {
                 result
             } else {
                 ProviderReadingEvidenceCollection(complete = false)
@@ -494,7 +496,7 @@ class CollectProviderReadingEvidence private constructor(
         target: ReadingTarget,
         canonicalCreators: Set<String>?,
         onStageChanged: (DiagnosticStage) -> Unit,
-        onPreferredBindingSelected: () -> Unit,
+        onPreferredBindingSelected: (ProviderReadingBinding) -> Unit,
         onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
         onPageCollected: CollectProviderPageEvidence,
     ): ProviderReadingEvidenceCollection {
@@ -550,7 +552,7 @@ class CollectProviderReadingEvidence private constructor(
             if (existing == null) {
                 traceBoundWork(canonicalTitleId, target, binding, DiagnosticOutcome.ACCEPTED)
             }
-            onPreferredBindingSelected()
+            onPreferredBindingSelected(binding)
             onStageChanged(DiagnosticStage.READ)
             var published: ProviderReadingEvidenceSnapshot? = null
             var lastPageNumber = 0
@@ -2118,9 +2120,27 @@ class CollectProviderReadingEvidence private constructor(
      * source lanes use the same global semaphore and cannot replace a binding.
      * The Host must attest scoped native support before any lane is created.
      */
-    private suspend fun targetStillAuthorized(canonicalTitleId: String, target: ReadingTarget): Boolean =
-        providerRegistry.registration(target.registration.descriptor.id) == target.registration &&
-            supplementaryTargetStillAuthorized(canonicalTitleId, target)
+    private suspend fun targetStillAuthorized(
+        canonicalTitleId: String,
+        target: ReadingTarget,
+        preferredBinding: ProviderReadingBinding?,
+    ): Boolean {
+        if (providerRegistry.registration(target.registration.descriptor.id) != target.registration ||
+            !supplementaryTargetStillAuthorized(canonicalTitleId, target)
+        ) {
+            return false
+        }
+        val selected = preferredBinding ?: return true
+        return try {
+            val current = bindingRepository.get(canonicalTitleId, selected.ref.providerId, selected.ref.facetId)
+            current?.id == selected.id && current.ref == selected.ref &&
+                current.availability == ProviderBindingAvailability.AVAILABLE
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     private suspend fun supplementaryTargetStillAuthorized(
         canonicalTitleId: String,
