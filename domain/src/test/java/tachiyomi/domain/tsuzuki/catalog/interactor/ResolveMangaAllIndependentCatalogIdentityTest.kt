@@ -144,7 +144,7 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
     }
 
     @Test
-    fun `explicit edition extent distinguishes a completed short work from serial with same title and credits`() = runTest {
+    fun `edition extent distinguishes a completed short work from serial with same title and credits`() = runTest {
         val serial = item("shikimori", "42", "Work", authors = listOf("Creator")).copy(
             format = CatalogItemFormat.MANGA,
             chapterCount = 120,
