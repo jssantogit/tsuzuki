@@ -48,6 +48,24 @@ class ParseCanonicalChapterLabelTest {
     }
 
     @Test
+    fun `explicit chapter labels accept quoted titles without treating wrapped numbering as a title`() {
+        val expected = parse.execute("Ch. 1").identity
+        for (label in listOf("Ch. 1 \"First Sound\"", "Ch. 1 「音楽」", "Ch. 1 [A new beginning]")) {
+            parse.execute(label, numericHint = 1.0).identity shouldBe expected
+        }
+        for (label in listOf(
+            "1 [A new beginning]",
+            "Ch. 1 (2)",
+            "Ch. 1 (Part 2)",
+            "Ch. 1 [Chapter 2]",
+            "Ch. 1 / 2",
+            "Ch. 1 [DELETED]",
+        )) {
+            parse.execute(label, numericHint = 1.0).type shouldBe CanonicalChapterType.UNKNOWN
+        }
+    }
+
+    @Test
     fun `decimal label preserves part as a structured component`() {
         val chapter = parse.execute("12.5")
 

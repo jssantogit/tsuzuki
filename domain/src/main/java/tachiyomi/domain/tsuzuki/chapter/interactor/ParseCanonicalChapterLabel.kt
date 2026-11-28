@@ -237,7 +237,11 @@ class ParseCanonicalChapterLabel {
     private fun parseNumberForm(normalized: String, hasExplicitChapterPrefix: Boolean): NumericParse? {
         val match = NUMBER_FORM.find(normalized) ?: return null
         val remainder = normalized.substring(match.range.last + 1).trim()
-        if (!isAllowedRemainder(remainder)) return null
+        if (!isAllowedRemainder(remainder) &&
+            !(hasExplicitChapterPrefix && isQuotedTitle(remainder))
+        ) {
+            return null
+        }
 
         val baseNumber = match.groupValues[1].toIntOrNull() ?: return null
         val decimalPart = match.groupValues[2].takeIf(String::isNotEmpty)
@@ -307,6 +311,18 @@ class ParseCanonicalChapterLabel {
         // or a malformed second part is ambiguous and must not be discarded.
         if (remainder.matches(AMBIGUOUS_PART_REMAINDER)) return false
         return remainder.matches(TRAILING_TITLE)
+    }
+
+    /**
+     * Structured adapters can append a chapter title without a dash. Accept
+     * opening punctuation followed by title text only after an explicit chapter
+     * marker. Wrapped numeric/semantic markers remain unresolved.
+     */
+    private fun isQuotedTitle(remainder: String): Boolean {
+        val opening = TITLE_OPENING_PUNCTUATION.find(remainder) ?: return false
+        val title = remainder.substring(opening.range.last + 1).trimStart()
+        if (title.firstOrNull()?.isLetter() != true) return false
+        return !RESERVED_WRAPPED_TITLE.containsMatchIn(title)
     }
 
     private fun unknown(rawLabel: String, numericHint: String?): ParsedChapterLabel {
@@ -406,6 +422,11 @@ class ParseCanonicalChapterLabel {
         val NUMBER_FORM = Regex("^(\\d+)(?:[.]((?:\\d+))|[.]?([a-z]))?(?=$|\\s|[-:–—])")
         val AMBIGUOUS_PART_REMAINDER = Regex("^(?:part|pt)\\s+\\d+.*")
         val TRAILING_TITLE = Regex("^(?:[-:–—:]\\s*[^\\s\\p{N}].*|\\p{L}.*)$")
+        val TITLE_OPENING_PUNCTUATION = Regex("^[\\p{Ps}\\p{Pi}\"']+")
+        val RESERVED_WRAPPED_TITLE = Regex(
+            "^(?:part|pt|chapter|ch|capitulo|volume|vol|extra|special|especial|" +
+                "prologue|prologo|epilogue|epilogo|one[- ]?shot|deleted)(?:\\b|\\.)",
+        )
 
         fun normalize(value: String): String {
             return Normalizer.normalize(value, Normalizer.Form.NFD)
