@@ -943,7 +943,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     instrument.sendStatus(
                         1,
                         Bundle().apply {
-                            putString("stream", "MANGAALL_EVIDENCE_SHAPE|index=$index|source=$source|$fact|count=$count")
+                            putString(
+                                "stream",
+                                "MANGAALL_EVIDENCE_SHAPE|index=$index|source=$source|$fact|count=$count",
+                            )
                         },
                     )
                 }

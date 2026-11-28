@@ -238,3 +238,5 @@ jobs:
 # Reattest the immutable Japanese cohort after approved pagination and parser changes.
 
 # Reattest full cohort for the integrated creator and evidence shape diagnostics.
+
+# Repeat the strict gate after the exact Spotless formatting correction.
