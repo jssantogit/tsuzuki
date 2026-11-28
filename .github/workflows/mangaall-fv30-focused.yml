@@ -1,0 +1,133 @@
+name: MangaALL FV30 focused eight-case catalog diagnostic
+on:
+  push:
+    branches: ['research/mangaall-fv30-20261128']
+    paths: ['.github/workflows/mangaall-fv30-focused.yml']
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-fv30-focused
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: python3 .github/scripts/run_mangaall_fv30_focused.py --check
+  build-once:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          cache-read-only: true
+      - name: Build exact baseline Android and instrumentation APKs
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :app:testDebugUnitTest --tests '*MangaUpdatesIntegrationProviderTest' :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+            cat "$log"
+            exit 0
+          fi
+          if ! grep -Eiq 'no cached version|offline mode|not available for offline' "$log"; then
+            cat "$log"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :app:testDebugUnitTest --tests '*MangaUpdatesIntegrationProviderTest' :domain:testDebugUnitTest --tests '*ResolveMangaAllIndependentCatalogIdentityTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+              cat "$log"
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log" || [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: fv30-android-apks
+          path: app/build/outputs/apk/
+          if-no-files-found: error
+          retention-days: 2
+  catalog:
+    needs: build-once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        catalog: [shikimori, mangaupdates]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: fv30-android-apks
+          path: app/build/outputs/apk/
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Observe eight unresolved titles through each production catalog resolver
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: python3 .github/scripts/run_mangaall_fv30_focused.py --catalog ${{ matrix.catalog }}
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: fv30-focused-${{ matrix.catalog }}
+          path: fv30-focused-results/${{ matrix.catalog }}/
+          if-no-files-found: error
+          retention-days: 90
+  aggregate:
+    if: always()
+    needs: [build-once, catalog]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          pattern: fv30-focused-*
+          path: fv30-focused-results
+      - name: Aggregate comparative diagnostic, not a final gate
+        run: |
+          set -euo pipefail
+          for catalog in shikimori mangaupdates; do
+            if [[ -d "fv30-focused-results/fv30-focused-$catalog" ]]; then
+              mv "fv30-focused-results/fv30-focused-$catalog" "fv30-focused-results/$catalog"
+            fi
+          done
+          python3 .github/scripts/run_mangaall_fv30_focused.py --aggregate
+          test '${{ needs.build-once.result }}' = 'success'
+          test '${{ needs.catalog.result }}' = 'success'
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: fv30-focused-summary
+          path: fv30-focused-results/summary.json
+          if-no-files-found: error
+          retention-days: 90
