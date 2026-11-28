@@ -1,0 +1,21 @@
+name: MangaALL FV30 reading receipt parser contract
+on:
+  push:
+    branches: ['research/mangaall-fv30-reading-profiles-20261128']
+    paths: ['.github/workflows/mangaall-fv30-reading-receipts.yml']
+permissions:
+  contents: read
+jobs:
+  receipt-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate mixed and legacy receipt contracts without live sources
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/mangaall_fv30_reading_profile_plan.py
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
+          python3 .github/scripts/run_mangaall_fv30_reading.py --selftest
