@@ -48,7 +48,7 @@ def case_id(title):
 
 
 def classify(record, catalog="mangaupdates", expected_format="MANHWA"):
-    if expected_format not in ("MANHWA", "MANGA"):
+    if expected_format not in ("MANHWA", "MANGA", "MANHUA"):
         raise ValueError("Unknown frozen catalog format")
     if catalog not in ("mangaupdates", "shikimori", "mal", "kitsu"):
         raise ValueError("Unknown independent catalog scope")
