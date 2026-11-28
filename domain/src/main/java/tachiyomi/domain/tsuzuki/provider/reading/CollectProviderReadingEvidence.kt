@@ -798,6 +798,9 @@ class CollectProviderReadingEvidence private constructor(
                                     exact,
                                     independentlyVerifiedMangaUpdatesId = independentCatalogId,
                                     requiredCreatorGroups = researchRequiredCreatorGroups,
+                                    onRequiredCredits = { required, matched, observed ->
+                                        traceRequiredCredits(canonicalTitleId, target, required, matched, observed)
+                                    },
                                 )
                                 assessments.forEach {
                                     traceWorkSourceAssociation(
@@ -2545,6 +2548,45 @@ class CollectProviderReadingEvidence private constructor(
      * Typed reason codes distinguish an unverified work, conflicting creator,
      * source-attested variant and a valid work with unresolved edition.
      */
+    private fun traceRequiredCredits(
+        titleId: String,
+        target: ReadingTarget,
+        required: Int,
+        matched: Int,
+        observed: Int,
+    ) {
+        if (!diagnostics.detailedCaptureActive) return
+        runCatching {
+            val attributes = buildMap<String, DiagnosticAttributeValue> {
+                put("provider_id", DiagnosticAttributeValue.Text(target.registration.descriptor.id.value))
+                diagnostics.canonicalTitleReference(titleId)?.let {
+                    put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
+                }
+                when (target.researchSource) {
+                    "mangadex" -> DiagnosticMangaAllNetworkSource.MANGADEX
+                    "mangadot" -> DiagnosticMangaAllNetworkSource.MANGADOT
+                    else -> null
+                }?.let { put("mangaall_network_source", DiagnosticAttributeValue.Code(it)) }
+                put("target_source_count", DiagnosticAttributeValue.Number(required.toLong()))
+                put("accepted_count", DiagnosticAttributeValue.Number(matched.toLong()))
+                put("observation_count", DiagnosticAttributeValue.Number(observed.toLong()))
+            }
+            diagnostics.record(
+                StructuredDiagnosticEvent(
+                    timestampMillis = clock().coerceAtLeast(0L),
+                    severity = DiagnosticSeverity.DEBUG,
+                    subsystem = DiagnosticSubsystem.CHAPTER,
+                    name = DiagnosticEventName.PROVIDER_READING_SOURCE_ASSOCIATION,
+                    sessionId = diagnostics.sessionId,
+                    operationId = null,
+                    stage = DiagnosticStage.BINDING,
+                    outcome = DiagnosticOutcome.CANDIDATES,
+                    attributes = attributes,
+                ),
+            )
+        }
+    }
+
     private fun traceWorkSourceAssociation(
         titleId: String,
         target: ReadingTarget,

@@ -345,6 +345,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val acquisitionFacts = java.util.Collections.synchronizedList(mutableListOf<String>())
         val lookupFailureFacts = java.util.Collections.synchronizedList(mutableListOf<String>())
         val chapterFailureFacts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val requiredCreditFacts = java.util.Collections.synchronizedList(mutableListOf<String>())
         val diagnosticRecorder = object : StructuredDiagnosticRecorder {
             override val sessionId = "00000000-0000-0000-0000-000000000000"
             override val detailedCaptureActive = true
@@ -386,6 +387,19 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     val status = (event.attributes["http_status"] as? DiagnosticAttributeValue.Number)?.value
                         ?.takeIf { it in 100..599 } ?: 0
                     chapterFailureFacts += "source=$source|code=$error|category=$category|http=$status"
+                }
+                if (event.name == DiagnosticEventName.PROVIDER_READING_SOURCE_ASSOCIATION &&
+                    requiredCreditFacts.size < 2_048
+                ) {
+                    val required = (event.attributes["target_source_count"] as? DiagnosticAttributeValue.Number)?.value
+                    val matched = (event.attributes["accepted_count"] as? DiagnosticAttributeValue.Number)?.value
+                    val observed = (event.attributes["observation_count"] as? DiagnosticAttributeValue.Number)?.value
+                    if (required != null && matched != null && observed != null &&
+                        required in 1..8 && matched in 0..required && observed in 0..64
+                    ) {
+                        requiredCreditFacts += "source=$source|required=$required|matched=$matched|observed=$observed"
+                        return
+                    }
                 }
                 val reason = code("provider_work_verification") ?: code("provider_detail_outcome")
                     ?: error ?: code("error_category") ?: "NONE"
@@ -903,6 +917,36 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     parsed.type == CanonicalChapterType.REGULAR && parsed.baseNumber == 1 &&
                         parsed.part == null && parsed.alphaSuffix == null
                 }
+                val chapterOneIds = chapterOnes.map { it.id }.toSet()
+                // Classify source formatting without exporting actual chapter titles.
+                val shapes = rawOnes.groupingBy { row ->
+                    val evidence = row.evidence
+                    val title = evidence.title.orEmpty().trim()
+                    val parsed = parser.execute(evidence.rawLabel, evidence.rawNumber)
+                    val shape = when {
+                        title.isEmpty() -> "NO_TITLE"
+                        title == "1" || title == "1.0" -> "REPEATED_NUMBER"
+                        title.first().isDigit() -> "NUMERIC_TITLE"
+                        title.first().isLetter() -> "LETTER_TITLE"
+                        else -> "PUNCTUATION_TITLE"
+                    }
+                    val result = when {
+                        parsed.type == CanonicalChapterType.UNKNOWN -> "UNKNOWN"
+                        parsed.type != CanonicalChapterType.REGULAR -> "SEMANTIC"
+                        parsed.baseNumber != 1 -> "OTHER_NUMBER"
+                        parsed.part != null || parsed.alphaSuffix != null -> "PART_OR_SUFFIX"
+                        else -> "EXACT_ONE"
+                    }
+                    "shape=$shape|parsed=$result"
+                }.eachCount()
+                for ((fact, count) in shapes.toSortedMap()) {
+                    instrument.sendStatus(
+                        1,
+                        Bundle().apply {
+                            putString("stream", "MANGAALL_EVIDENCE_SHAPE|index=$index|source=$source|$fact|count=$count")
+                        },
+                    )
+                }
                 instrument.sendStatus(
                     1,
                     Bundle().apply {
@@ -911,7 +955,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                             "MANGAALL_EVIDENCE_RANGE|index=$index|source=$source|observed=${scopedEvidence.size}" +
                                 "|mappedRows=${scopedEvidence.count { it.mappedCanonicalChapterId != null }}" +
                                 "|rawOne=${rawOnes.size}|parsedOne=$parsedOnes" +
-                                "|mappedOne=${rawOnes.count { it.mappedCanonicalChapterId != null }}",
+                                "|mappedOne=${rawOnes.count { it.mappedCanonicalChapterId in chapterOneIds }}",
                         )
                     },
                 )
@@ -1064,6 +1108,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             acquisitionFacts.clear()
             lookupFailureFacts.clear()
             chapterFailureFacts.clear()
+            requiredCreditFacts.clear()
             val result = try {
                 if (phase == "COLLECT" || creditAudit) {
                     collect(index, titleId)
@@ -1115,6 +1160,19 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                         1,
                         Bundle().apply {
                             putString("stream", "MANGAALL_CHAPTER_FAILURE|index=$index|$fact|count=$count")
+                        },
+                    )
+                }
+            }
+            if (phase == "COLLECT") {
+                val credits = synchronized(requiredCreditFacts) {
+                    requiredCreditFacts.toList().groupingBy { it }.eachCount()
+                }
+                for ((fact, count) in credits.toSortedMap()) {
+                    instrument.sendStatus(
+                        1,
+                        Bundle().apply {
+                            putString("stream", "MANGAALL_REQUIRED_CREDITS|index=$index|$fact|count=$count")
                         },
                     )
                 }

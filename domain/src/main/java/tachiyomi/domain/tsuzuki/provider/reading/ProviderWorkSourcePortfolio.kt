@@ -61,6 +61,7 @@ object ProviderWorkSourcePortfolio {
         candidates: List<ProviderWorkCandidate>,
         independentlyVerifiedMangaUpdatesId: String? = null,
         requiredCreatorGroups: List<Set<String>> = emptyList(),
+        onRequiredCredits: (required: Int, matched: Int, observed: Int) -> Unit = { _, _, _ -> },
     ): List<ProviderWorkSourceAssessment> {
         val normalizedQuery = normalizeTitle(queryTitle)
         require(normalizedQuery.isNotEmpty()) { "Portfolio query title cannot be empty" }
@@ -105,6 +106,9 @@ object ProviderWorkSourcePortfolio {
                     normalizedRequiredGroups[index].any(keys::contains)
                 }
             }.toSet().size
+            if (requiredCreatorGroups.isNotEmpty() && exactTitle && detailVerified) {
+                onRequiredCredits(requiredCreatorGroups.size, matchedGroups, candidate.authors.size)
+            }
             val verification = when {
                 !exactTitle -> ProviderWorkVerification.TITLE_UNVERIFIED
                 expectedAuthors == null || !constraintsVerified ->

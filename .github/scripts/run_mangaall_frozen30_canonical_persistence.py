@@ -242,6 +242,40 @@ def collect_ranges(log, shard, focused=False):
     return [rows[k] for k in sorted(rows)]
 
 
+def collect_required_credits(log, shard, focused=False):
+    pattern = (r"MANGAALL_REQUIRED_CREDITS\|index=(\d+)\|source=(MANGADEX|MANGADOT|UNKNOWN)"
+               r"\|required=(\d)\|matched=(\d)\|observed=(\d{1,2})\|count=(\d{1,4})(?=\s|$)")
+    rows = {}
+    for match in re.finditer(pattern, log):
+        index, source, required, matched, observed, count = match.groups()
+        index, required, matched, observed, count = map(int, (index, required, matched, observed, count))
+        key = (index, source, required, matched, observed)
+        if (index not in expected_indices(shard, focused) or key in rows or not 1 <= required <= 8
+                or not 0 <= matched <= min(required, observed) or not 0 <= observed <= 64
+                or not 0 < count <= 2048 or len(rows) >= 2048):
+            return []
+        rows[key] = dict(index=index, source=source, required=required, matched=matched,
+                         observed=observed, count=count)
+    return [rows[k] for k in sorted(rows)]
+
+
+def collect_evidence_shapes(log, shard, focused=False):
+    pattern = (r"MANGAALL_EVIDENCE_SHAPE\|index=(\d+)\|source=(mangadex|mangadot)"
+               r"\|shape=(NO_TITLE|REPEATED_NUMBER|NUMERIC_TITLE|LETTER_TITLE|PUNCTUATION_TITLE)"
+               r"\|parsed=(UNKNOWN|SEMANTIC|OTHER_NUMBER|PART_OR_SUFFIX|EXACT_ONE)"
+               r"\|count=(\d{1,7})(?=\s|$)")
+    rows = {}
+    for match in re.finditer(pattern, log):
+        index, source, shape, parsed, count = match.groups()
+        index, count = int(index), int(count)
+        key = (index, source, shape, parsed)
+        if (index not in expected_indices(shard, focused) or key in rows
+                or not 0 < count <= 1_000_000 or len(rows) >= 2048):
+            return []
+        rows[key] = dict(index=index, source=source, shape=shape, parsed=parsed, count=count)
+    return [rows[k] for k in sorted(rows)]
+
+
 def collect_evidence_ranges(log, shard, focused=False):
     pattern = (
         r"MANGAALL_EVIDENCE_RANGE\|index=(\d+)\|source=(mangadex|mangadot)"
@@ -414,6 +448,8 @@ def invoke(shard, phase, catalog, reader=False, focused=False, cohort=None):
         parsed["diagnostics"] = collect_diagnostics(log, shard, focused)
         parsed["ranges"] = collect_ranges(log, shard, focused)
         parsed["evidenceRanges"] = collect_evidence_ranges(log, shard, focused)
+        parsed["evidenceShapes"] = collect_evidence_shapes(log, shard, focused)
+        parsed["requiredCredits"] = collect_required_credits(log, shard, focused)
         parsed["acquisition"] = collect_acquisition(log, shard, focused)
         parsed["optionRejections"] = collect_option_rejections(log, shard, focused)
     if reader and phase == "RESTORE":
@@ -469,6 +505,10 @@ def run(shard, catalog, reader=False, focused=False, cohort=None):
                 print(f"MANGAALL_CANONICAL_PERSISTENCE|phase={phase.upper()}|index={row['index']}|outcome={row['status']}")
         for row in report["collect"].get("lookupFailures", []):
             print("MANGAALL_LOOKUP_FAILURE|" + "|".join(f"{key}={value}" for key, value in row.items()))
+        for row in report["collect"].get("evidenceShapes", []):
+            print("MANGAALL_EVIDENCE_SHAPE|" + "|".join(f"{key}={value}" for key, value in row.items()))
+        for row in report["collect"].get("requiredCredits", []):
+            print("MANGAALL_REQUIRED_CREDITS|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("chapterFailures", []):
             print("MANGAALL_CHAPTER_FAILURE|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["restore"].get("readerFailures", []):
@@ -552,6 +592,13 @@ def aggregate(catalog, reader=False, focused=False, cohort=None):
 
 
 def selftest():
+    credit = "MANGAALL_REQUIRED_CREDITS|index=1|source=MANGADEX|required=2|matched=1|observed=1|count=3"
+    assert collect_required_credits(credit, 0)[0]["matched"] == 1
+    assert collect_required_credits(credit.replace("matched=1", "matched=2"), 0) == []
+    assert collect_required_credits(credit + "\n" + credit, 0) == []
+    shape = "MANGAALL_EVIDENCE_SHAPE|index=1|source=mangadot|shape=NUMERIC_TITLE|parsed=UNKNOWN|count=1"
+    assert collect_evidence_shapes(shape, 0)[0]["parsed"] == "UNKNOWN"
+    assert collect_evidence_shapes(shape + "\n" + shape, 0) == []
     lookup = ("MANGAALL_LOOKUP_FAILURE|index=1|source=MANGADOT|code=SOURCE_READ_ERROR"
               "|category=HTTP|http=429|count=2")
     assert collect_lookup_failures(lookup, 0) == [
