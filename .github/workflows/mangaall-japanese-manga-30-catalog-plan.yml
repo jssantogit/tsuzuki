@@ -236,3 +236,5 @@ jobs:
 # Strict gate for integrated diagnostics and provider authorization guards, frozen Japanese corpus.
 
 # Reattest the immutable Japanese cohort after approved pagination and parser changes.
+
+# Reattest full cohort for the integrated creator and evidence shape diagnostics.
