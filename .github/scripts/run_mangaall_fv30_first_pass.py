@@ -46,6 +46,7 @@ def parse(raw, group):
             title = record.get("query")
             row = by_title.get(title)
             if (row is None or row["index"] in observed or record.get("caseId") != case_id(title)
+                    or record.get("editionExtentUsed", False) is not False
                     or any(record.get(key) is not False for key in
                            ("retrievalHintUsed", "creatorConstraintUsed", "creatorAliasesUsed"))):
                 invalid += 1
