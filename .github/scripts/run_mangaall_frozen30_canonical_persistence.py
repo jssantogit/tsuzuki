@@ -26,6 +26,10 @@ JAPANESE2 = frozenset((5, 13))
 
 
 def focused_indices(focused):
+    if isinstance(focused, frozenset):
+        if not focused or not focused <= frozenset(range(1, 31)):
+            raise ValueError("INVALID_EXPLICIT_RESEARCH_INDICES")
+        return focused
     if focused == "japanese2":
         return JAPANESE2
     if focused == "japanese28":
