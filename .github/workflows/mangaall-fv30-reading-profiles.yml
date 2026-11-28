@@ -29,3 +29,46 @@ jobs:
           python3 .github/scripts/test_mangaall_fv30_reading_profiles.py future-code11-source
           node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
           node .github/scripts/test_mangaall_mangadot_search_policy.mjs
+  instrumentation-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify mixed corpus slice and receipt geometry
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/mangaall_fv30_reading_profile_plan.py
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          cache-read-only: true
+      - name: Compile shared instrumentation without executing live sources
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          if ./gradlew :app:spotlessKotlinCheck :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+            cat "$log"
+            exit 0
+          fi
+          if ! grep -Eiq 'no cached version|offline mode|not available for offline' "$log"; then
+            cat "$log"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if ./gradlew :app:spotlessKotlinCheck :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+              cat "$log"
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log" || [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
