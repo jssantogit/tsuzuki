@@ -11,9 +11,11 @@ import eu.kanade.tachiyomi.data.tsuzuki.integration.MalIntegrationProvider
 import eu.kanade.tachiyomi.data.tsuzuki.integration.MangaUpdatesIntegrationProvider
 import eu.kanade.tachiyomi.data.tsuzuki.integration.ShikimoriIntegrationProvider
 import eu.kanade.tachiyomi.data.tsuzuki.integration.ShikimoriRequestGate
+import eu.kanade.tachiyomi.network.HttpException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -47,6 +49,7 @@ import tachiyomi.domain.tsuzuki.integration.MetadataProvider
 import tachiyomi.domain.tsuzuki.integration.RatingsProvider
 import tachiyomi.domain.tsuzuki.integration.SearchProvider
 import tachiyomi.domain.tsuzuki.integration.TrackingProvider
+import java.io.IOException
 import java.security.MessageDigest
 import java.text.Normalizer
 
@@ -153,6 +156,9 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                         error is CatalogError.RateLimitExceeded -> "HTTP_429"
                         error is CatalogError.NetworkError -> "NETWORK_FAILURE"
                         error is CatalogError.SerializationError -> "SERIALIZATION_FAILURE"
+                        error is HttpException -> "HTTP_${error.code}"
+                        error is SerializationException -> "SERIALIZATION_FAILURE"
+                        error is IOException -> "NETWORK_FAILURE"
                         else -> "OTHER_FAILURE"
                     }
                     contract ?: "$diagnosticPrefix|reason=$reason"
