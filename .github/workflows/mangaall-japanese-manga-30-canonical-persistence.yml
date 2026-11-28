@@ -224,3 +224,5 @@ jobs:
 # Run the exact frozen 30-work canonical gate after the successful strict catalog receipt.
 
 # Bind the opt-in to strict catalog run 46068650846; no source tree changes.
+
+# Verify multilingual chapter parsing and bounded continuation on the frozen cohort.
