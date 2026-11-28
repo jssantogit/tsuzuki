@@ -508,6 +508,31 @@ class RefreshProviderReadingChaptersTest {
     }
 
     @Test
+    fun `chapter failure callback retains transport error without accepting a page`() = runBlocking {
+        val failure = ProviderError(
+            ProviderErrorCode.SOURCE_READ_ERROR,
+            retryable = true,
+            sourceFailureCode = ProviderLookupFailureCode.HTTP_ERROR,
+            httpStatus = 429,
+        )
+        val errors = mutableListOf<ProviderError>()
+        var accepted = 0
+        val refresher = RefreshProviderReadingChapters(
+            gateway = gateway { ProviderCallResult.Failure(failure) },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = null,
+            onPageFailure = { index, error, _ ->
+                index shouldBe 1
+                errors += error
+            },
+            onPageAccepted = { accepted++ },
+        )
+        refresher.execute(binding) shouldBe ProviderCallResult.Failure(failure)
+        errors shouldBe listOf(failure)
+        accepted shouldBe 0
+    }
+
+    @Test
     fun `terminal empty inventory remains a successful zero-row chapter observation`() = runBlocking {
         val finished = mutableListOf<Triple<Int, Int?, ProviderErrorCode?>>()
         val refresher = RefreshProviderReadingChapters(

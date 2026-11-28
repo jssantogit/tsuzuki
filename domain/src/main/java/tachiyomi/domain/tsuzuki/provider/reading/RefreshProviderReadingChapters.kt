@@ -19,6 +19,7 @@ class RefreshProviderReadingChapters internal constructor(
     private val onPageCollected: suspend (List<ProviderChapterObservation>, Long) -> Unit = { _, _ -> },
     private val onPageStarted: suspend (Int) -> Unit = {},
     private val onPageFinished: suspend (Int, Int?, ProviderErrorCode?, Long) -> Unit = { _, _, _, _ -> },
+    private val onPageFailure: suspend (Int, ProviderError, Long) -> Unit = { _, _, _ -> },
     /** Called only after the fully validated page has been delivered to its provisional collector. */
     private val onPageAccepted: suspend (ProviderCursor?) -> Unit = {},
 ) {
@@ -84,6 +85,7 @@ class RefreshProviderReadingChapters internal constructor(
                 is ProviderCallResult.Success -> result.value
                 is ProviderCallResult.Failure -> {
                     onPageFinished(pageIndex, null, result.error.code, elapsedMillis)
+                    onPageFailure(pageIndex, result.error, elapsedMillis)
                     return result
                 }
             }
@@ -100,8 +102,10 @@ class RefreshProviderReadingChapters internal constructor(
                 else -> null
             }
             if (pageError != null) {
+                val invalid = failure(pageError)
                 onPageFinished(pageIndex, null, pageError, elapsedMillis)
-                return failure(pageError)
+                onPageFailure(pageIndex, invalid.error, elapsedMillis)
+                return invalid
             }
             seenChapterIds.addAll(pageIds)
             if (next != null) seenCursors += next.value

@@ -166,8 +166,9 @@ PROVIDER_ERROR_CODES = {
 }
 
 
-def collect_lookup_failures(log, shard, focused=False):
-    pattern = (r"MANGAALL_LOOKUP_FAILURE\|index=(\d+)\|source=(MANGADEX|MANGADOT|UNKNOWN)"
+def collect_lookup_failures(log, shard, focused=False, chapter=False):
+    prefix = "MANGAALL_CHAPTER_FAILURE" if chapter else "MANGAALL_LOOKUP_FAILURE"
+    pattern = (prefix + r"\|index=(\d+)\|source=(MANGADEX|MANGADOT|UNKNOWN)"
                r"\|code=([A-Z_]{1,48})\|category=(NONE|CAPTCHA|HTTP|MALFORMED_RESPONSE|UNKNOWN)"
                r"\|http=(\d{1,3})\|count=(\d{1,4})(?=\s|$)")
     rows = {}
@@ -409,6 +410,7 @@ def invoke(shard, phase, catalog, reader=False, focused=False, cohort=None):
     if phase == "COLLECT":
         parsed["catalogSearchFailures"] = collect_catalog_search_failures(log, shard, focused)
         parsed["lookupFailures"] = collect_lookup_failures(log, shard, focused)
+        parsed["chapterFailures"] = collect_lookup_failures(log, shard, focused, chapter=True)
         parsed["diagnostics"] = collect_diagnostics(log, shard, focused)
         parsed["ranges"] = collect_ranges(log, shard, focused)
         parsed["evidenceRanges"] = collect_evidence_ranges(log, shard, focused)
@@ -467,6 +469,8 @@ def run(shard, catalog, reader=False, focused=False, cohort=None):
                 print(f"MANGAALL_CANONICAL_PERSISTENCE|phase={phase.upper()}|index={row['index']}|outcome={row['status']}")
         for row in report["collect"].get("lookupFailures", []):
             print("MANGAALL_LOOKUP_FAILURE|" + "|".join(f"{key}={value}" for key, value in row.items()))
+        for row in report["collect"].get("chapterFailures", []):
+            print("MANGAALL_CHAPTER_FAILURE|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["restore"].get("readerFailures", []):
             print("MANGAALL_READER_FAILURE|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("catalogSearchFailures", []):
@@ -555,6 +559,10 @@ def selftest():
     assert collect_lookup_failures(lookup + "\n" + lookup, 0) == []
     assert collect_lookup_failures(lookup.replace("http=429", "http=999"), 0) == []
     assert collect_lookup_failures(lookup.replace("SOURCE_READ_ERROR", "UNRECOGNIZED"), 0) == []
+    chapter = lookup.replace("MANGAALL_LOOKUP_FAILURE", "MANGAALL_CHAPTER_FAILURE")
+    assert collect_lookup_failures(chapter, 0, chapter=True) == collect_lookup_failures(lookup, 0)
+    assert collect_lookup_failures(chapter, 0) == []
+    assert collect_lookup_failures(chapter.replace("http=429", "http=999"), 0, chapter=True) == []
     reader = {"works": [dict(index=1, status="PREPARATION_FAILED")]}
     failure = ("MANGAALL_READER_FAILURE|index=1|code=SOURCE_READ_ERROR|retryable=false"
                "|http=403|category=CHALLENGE_BLOCKED|stage=NONE")

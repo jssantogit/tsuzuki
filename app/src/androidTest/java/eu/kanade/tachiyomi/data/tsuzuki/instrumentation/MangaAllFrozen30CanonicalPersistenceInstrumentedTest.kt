@@ -344,6 +344,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         // export actual titles, creator names, HIDs, URLs or chapter IDs.
         val acquisitionFacts = java.util.Collections.synchronizedList(mutableListOf<String>())
         val lookupFailureFacts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val chapterFailureFacts = java.util.Collections.synchronizedList(mutableListOf<String>())
         val diagnosticRecorder = object : StructuredDiagnosticRecorder {
             override val sessionId = "00000000-0000-0000-0000-000000000000"
             override val detailedCaptureActive = true
@@ -377,6 +378,14 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                     val status = (event.attributes["http_status"] as? DiagnosticAttributeValue.Number)?.value
                         ?.takeIf { it in 100..599 } ?: 0
                     lookupFailureFacts += "source=$source|code=$error|category=$category|http=$status"
+                }
+                if (event.name == DiagnosticEventName.PROVIDER_READING_CHAPTER_ATTEMPT &&
+                    error != null && chapterFailureFacts.size < 2_048
+                ) {
+                    val category = code("error_category") ?: "NONE"
+                    val status = (event.attributes["http_status"] as? DiagnosticAttributeValue.Number)?.value
+                        ?.takeIf { it in 100..599 } ?: 0
+                    chapterFailureFacts += "source=$source|code=$error|category=$category|http=$status"
                 }
                 val reason = code("provider_work_verification") ?: code("provider_detail_outcome")
                     ?: error ?: code("error_category") ?: "NONE"
@@ -1054,6 +1063,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             val titleId = "$receiptNamespace-canonical-$index"
             acquisitionFacts.clear()
             lookupFailureFacts.clear()
+            chapterFailureFacts.clear()
             val result = try {
                 if (phase == "COLLECT" || creditAudit) {
                     collect(index, titleId)
@@ -1092,6 +1102,19 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                         1,
                         Bundle().apply {
                             putString("stream", "MANGAALL_LOOKUP_FAILURE|index=$index|$fact|count=$count")
+                        },
+                    )
+                }
+            }
+            if (phase == "COLLECT") {
+                val failures = synchronized(chapterFailureFacts) {
+                    chapterFailureFacts.toList().groupingBy { it }.eachCount()
+                }
+                for ((fact, count) in failures.toSortedMap()) {
+                    instrument.sendStatus(
+                        1,
+                        Bundle().apply {
+                            putString("stream", "MANGAALL_CHAPTER_FAILURE|index=$index|$fact|count=$count")
                         },
                     )
                 }

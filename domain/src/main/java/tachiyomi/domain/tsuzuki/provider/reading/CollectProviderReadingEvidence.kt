@@ -574,14 +574,26 @@ class CollectProviderReadingEvidence private constructor(
                     traceChapterRequest(canonicalTitleId, target, binding.ref, pageIndex, DiagnosticOutcome.STARTED)
                 },
                 onPageFinished = { pageIndex, count, errorCode, elapsedMillis ->
+                    if (errorCode == null) {
+                        traceChapterRequest(
+                            canonicalTitleId,
+                            target,
+                            binding.ref,
+                            pageIndex,
+                            DiagnosticOutcome.SUCCEEDED,
+                            itemCount = count,
+                            elapsedMillis = elapsedMillis,
+                        )
+                    }
+                },
+                onPageFailure = { pageIndex, error, elapsedMillis ->
                     traceChapterRequest(
                         canonicalTitleId,
                         target,
                         binding.ref,
                         pageIndex,
-                        if (errorCode == null) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.FAILED,
-                        itemCount = count,
-                        errorCode = errorCode,
+                        DiagnosticOutcome.FAILED,
+                        error = error,
                         elapsedMillis = elapsedMillis,
                     )
                 },
@@ -1420,7 +1432,7 @@ class CollectProviderReadingEvidence private constructor(
                 1,
                 if (page != null) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.FAILED,
                 itemCount = page?.items?.size,
-                errorCode = error?.code,
+                error = error,
                 elapsedMillis = (System.nanoTime() - started) / 1_000_000L,
             )
             activePreview = null
@@ -1923,14 +1935,26 @@ class CollectProviderReadingEvidence private constructor(
                         traceChapterRequest(canonicalTitleId, target, source.ref, index, DiagnosticOutcome.STARTED)
                     },
                     onPageFinished = { index, count, errorCode, elapsedMillis ->
+                        if (errorCode == null) {
+                            traceChapterRequest(
+                                canonicalTitleId,
+                                target,
+                                source.ref,
+                                index,
+                                DiagnosticOutcome.SUCCEEDED,
+                                itemCount = count,
+                                elapsedMillis = elapsedMillis,
+                            )
+                        }
+                    },
+                    onPageFailure = { index, error, elapsedMillis ->
                         traceChapterRequest(
                             canonicalTitleId,
                             target,
                             source.ref,
                             index,
-                            if (errorCode == null) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.FAILED,
-                            itemCount = count,
-                            errorCode = errorCode,
+                            DiagnosticOutcome.FAILED,
+                            error = error,
                             elapsedMillis = elapsedMillis,
                         )
                     },
@@ -2452,7 +2476,7 @@ class CollectProviderReadingEvidence private constructor(
         pageIndex: Int,
         outcome: DiagnosticOutcome,
         itemCount: Int? = null,
-        errorCode: ProviderErrorCode? = null,
+        error: ProviderError? = null,
         elapsedMillis: Long? = null,
     ) {
         if (!diagnostics.detailedCaptureActive) return
@@ -2480,7 +2504,24 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 source?.let { put("mangaall_network_source", DiagnosticAttributeValue.Code(it)) }
                 itemCount?.let { put("item_count", DiagnosticAttributeValue.Number(it.toLong())) }
-                errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
+                error?.let {
+                    put("provider_error_code", DiagnosticAttributeValue.Text(it.code.name))
+                    it.malformedStage?.let { stage ->
+                        put("provider_malformed_stage", DiagnosticAttributeValue.Code(stage))
+                    }
+                    it.sourceFailureCode?.let { reason ->
+                        val category = when (reason) {
+                            ProviderLookupFailureCode.CHALLENGE_BLOCKED -> DiagnosticErrorCategory.CAPTCHA
+                            ProviderLookupFailureCode.HTTP_ERROR -> DiagnosticErrorCategory.HTTP
+                            ProviderLookupFailureCode.INVALID_RESPONSE -> DiagnosticErrorCategory.MALFORMED_RESPONSE
+                            ProviderLookupFailureCode.UNCLASSIFIED_ERROR -> DiagnosticErrorCategory.UNKNOWN
+                        }
+                        put("error_category", DiagnosticAttributeValue.Code(category))
+                    }
+                    it.httpStatus?.let { status ->
+                        put("http_status", DiagnosticAttributeValue.Number(status.toLong()))
+                    }
+                }
             }
             diagnostics.record(
                 StructuredDiagnosticEvent(
