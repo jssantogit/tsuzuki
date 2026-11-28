@@ -131,3 +131,5 @@ jobs:
           path: fv30-focused-results/summary.json
           if-no-files-found: error
           retention-days: 90
+
+# Re-run the eight-case diagnostic after the exact Spotless correction.
