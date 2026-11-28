@@ -1,0 +1,108 @@
+name: MangaALL FV30 B/C focused diagnostic
+on:
+  push:
+    branches: ['research/mangaall-fv30-parallel-20261128']
+    paths: ['.github/workflows/mangaall-fv30-parallel-focused.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify original run and frozen unresolved works
+        run: |
+          set -euo pipefail
+          gh api repos/$GH_REPO/actions/runs/46136665066 | jq -e '.head_sha=="1fc216da90ed13b45a564fcdb702ebe5488304d6" and .conclusion=="failure"'
+          for cohort in fv30b fv30c; do
+            gh run download 46136665066 --name "$cohort-first-pass-summary" --dir "fv30-parallel-prior/$cohort"
+          done
+          python3 .github/scripts/run_mangaall_fv30_parallel_focused.py --check
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: fv30-bc-prior-verified
+          path: fv30-parallel-prior/
+          if-no-files-found: error
+          retention-days: 7
+  catalog:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        job: [b-shiki-alternate, b-mu-alternate, b-mu-diagnose, c-shiki-retry, c-shiki-alternate, c-mu-diagnose]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: fv30-bc-prior-verified
+          path: fv30-parallel-prior/
+      - name: Reuse the exact original APK pair without rebuilding
+        run: gh run download 46136665066 --name fv30-parallel-android-apks --dir app/build/outputs/apk/
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Observe only unresolved titles
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: python3 .github/scripts/run_mangaall_fv30_parallel_focused.py --job ${{ matrix.job }}
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: fv30-bc-diag-${{ matrix.job }}
+          path: fv30-parallel-focused-results/${{ matrix.job }}/
+          if-no-files-found: error
+          retention-days: 90
+  aggregate:
+    if: always()
+    needs: [preflight, catalog]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: fv30-bc-prior-verified
+          path: fv30-parallel-prior/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          pattern: fv30-bc-diag-*
+          path: fv30-parallel-focused-results/
+      - run: |
+          set -euo pipefail
+          cd fv30-parallel-focused-results
+          for p in fv30-bc-diag-*; do
+            [[ ! -d "$p" ]] || mv "$p" "${p#fv30-bc-diag-}"
+          done
+          cd ..
+          python3 .github/scripts/run_mangaall_fv30_parallel_focused.py --aggregate
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: fv30-bc-focused-summary
+          path: fv30-parallel-focused-results/summary.json
+          if-no-files-found: error
+          retention-days: 90
