@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "cohort": "FV30_FIXED_20261128",
+  "baselineSha": "d25f5367efabb939aea67b8daf5a1217a439c3e1",
+  "purpose": "HOLDOUT_FIRST_PASS",
+  "oracleStatus": "EDITION_AND_CREDIT_REVIEW_PENDING",
+  "controls": {
+    "repeated": "Tower of God",
+    "negativeOutsideCohort": "Chuunibyou demo Koi ga Shitai!"
+  },
+  "works": [
+    {
+      "index": 1,
+      "title": "Golden Time",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 2,
+      "title": "KonoSuba",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 3,
+      "title": "Black Clover",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 4,
+      "title": "Tower of God",
+      "format": "manhwa",
+      "originalLanguage": "ko",
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 5,
+      "title": "Kaze no Stigma: Kouen no Miko",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 6,
+      "title": "Angel Beats! Heaven's Door",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 7,
+      "title": "Mirai Nikki",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 8,
+      "title": "Amagami: Precious Diary",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 9,
+      "title": "Sakurasou no Pet na Kanojo",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 10,
+      "title": "Yahari Ore no Seishun Love Comedy wa Machigatteiru. @comic",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 11,
+      "title": "Hyouka",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 12,
+      "title": "Toradora!",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 13,
+      "title": "Baka to Test to Shoukanjuu",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 14,
+      "title": "Accel World",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 15,
+      "title": "DanMachi",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 16,
+      "title": "Strike the Blood",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 17,
+      "title": "Guilty Crown",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 18,
+      "title": "ReLIFE",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 19,
+      "title": "Another",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 20,
+      "title": "The World God Only Knows",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 21,
+      "title": "D-Frag!",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 22,
+      "title": "Nisekoi",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 23,
+      "title": "Btooom!",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 24,
+      "title": "Akatsuki no Yona",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 25,
+      "title": "3-gatsu no Lion",
+      "format": "manga",
+      "originalLanguage": "ja",
+      "catalog": "shikimori"
+    },
+    {
+      "index": 26,
+      "title": "Kubera",
+      "format": "manhwa",
+      "originalLanguage": "ko",
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 27,
+      "title": "DICE: The Cube That Changes Everything",
+      "format": "manhwa",
+      "originalLanguage": "ko",
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 28,
+      "title": "The Gamer",
+      "format": "manhwa",
+      "originalLanguage": "ko",
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 29,
+      "title": "Tales of Demons and Gods",
+      "format": "manhua",
+      "originalLanguage": "zh",
+      "catalog": "mangaupdates"
+    },
+    {
+      "index": 30,
+      "title": "Song of the Long March",
+      "format": "manhua",
+      "originalLanguage": "zh",
+      "catalog": "mangaupdates"
+    }
+  ]
+}
