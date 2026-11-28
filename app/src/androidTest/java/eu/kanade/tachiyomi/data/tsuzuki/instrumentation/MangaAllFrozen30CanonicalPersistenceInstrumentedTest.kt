@@ -213,7 +213,12 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         )
         if (mixed) {
             assertEquals(corpusSha, hash(lockText))
-            assertEquals((1..30).toList(), lockedRows.map { it.jsonObject.getValue("index").jsonPrimitive.content.toInt() })
+            assertEquals(
+                (1..30).toList(),
+                lockedRows.map {
+                    it.jsonObject.getValue("index").jsonPrimitive.content.toInt()
+                },
+            )
             val formats = mapOf("ja" to "manga", "ko" to "manhwa", "zh" to "manhua")
             assertTrue(
                 lockedRows.all {
@@ -230,7 +235,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         assertEquals(30, works.size)
         assertEquals(30, works.toSet().size)
         val indices = if (mixed) {
-            shardIndices.filter { lockedRows[it - 1].jsonObject.getValue("originalLanguage").jsonPrimitive.content == profile }
+            shardIndices.filter {
+                lockedRows[it - 1].jsonObject.getValue("originalLanguage").jsonPrimitive.content ==
+                    profile
+            }
         } else {
             shardIndices
         }
@@ -289,7 +297,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         }
 
         fun matchesAttestedOwner(index: Int, provider: String, externalId: String): Boolean =
-            (!japanese && !mixed) || japaneseDiagnostic || hash("$provider:$externalId") == attestedIdentities[index - 1]
+            (!japanese && !mixed) || japaneseDiagnostic ||
+                hash("$provider:$externalId") == attestedIdentities[index - 1]
 
         fun nativeTitle(index: Int): String? = if (mixed) {
             null
@@ -714,7 +723,9 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 return compact.takeIf { it.isNotEmpty() && it.all { char -> char in '가'..'힣' } }
             }
             val publishedNames = listOf(owner.title) + owner.titles.values
-            val references = plan.getOrNull(index - 1)?.takeUnless { mixed }?.get("reviewedCreatorReferences")?.jsonArray.orEmpty()
+            val references = plan.getOrNull(index - 1)?.takeUnless {
+                mixed
+            }?.get("reviewedCreatorReferences")?.jsonArray.orEmpty()
                 .mapNotNull { raw ->
                     val entry = raw.jsonObject
                     val native = nativeKey(entry.getValue("nativeTitle").jsonPrimitive.content)
