@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemStatus
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.catalog.model.mergeCatalogItemsByVerifiedIdentity
@@ -73,6 +74,27 @@ data class MangaAllCatalogIdentityResult(
     }
 }
 
+/**
+ * Optional externally supplied editorial context, never inferred from ranking
+ * or from the candidate list itself. Missing counts are not negative proof.
+ */
+data class MangaAllEditionExtent(
+    val minimumChapters: Int? = null,
+    val minimumVolumes: Int? = null,
+) {
+    init {
+        require(minimumChapters != null || minimumVolumes != null)
+        require(minimumChapters == null || minimumChapters > 0)
+        require(minimumVolumes == null || minimumVolumes > 0)
+    }
+}
+
+private enum class EditionMatch {
+    MATCH,
+    MISMATCH,
+    UNKNOWN,
+}
+
 @Inject
 class ResolveMangaAllIndependentCatalogIdentity(
     private val registry: IntegrationRegistry,
@@ -83,6 +105,7 @@ class ResolveMangaAllIndependentCatalogIdentity(
         searchTitle: String? = null,
         requiredCreatorNames: List<String> = emptyList(),
         requiredCreatorAliases: Map<String, List<String>> = emptyMap(),
+        editionExtent: MangaAllEditionExtent? = null,
     ): MangaAllCatalogIdentityResult = coroutineScope {
         val query = title.trim()
         require(query.isNotBlank() && query.length <= 256)
@@ -163,7 +186,10 @@ class ResolveMangaAllIndependentCatalogIdentity(
             catalogsQueried = sources.size,
         )
         if (exact.isEmpty()) return@coroutineScope fields
-        if (exact.size > 1 && (requiredCreators.isEmpty() || exact.size > MAX_CREATOR_CANDIDATES)) {
+        if (exact.size > 1 && (
+                (requiredCreators.isEmpty() && editionExtent == null) || exact.size > MAX_CREATOR_CANDIDATES
+                )
+        ) {
             return@coroutineScope fields.copy(status = MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS)
         }
 
@@ -184,35 +210,58 @@ class ResolveMangaAllIndependentCatalogIdentity(
             )
         }
         val details = verified.map { requireNotNull(it.item) }
-        val selected = if (requiredCreators.isEmpty()) {
-            details.single()
-        } else {
-            val candidates = details.map { item ->
-                item to (item.authors + item.artists).map(::creatorKey).filter(String::isNotBlank).toSet()
+        val candidates = details.map { item ->
+            val names = (item.authors + item.artists).map(::creatorKey).filter(String::isNotBlank).toSet()
+            val matched = requiredCreators.count { group -> group.any(names::contains) }
+            val creatorMatch = when {
+                requiredCreators.isEmpty() || matched == requiredCreators.size -> EditionMatch.MATCH
+                names.isEmpty() || matched > 0 -> EditionMatch.UNKNOWN
+                else -> EditionMatch.MISMATCH
             }
-            val matches = candidates.filter { (_, names) ->
-                requiredCreators.all { group -> group.any(names::contains) }
+            val evidence = listOf(creatorMatch, extentMatch(item, editionExtent))
+            val match = when {
+                EditionMatch.MISMATCH in evidence -> EditionMatch.MISMATCH
+                EditionMatch.UNKNOWN in evidence -> EditionMatch.UNKNOWN
+                else -> EditionMatch.MATCH
             }
-            val uncertain = candidates.any { (_, names) ->
-                val matched = requiredCreators.count { group -> group.any(names::contains) }
-                names.isEmpty() || matched in 1 until requiredCreators.size
-            }
-            if (matches.size != 1 || uncertain) {
-                return@coroutineScope fields.copy(
-                    status = if (matches.size > 1 || (uncertain && exact.size > 1)) {
-                        MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS
-                    } else {
-                        MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
-                    },
-                )
-            }
-            matches.single().first
+            item to match
         }
+        val matches = candidates.filter { (_, match) -> match == EditionMatch.MATCH }
+        val uncertain = candidates.any { (_, match) -> match == EditionMatch.UNKNOWN }
+        if (matches.size != 1 || uncertain) {
+            return@coroutineScope fields.copy(
+                status = if (matches.size > 1 || (uncertain && exact.size > 1)) {
+                    MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS
+                } else {
+                    MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+                },
+            )
+        }
+        val selected = matches.single().first
         fields.copy(
             status = MangaAllCatalogIdentityStatus.RESOLVED,
             identity = selected,
             creatorsAttested = selected.authors.isNotEmpty() || selected.artists.isNotEmpty(),
         )
+    }
+
+    private fun extentMatch(item: CatalogItem, extent: MangaAllEditionExtent?): EditionMatch {
+        if (extent == null) return EditionMatch.MATCH
+        fun compare(actual: Int?, minimum: Int): EditionMatch = when {
+            actual == null || actual <= 0 -> EditionMatch.UNKNOWN
+            actual >= minimum -> EditionMatch.MATCH
+            item.status == CatalogItemStatus.COMPLETED -> EditionMatch.MISMATCH
+            else -> EditionMatch.UNKNOWN
+        }
+        val evidence = listOfNotNull(
+            extent.minimumChapters?.let { compare(item.chapterCount, it) },
+            extent.minimumVolumes?.let { compare(item.volumeCount, it) },
+        )
+        return when {
+            EditionMatch.MISMATCH in evidence -> EditionMatch.MISMATCH
+            EditionMatch.UNKNOWN in evidence -> EditionMatch.UNKNOWN
+            else -> EditionMatch.MATCH
+        }
     }
 
     private data class VerifiedDetail(
