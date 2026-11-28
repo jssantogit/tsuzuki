@@ -299,9 +299,10 @@ class ResolveMangaAllIndependentCatalogIdentity(
         // exhaustion as complete.
         val narrowed = (
             source.integrationId.value == "mangaupdates" &&
-                format in setOf(CatalogItemFormat.MANHWA, CatalogItemFormat.MANGA)
+                format in setOf(CatalogItemFormat.MANHWA, CatalogItemFormat.MANGA, CatalogItemFormat.MANHUA)
             ) ||
-            (source.integrationId.value == "shikimori" && format == CatalogItemFormat.MANGA)
+            (source.integrationId.value == "shikimori" &&
+                format in setOf(CatalogItemFormat.MANGA, CatalogItemFormat.MANHWA, CatalogItemFormat.MANHUA))
         val maxPages = if (narrowed) MAX_NARROWED_PAGES_PER_CATALOG else MAX_PAGES_PER_CATALOG
         val timeout = if (narrowed) NARROWED_CATALOG_TIMEOUT_MILLIS else CATALOG_TIMEOUT_MILLIS
         // Kitsu JSON:API caps manga pages at twenty records.
