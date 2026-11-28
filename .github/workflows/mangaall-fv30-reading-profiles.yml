@@ -72,3 +72,5 @@ jobs:
             fi
             sleep "$((attempt * 45))"
           done
+
+# Retry compile with the exact formatter diff; receipt tests already passed.
