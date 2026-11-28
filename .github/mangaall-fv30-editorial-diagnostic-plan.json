@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "scope": "FV30_EDITORIAL_CONTEXT_DIAGNOSTIC_NOT_FIRST_PASS",
+  "cases": [
+    {
+      "cohort": "fv30a",
+      "index": 2,
+      "query": "この素晴らしい世界に祝福を！",
+      "creators": [
+        "Masahito Watari"
+      ],
+      "minimumVolumes": null,
+      "evidence": [
+        "https://yenpress.com/series/konosuba-manga",
+        "https://mangadb.org/series/2659/konosuba-god-s-blessing-on-this-wonderful-world"
+      ]
+    },
+    {
+      "cohort": "fv30a",
+      "index": 14,
+      "query": "Accel World",
+      "creators": [
+        "Hiroyuki Aigamo"
+      ],
+      "minimumVolumes": 2,
+      "evidence": [
+        "https://yenpress.com/series/accel-world-manga"
+      ]
+    },
+    {
+      "cohort": "fv30a",
+      "index": 22,
+      "query": "Nisekoi",
+      "creators": [
+        "Naoshi Komi"
+      ],
+      "minimumVolumes": 2,
+      "evidence": [
+        "https://www.viz.com/manga-books/manga/nisekoi-false-love-volume-25/product/5379"
+      ]
+    },
+    {
+      "cohort": "fv30a",
+      "index": 29,
+      "query": "Yao Shen Ji",
+      "creators": [],
+      "minimumVolumes": null,
+      "evidence": [
+        "https://comics.inkr.com/title/480-tales-of-demons-and-gods"
+      ]
+    },
+    {
+      "cohort": "fv30b",
+      "index": 4,
+      "query": "Boku wa Tomodachi ga Sukunai",
+      "creators": [
+        "Itachi"
+      ],
+      "minimumVolumes": 2,
+      "evidence": [
+        "https://sevenseasentertainment.com/series/haganai-i-dont-have-many-friends/"
+      ]
+    },
+    {
+      "cohort": "fv30b",
+      "index": 12,
+      "query": "Kekkaishi",
+      "creators": [
+        "Yellow Tanabe"
+      ],
+      "minimumVolumes": 2,
+      "evidence": [
+        "https://www.viz.com/kekkaishi",
+        "https://www.viz.com/manga-books/manga/kekkaishi-volume-25-0/product/2379"
+      ]
+    },
+    {
+      "cohort": "fv30b",
+      "index": 13,
+      "query": "Reborn!",
+      "creators": [
+        "Akira Amano"
+      ],
+      "minimumVolumes": null,
+      "evidence": [
+        "https://www.jbox.com.br/sobre-a-serie/reborn/",
+        "https://pt.wikipedia.org/wiki/Kateky%C5%8D_Hitman_Reborn%21"
+      ]
+    },
+    {
+      "cohort": "fv30b",
+      "index": 16,
+      "query": "Kimi ni Todoke",
+      "creators": [
+        "Karuho Shiina"
+      ],
+      "minimumVolumes": 2,
+      "evidence": [
+        "https://www.viz.com/manga-books/manga/kimi-ni-todoke-from-me-to-you-volume-30/product/5734"
+      ]
+    },
+    {
+      "cohort": "fv30b",
+      "index": 21,
+      "query": "Mushishi",
+      "creators": [
+        "Yuki Urushibara"
+      ],
+      "minimumVolumes": 2,
+      "evidence": [
+        "https://kodansha.us/series/mushishi/volume-2/"
+      ]
+    },
+    {
+      "cohort": "fv30b",
+      "index": 30,
+      "query": "Yi Ren Zhi Xia",
+      "creators": [
+        "Mi Er"
+      ],
+      "minimumVolumes": null,
+      "evidence": [
+        "https://onisaga.com/title/the-outcast-dong-man-tang"
+      ]
+    },
+    {
+      "cohort": "fv30c",
+      "index": 10,
+      "query": "Seiken no Blacksmith",
+      "creators": [
+        "Kotaro Yamada"
+      ],
+      "minimumVolumes": null,
+      "evidence": [
+        "https://sevenseasentertainment.com/series/the-sacred-blacksmith/",
+        "https://mangatlas.com/title/the-sacred-blacksmith"
+      ]
+    }
+  ]
+}
