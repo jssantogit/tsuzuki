@@ -23,9 +23,12 @@ REMAINING_OUT = Path(".github/results/mangaall-frozen30-remaining6-persistence")
 
 JAPANESE28 = frozenset(range(1,31)) - {3,5}
 JAPANESE2 = frozenset((5, 13))
+JAPANESE1 = frozenset((13,))
 
 
 def focused_indices(focused):
+    if focused == "japanese1":
+        return JAPANESE1
     if focused == "japanese2":
         return JAPANESE2
     if focused == "japanese28":
@@ -37,8 +40,9 @@ def focused_indices(focused):
 
 def report_root(focused, cohort=None):
     if cohort and cohort.key == "manga":
-        assert focused in (False, "japanese28", "japanese2")
+        assert focused in (False, "japanese28", "japanese2", "japanese1")
         suffix = {"japanese28": "28-reading-diagnostic", "japanese2": "2-reading-diagnostic",
+                  "japanese1": "1-reading-diagnostic",
                   False: "30-canonical-persistence"}[focused]
         return Path(".github/results/mangaall-japanese-manga-" + suffix)
     if focused == "remaining6":
@@ -53,7 +57,9 @@ def expected_indices(shard, focused=False):
 
 def receipt_scope(focused, cohort=None):
     if cohort and cohort.key == "manga":
-        assert focused in (False, "japanese28", "japanese2")
+        assert focused in (False, "japanese28", "japanese2", "japanese1")
+        if focused == "japanese1":
+            return "JAPANESE1_READING_DIAGNOSTIC_NOT_FINAL_GATE"
         if focused == "japanese2":
             return "JAPANESE2_READING_DIAGNOSTIC_NOT_FINAL_GATE"
         if focused == "japanese28":
@@ -429,7 +435,9 @@ def invoke(shard, phase, catalog, reader=False, focused=False, cohort=None):
           "-e", "mangaAllFrozen30Shard", str(shard)]
     if cohort and cohort.key == "manga":
         args.extend(["-e", "mangaAllCanonicalCohort", "manga"])
-    if focused == "japanese2":
+    if focused == "japanese1":
+        args.extend(["-e", "mangaAllJapaneseReadingDiagnostic", "3"])
+    elif focused == "japanese2":
         args.extend(["-e", "mangaAllJapaneseReadingDiagnostic", "2"])
     elif focused == "japanese28":
         args.extend(["-e", "mangaAllJapaneseReadingDiagnostic", "1"])
@@ -533,7 +541,7 @@ def run(shard, catalog, reader=False, focused=False, cohort=None):
             print("MANGAALL_CANONICAL_ACQUISITION|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("optionRejections", []):
             print("MANGAALL_CANONICAL_OPTION_REJECTION|" + "|".join(f"{key}={value}" for key, value in row.items()))
-        if focused in ("japanese28", "japanese2"):
+        if focused in ("japanese28", "japanese2", "japanese1"):
             for row in source_diagnostics(report["collect"]):
                 print("MANGAALL_SOURCE_DIAGNOSTIC|" + "|".join(f"{key}={value}" for key,value in row.items()))
         if reader:
@@ -559,7 +567,7 @@ def aggregate(catalog, reader=False, focused=False, cohort=None):
             complete = False
             continue
         report = json.loads(path.read_text())
-        if focused in ("japanese28", "japanese2"):
+        if focused in ("japanese28", "japanese2", "japanese1"):
             source_rows.extend(source_diagnostics(report.get("collect", {})))
         expected = sorted(expected_indices(shard, focused))
         if (report.get("schemaVersion") != 1 or report.get("corpusSha256") != (cohort.digest if cohort else DIGEST)
@@ -585,7 +593,7 @@ def aggregate(catalog, reader=False, focused=False, cohort=None):
                     or any(r.get("status") != success or r.get("catalog") != (owners.get(r["index"]) if owners is not None else catalog) for r in rows)):
                 complete = False
     total = len(focused_indices(focused))
-    if focused in ("japanese28", "japanese2"):
+    if focused in ("japanese28", "japanese2", "japanese1"):
         print(f"MANGAALL_READING_DIAGNOSTIC|scope={focused.upper()}|finalGate=NOT_TESTED|catalogOwners=FRESH_VERIFICATION")
         for source in ("mangadex", "mangadot"):
             rows = [row for row in source_rows if row["source"] == source]
@@ -602,6 +610,9 @@ def aggregate(catalog, reader=False, focused=False, cohort=None):
 
 
 def selftest():
+    assert expected_indices(0, "japanese1") == set()
+    assert expected_indices(1, "japanese1") == {13}
+    assert expected_indices(2, "japanese1") == set()
     assert expected_indices(0, "japanese2") == {5}
     assert expected_indices(1, "japanese2") == {13}
     assert expected_indices(2, "japanese2") == set()
@@ -798,6 +809,7 @@ def main():
     focus.add_argument("--remaining6", action="store_true", help="Exact remaining six; never certifies all 30")
     focus.add_argument("--japanese28", action="store_true", help="Diagnostic reading scope; never final gate")
     focus.add_argument("--japanese2", action="store_true", help="Only indices 5 and 13; never final gate")
+    focus.add_argument("--japanese1", action="store_true", help="Only original index 13; never final gate")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--shard", type=int, choices=range(3))
     group.add_argument("--aggregate", action="store_true")
@@ -808,13 +820,15 @@ def main():
     if args.selftest:
         selftest()
         return
-    focused = ("japanese2" if args.japanese2 else
+    focused = ("japanese1" if args.japanese1 else "japanese2" if args.japanese2 else
                "japanese28" if args.japanese28 else ("remaining6" if args.remaining6 else args.pending14))
-    if (args.japanese28 or args.japanese2) and args.cohort != "manga":
+    if (args.japanese28 or args.japanese2 or args.japanese1) and args.cohort != "manga":
         parser.error("Japanese diagnostic requires the Japanese corpus")
     if args.japanese2 and args.shard == 2:
         parser.error("Focused Japanese two-work run has no shard 2")
-    if args.cohort == "manga" and (focused not in (False, "japanese28", "japanese2") or args.catalog != "explicit_plan" or not args.reader):
+    if args.japanese1 and args.shard not in (None, 1):
+        parser.error("Focused Japanese one-work run requires shard 1")
+    if args.cohort == "manga" and (focused not in (False, "japanese28", "japanese2", "japanese1") or args.catalog != "explicit_plan" or not args.reader):
         parser.error("Japanese gate requires explicit plan and Reader probe")
     if focused and (args.catalog != "explicit_plan" or not args.reader):
         parser.error("Focused runs require the original explicit catalog plan and Reader probe")

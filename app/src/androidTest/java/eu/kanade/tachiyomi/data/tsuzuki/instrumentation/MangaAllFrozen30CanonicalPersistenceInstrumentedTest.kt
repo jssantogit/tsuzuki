@@ -133,9 +133,10 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         require(cohort in setOf("manhwa", "manga"))
         val japanese = cohort == "manga"
         val diagnosticMode = args.getString("mangaAllJapaneseReadingDiagnostic") ?: "0"
-        require(diagnosticMode in setOf("0", "1", "2"))
+        require(diagnosticMode in setOf("0", "1", "2", "3"))
         val japaneseDiagnostic = diagnosticMode != "0"
         val japaneseRemainingTwo = diagnosticMode == "2"
+        val japaneseRemainingOne = diagnosticMode == "3"
         require(!japaneseDiagnostic || (japanese && catalogScope == "explicit_plan"))
         val expectedFormat = if (japanese) CatalogItemFormat.MANGA else CatalogItemFormat.MANHWA
         val corpusSha = if (japanese) JAPANESE_CORPUS_SHA else CORPUS_SHA
@@ -149,6 +150,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val shard = requireNotNull(args.getString("mangaAllFrozen30Shard")).toInt()
         require(shard in 0..2)
         require(!japaneseRemainingTwo || shard in 0..1)
+        require(!japaneseRemainingOne || shard == 1)
         val pendingMode = args.getString("mangaAllCanonicalPending14") ?: "0"
         require(pendingMode in setOf("0", "1"))
         require(pendingMode == "0" || catalogScope == "explicit_plan")
@@ -168,7 +170,8 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 (auditScope != "REMAINING6" || it in remainingSix) &&
                 (remainingMode != "1" || it in remainingSix) &&
                 (diagnosticMode != "1" || it !in setOf(3, 5)) &&
-                (!japaneseRemainingTwo || it in setOf(5, 13))
+                (!japaneseRemainingTwo || it in setOf(5, 13)) &&
+                (!japaneseRemainingOne || it == 13)
         }
         val context = instrument.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)
@@ -489,6 +492,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             }
         }
         val receiptNamespace = when {
+            japaneseRemainingOne -> "mangaall-japanese-manga-1-diagnostic"
             japaneseRemainingTwo -> "mangaall-japanese-manga-2-diagnostic"
             japaneseDiagnostic -> "mangaall-japanese-manga-28-diagnostic"
             japanese -> "mangaall-japanese-manga-30"

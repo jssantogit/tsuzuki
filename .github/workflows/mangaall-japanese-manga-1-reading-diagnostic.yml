@@ -1,0 +1,202 @@
+name: MangaALL — Japanese manga 1 reading diagnostic (OPT-IN)
+on:
+  push:
+    branches: ['probe/mangaall-dual-source-scale30-*']
+    paths:
+      - '.github/workflows/mangaall-japanese-manga-1-reading-diagnostic.yml'
+
+permissions:
+  contents: read
+
+env:
+  READER_PROBE: '--reader'
+  CATALOG_SCOPE: explicit_plan
+
+concurrency:
+  group: mangaall-japanese-manga-1-reading-diagnostic
+  # Preserve an active baseline run when a corrected candidate is queued.
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate locked cohort, restored Reader verdicts and independent MangaDex pixel reporter
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .github/scripts/run_mangaall_frozen30_canonical_persistence.py
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan
+          python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --cohort manga --check-plan
+          node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
+          node .github/scripts/test_mangaall_mangadot_search_policy.mjs
+          bash -n .github/scripts/run_mangaall_frozen30_mangadex_audit.sh
+          python3 -m py_compile .github/scripts/verify_mangaall_frozen30_mangadex_audit.py
+          python3 .github/scripts/verify_mangaall_frozen30_mangadex_audit.py --selftest
+          python3 .github/scripts/verify_mangaall_japanese_catalog_gate.py --selftest
+
+  build-once:
+    needs: preflight
+    if: contains(github.event.head_commit.message, 'RUN_JAPANESE1_READING_DIAGNOSTIC')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: future-code11-source
+          persist-credentials: false
+      - name: Stage exact immutable lock
+        run: |
+          mkdir -p app/src/androidTest/assets
+          cp .github/mangaall-japanese-manga-30-cohort-lock.json app/src/androidTest/assets/
+          cp .github/mangaall-japanese-manga-30-catalog-plan.json app/src/androidTest/assets/
+      - name: Stage pinned, NONSHIPPING code11 ZIP and exact lock into test assets
+        run: |
+          set -euo pipefail
+          test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
+          python3 .github/scripts/verify_mangaall_mangadex_reading_contract.py --source future-code11-source
+          extra=()
+          if [[ "$CATALOG_SCOPE" == 'explicit_plan' ]]; then extra+=(--mangadot-creators); fi
+          python3 .github/scripts/mangaall_code11_dual_source_unsigned.py \
+            --source future-code11-source --original-language ja "${extra[@]}" \
+            --output app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          test -s app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          ! git ls-files --error-unmatch app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip
+          python3 - <<'PY'
+          import json
+          import zipfile
+          from pathlib import Path
+          package = Path("app/src/androidTest/assets/mangaall-dual-source-code11-unsigned-research.zip")
+          with zipfile.ZipFile(package) as zf:
+              manifest = json.loads(zf.read("manifest.json"))
+              dot = zf.read("modules/sources/mangadot/modules/mangadot.js").decode()
+              policy = zf.read("modules/sources/mangadot/modules/search-policy.js")
+              dex = zf.read("modules/sources/mangadex/modules/mangadex.js").decode()
+          assert manifest["id"] == "app.tsuzuki.mangaall"
+          assert manifest["version"]["code"] == 11
+          assert "mangafire" not in str(manifest).lower()
+          assert manifest["name"] == "MangaAll — frozen 30 manga source research"
+          assert 'originalLanguage !== "ja"' in dex
+          assert '["originalLanguage[]", "ja"]' in dex
+          assert '["search", mangaDotRetrievalQuery(title)]' in dot
+          assert 'n > mangaDotResearchPageLimit()' in dot
+          assert policy == Path(".github/scripts/mangaall_mangadot_search_policy.mjs").read_bytes()
+          assert '"The Boxer":"Boxer"' not in dot
+          assert '"Weak Hero","The World After the Fall","Cheese in the Trap"' not in dot
+          assert not any("mangafire" in member.lower() for member in manifest["permissions"]["network"]["origins"])
+          print("MANGAALL_FROZEN30_ANDROID|nativeSource=MANGA_ONLY_JA|genericQueryPolicy=VERIFIED|canonical=NOT_TESTED")
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Build corrected shared unsigned APK pair and native Japanese search filter
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*MangaAllCatalogCanonicalMetadataTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:testDebugUnitTest --tests '*ShikimoriApiTest' --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --offline >"$log" 2>&1; then
+            cat "$log"
+            exit 0
+          fi
+          if ! grep -Eiq 'no cached version|offline mode|not available for offline' "$log"; then
+            cat "$log"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck :data:spotlessKotlinCheck :data:testDebugUnitTest --tests '*ProviderReadingBindingRepositoryImplTest' :domain:testDebugUnitTest --tests '*CreatorAliasProviderTest' --tests '*ResolveMangaAllIndependentCatalogIdentityTest' --tests '*MangaAllCatalogCanonicalMetadataTest' --tests '*MangaAllMangaDotNativeCoverageTest' --tests '*ProviderWorkSourcePortfolioTest' --tests '*ResolveMangaAllSelectedReadingOptionTest' --tests '*ResolveMangaAllSelectedChapterTest' --tests '*PrepareCanonicalChapterForReaderTest' --tests '*CollectProviderReadingEvidenceTest' :app:testDebugUnitTest --tests '*ShikimoriApiTest' --tests '*ShikimoriIntegrationProviderTest' --tests '*MangaUpdatesIntegrationProviderTest' --tests '*MalIntegrationProviderTest' --tests '*MALMangaTest' --tests '*MyAnimeListApiTest' --tests '*KitsuCatalogProviderTest' --tests '*KitsuIntegrationProviderTest' :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace >"$log" 2>&1; then
+              cat "$log"
+              exit 0
+            fi
+            if ! grep -Eq 'Received status code 429|Too Many Requests' "$log" || [[ "$attempt" -eq 3 ]]; then
+              cat "$log"
+              exit 1
+            fi
+            sleep "$((attempt * 45))"
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: japanese1-diagnostic-unsigned-apks
+          path: app/build/outputs/apk/
+          if-no-files-found: error
+          retention-days: 1
+
+  canonical-restart:
+    needs: build-once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: japanese1-diagnostic-unsigned-apks
+          path: app/build/outputs/apk/
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Real canonical collector then force-stop and verify SQLite after process restart
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --cohort manga --japanese1 --catalog "$CATALOG_SCOPE" $READER_PROBE --shard ${{ matrix.shard }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: japanese1-diagnostic-shard-${{ matrix.shard }}
+          path: .github/results/mangaall-japanese-manga-1-reading-diagnostic/shard-${{ matrix.shard }}/
+          if-no-files-found: ignore
+          retention-days: 2
+
+  aggregate:
+    if: always() && contains(github.event.head_commit.message, 'RUN_JAPANESE1_READING_DIAGNOSTIC')
+    needs: [build-once, canonical-restart]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          pattern: japanese1-diagnostic-shard-*
+          path: .github/results/mangaall-japanese-manga-1-reading-diagnostic
+      - name: Require exact diagnostic 1 collected and restored works
+        run: |
+          set -euo pipefail
+          root=.github/results/mangaall-japanese-manga-1-reading-diagnostic
+          for shard in 1; do
+            if [[ -d "$root/japanese1-diagnostic-shard-$shard" ]]; then
+              mv "$root/japanese1-diagnostic-shard-$shard" "$root/shard-$shard"
+            fi
+          done
+          python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --cohort manga --japanese1 --catalog "$CATALOG_SCOPE" $READER_PROBE --aggregate
+          test '${{ needs.build-once.result }}' = 'success'
+          test '${{ needs.canonical-restart.result }}' = 'success'
+
+# Only original index 13, fresh owner checks, never the final 30 gate.
