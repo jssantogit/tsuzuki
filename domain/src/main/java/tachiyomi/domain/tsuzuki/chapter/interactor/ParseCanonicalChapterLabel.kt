@@ -405,7 +405,7 @@ class ParseCanonicalChapterLabel {
         val PART_FORM = Regex("^(\\d+)\\s+(?:part|pt)\\s+(\\d+)")
         val NUMBER_FORM = Regex("^(\\d+)(?:[.]((?:\\d+))|[.]?([a-z]))?(?=$|\\s|[-:–—])")
         val AMBIGUOUS_PART_REMAINDER = Regex("^(?:part|pt)\\s+\\d+.*")
-        val TRAILING_TITLE = Regex("^(?:[-:–—:]\\s*[^0-9].*|\\p{L}.*)$")
+        val TRAILING_TITLE = Regex("^(?:[-:–—:]\\s*[^\\s\\p{N}].*|\\p{L}.*)$")
 
         fun normalize(value: String): String {
             return Normalizer.normalize(value, Normalizer.Form.NFD)
