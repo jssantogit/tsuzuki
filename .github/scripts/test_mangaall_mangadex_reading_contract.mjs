@@ -39,6 +39,10 @@ globalThis.mangaDexFixture = async (path, params=[]) => {
 const result = await adapter.lookup({titles:["Work"],requestedLanguage:"en",editorialEvidenceVersion:1,coverageEvidenceVersion:1});
 assert.deepEqual(staffIncludes,["author","artist"]);
 assert.deepEqual(result.items[0].authors,["Original Writer","Manga Illustrator"]);
+if (process.argv[3] === "--creators-only") {
+  console.log("MANGADEX_CREATOR_CONTRACT|authorArtist=PASS|readerPolicy=UNCHANGED");
+  process.exit(0);
+}
 assert.equal(result.items[0].coverageOutcome,"OBSERVED");
 assert.equal(result.items[0].coverageObservedCount,1);
 const binding = {externalWorkId:"mangadex:"+work,facetId:"en"};

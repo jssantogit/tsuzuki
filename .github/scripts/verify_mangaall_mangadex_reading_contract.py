@@ -22,11 +22,12 @@ with zipfile.ZipFile(io.BytesIO(base)) as old, zipfile.ZipFile(io.BytesIO(patche
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
         (root / "package.json").write_text('{"type":"module"}')
-        (root / "mangadex.js").write_bytes(new.read(name))
+        (root / "mangadex.js").write_bytes(old.read(name))
         (root / "http.js").write_text(
             'export const MANGAALL_USER_AGENT = "fixture";\n'
             'export const getMangaDexJson = (...args) => globalThis.mangaDexFixture(...args);\n'
         )
-        subprocess.run(["node", str(Path(__file__).with_name(
-            "test_mangaall_mangadex_reading_contract.mjs").resolve()),
-            str(root / "mangadex.js")], check=True)
+        test = str(Path(__file__).with_name("test_mangaall_mangadex_reading_contract.mjs").resolve())
+        subprocess.run(["node", test, str(root / "mangadex.js"), "--creators-only"], check=True)
+        (root / "mangadex.js").write_bytes(new.read(name))
+        subprocess.run(["node", test, str(root / "mangadex.js")], check=True)

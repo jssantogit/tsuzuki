@@ -8,6 +8,9 @@ on:
       - '.github/workflows/mangaall-canonical-audit-offline.yml'
       - '.github/mangaall-frozen30-catalog-plan.json'
       - '.github/scripts/mangaall_code11_dual_source_unsigned.py'
+      - '.github/scripts/mangaall_mangadex_reading_contract.py'
+      - '.github/scripts/test_mangaall_mangadex_reading_contract.mjs'
+      - '.github/scripts/verify_mangaall_mangadex_reading_contract.py'
       - '.github/scripts/mangaall_mangadot_search_policy.mjs'
       - '.github/scripts/test_mangaall_mangadot_search_policy.mjs'
       - '.github/scripts/mangaall_mangadot_creator_evidence.mjs'
@@ -54,11 +57,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: future-code11-source
+          persist-credentials: false
       - name: Offline strict creator and receipt contracts
         run: |
           set -euo pipefail
           node --check .github/scripts/mangaall_mangadot_creator_evidence.mjs
           node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
+          test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
+          python3 .github/scripts/verify_mangaall_mangadex_reading_contract.py --source future-code11-source
           node .github/scripts/test_mangaall_mangadot_search_policy.mjs
           python3 .github/scripts/run_mangaall_frozen30_canonical_persistence.py --selftest
           python3 .github/scripts/run_mangaall_frozen30_catalog_plan.py --check-plan

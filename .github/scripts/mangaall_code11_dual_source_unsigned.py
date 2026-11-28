@@ -153,6 +153,12 @@ def candidate_bytes(source_root: Path, manhwa_only: bool = False,
         from mangaall_mangadex_reading_contract import patch_mangadex_reading_contract
         dex_name = "modules/sources/mangadex/modules/mangadex.js"
         files[dex_name] = patch_mangadex_reading_contract(files[dex_name])
+    if mangadot_creators and not mangadex_internal_reading:
+        # The explicit catalog live requires both writer and illustrator.
+        # Keep this metadata-only patch independent of Reader delivery policy.
+        from mangaall_mangadex_reading_contract import patch_mangadex_creator_contract
+        dex_name = "modules/sources/mangadex/modules/mangadex.js"
+        files[dex_name] = patch_mangadex_creator_contract(files[dex_name])
     if mangadot_creators:
         # Separate opt-in; the five previous source-only live probes keep
         # exactly their original package shape. No authority or chapter

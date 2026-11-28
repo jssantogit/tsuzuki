@@ -4,7 +4,7 @@ Apply after the existing pinned code11 source/language patches. The ordinary
 signed source and previous unsigned baseline remain unchanged until opt-in.
 """
 
-def patch_mangadex_reading_contract(blob: bytes) -> bytes:
+def patch_mangadex_creator_contract(blob: bytes) -> bytes:
     def change(old: bytes, new: bytes, label: str):
         nonlocal blob
         if blob.count(old) != 1:
@@ -21,6 +21,18 @@ def patch_mangadex_reading_contract(blob: bytes) -> bytes:
         b'    .filter((rel) => (rel?.type === "author" || rel?.type === "artist") && ID_PATTERN.test(rel.id || ""))',
         "STAFF_ROLES",
     )
+    return blob
+
+
+def patch_mangadex_reading_contract(blob: bytes) -> bytes:
+    blob = patch_mangadex_creator_contract(blob)
+
+    def change(old: bytes, new: bytes, label: str):
+        nonlocal blob
+        if blob.count(old) != 1:
+            raise ValueError("MANGADEX_READING_CONTRACT_SOURCE_PIN_DRIFT_" + label)
+        blob = blob.replace(old, new, 1)
+
     change(
         b'function numericChapter(label) {',
         b'// The internal Reader cannot load publisher/external chapter URLs.\n'
