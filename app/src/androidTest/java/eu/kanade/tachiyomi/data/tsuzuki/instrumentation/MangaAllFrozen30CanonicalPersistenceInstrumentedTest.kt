@@ -702,6 +702,17 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             if (identity.status != MangaAllCatalogIdentityStatus.RESOLVED) return identity.status.name
             val owner = requireNotNull(identity.identity)
             if (!matchesAttestedOwner(index, owner.provider, owner.providerId)) return "CATALOG_ATTESTED_OWNER_CHANGED"
+            if (mixed) {
+                val groups = plan[index - 1].getValue("editionReview").jsonObject
+                    .getValue("requiredCreatorDigests").jsonArray
+                val observed = (owner.authors + owner.artists).map(::mangaAllCatalogCreatorKey).map(::hash).toSet()
+                if (groups.isEmpty() || groups.any { group ->
+                        group.jsonArray.none { it.jsonPrimitive.content in observed }
+                    }
+                ) {
+                    return "EDITION_CREDITS_UNVERIFIED"
+                }
+            }
             val provenance = identity.toCanonicalReadingMetadata()
                 ?: return "CATALOG_PROVENANCE_MISSING"
             if (owner.provider != catalogName || owner.format != expectedFormat ||
