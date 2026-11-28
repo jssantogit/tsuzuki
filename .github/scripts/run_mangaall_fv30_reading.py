@@ -26,7 +26,8 @@ def read_plan():
     assert (ASSETS / "mangaall-fv30-cohort-lock.json").read_bytes() == lock_bytes
     plan_raw = (ASSETS / "mangaall-fv30-verified-catalog-plan.json").read_bytes()
     receipts_raw = (ASSETS / "attested-identities.json").read_bytes()
-    owners = verified_plan(rows, digest, plan_raw, receipts_raw)
+    history_raw = (ASSETS / "fv30-candidate-receipts.json").read_bytes()
+    owners = verified_plan(rows, digest, plan_raw, receipts_raw, history_raw)
     return rows, digest, hashlib.sha256(plan_raw).hexdigest(), owners
 
 
