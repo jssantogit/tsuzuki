@@ -130,16 +130,28 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val catalogScope = args.getString("mangaAllCanonicalCatalog") ?: "mangaupdates"
         require(catalogScope in setOf("mangaupdates", "shikimori", "explicit_plan"))
         val cohort = args.getString("mangaAllCanonicalCohort") ?: "manhwa"
-        require(cohort in setOf("manhwa", "manga"))
+        require(cohort in setOf("manhwa", "manga", "fv30"))
         val japanese = cohort == "manga"
+        val mixed = cohort == "fv30"
+        val profile = if (mixed) requireNotNull(args.getString("mangaAllCanonicalOriginalLanguage")) else null
+        require(profile == null || profile in setOf("ja", "ko", "zh"))
         val diagnosticMode = args.getString("mangaAllJapaneseReadingDiagnostic") ?: "0"
         require(diagnosticMode in setOf("0", "1", "2"))
         val japaneseDiagnostic = diagnosticMode != "0"
         val japaneseRemainingTwo = diagnosticMode == "2"
         require(!japaneseDiagnostic || (japanese && catalogScope == "explicit_plan"))
-        val expectedFormat = if (japanese) CatalogItemFormat.MANGA else CatalogItemFormat.MANHWA
-        val corpusSha = if (japanese) JAPANESE_CORPUS_SHA else CORPUS_SHA
-        require(!japanese || catalogScope == "explicit_plan")
+        val expectedFormat = when {
+            profile == "zh" -> CatalogItemFormat.MANHUA
+            profile == "ja" || japanese -> CatalogItemFormat.MANGA
+            else -> CatalogItemFormat.MANHWA
+        }
+        val corpusSha = when {
+            mixed -> requireNotNull(args.getString("mangaAllCanonicalCorpusSha256"))
+            japanese -> JAPANESE_CORPUS_SHA
+            else -> CORPUS_SHA
+        }
+        require(corpusSha.matches(Regex("[0-9a-f]{64}")))
+        require(!(japanese || mixed) || catalogScope == "explicit_plan")
         val readerMode = args.getString("mangaAllCanonicalReaderProbe") ?: "0"
         require(readerMode in setOf("0", "1"))
         val phase = requireNotNull(args.getString("mangaAllCanonicalPhase"))
@@ -152,7 +164,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val pendingMode = args.getString("mangaAllCanonicalPending14") ?: "0"
         require(pendingMode in setOf("0", "1"))
         require(pendingMode == "0" || catalogScope == "explicit_plan")
-        require(!japanese || (pendingMode == "0" && !creditAudit))
+        require(!(japanese || mixed) || (pendingMode == "0" && !creditAudit))
         val pending14 = setOf(5, 6, 8, 11, 15, 16, 19, 20, 21, 23, 25, 27, 28, 29)
         require(!creditAudit || (pendingMode == "1" && readerMode == "0"))
         val remainingSix = setOf(8, 15, 21, 27, 28, 29)
@@ -162,7 +174,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         val auditScope = args.getString("mangaAllCreditAuditScope") ?: "PENDING13"
         require(auditScope in setOf("PENDING13", "REMAINING6"))
         require(auditScope == "PENDING13" || creditAudit)
-        val indices = (shard * 10 + 1..shard * 10 + 10).filter {
+        val shardIndices = (shard * 10 + 1..shard * 10 + 10).filter {
             (pendingMode == "0" || it in pending14) &&
                 (!creditAudit || it != 16) &&
                 (auditScope != "REMAINING6" || it in remainingSix) &&
@@ -177,35 +189,67 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 Build.HARDWARE in setOf("ranchu", "goldfish") ||
                 Build.PRODUCT.startsWith("sdk_gphone"),
         )
-        val lockName = if (japanese) {
-            "mangaall-japanese-manga-30-cohort-lock.json"
-        } else {
-            "mangaall-dual-source-30-cohort-lock.json"
+        val lockName = when {
+            mixed -> "mangaall-fv30-cohort-lock.json"
+            japanese -> "mangaall-japanese-manga-30-cohort-lock.json"
+            else -> "mangaall-dual-source-30-cohort-lock.json"
         }
-        val lock = instrument.context.assets.open(lockName)
-            .bufferedReader().use { Json.parseToJsonElement(it.readText()).jsonObject }
-        val works = requireNotNull(lock["works"]).jsonArray.map { it.jsonPrimitive.content }
+        val lockText = instrument.context.assets.open(lockName)
+            .bufferedReader().use { it.readText() }
+        val lock = Json.parseToJsonElement(lockText).jsonObject
+        val lockedRows = requireNotNull(lock["works"]).jsonArray
+        val works = if (mixed) {
+            lockedRows.map { it.jsonObject.getValue("title").jsonPrimitive.content }
+        } else {
+            lockedRows.map { it.jsonPrimitive.content }
+        }
         assertEquals(
-            if (japanese) "MANGA_30_FIXED_20261126" else "MANHWA_30_FIXED_20261123",
+            when {
+                mixed -> "FV30_FIXED_20261128"
+                japanese -> "MANGA_30_FIXED_20261126"
+                else -> "MANHWA_30_FIXED_20261123"
+            },
             lock["cohort"]?.jsonPrimitive?.content,
         )
-        assertEquals(cohort, lock["format"]?.jsonPrimitive?.content)
-        if (japanese) assertEquals("ja", lock["originalLanguage"]?.jsonPrimitive?.content)
+        if (mixed) {
+            assertEquals(corpusSha, hash(lockText))
+            assertEquals((1..30).toList(), lockedRows.map { it.jsonObject.getValue("index").jsonPrimitive.content.toInt() })
+            val formats = mapOf("ja" to "manga", "ko" to "manhwa", "zh" to "manhua")
+            assertTrue(
+                lockedRows.all {
+                    val row = it.jsonObject
+                    formats[row.getValue("originalLanguage").jsonPrimitive.content] ==
+                        row.getValue("format").jsonPrimitive.content
+                },
+            )
+        } else {
+            assertEquals(cohort, lock["format"]?.jsonPrimitive?.content)
+            if (japanese) assertEquals("ja", lock["originalLanguage"]?.jsonPrimitive?.content)
+            assertEquals(corpusSha, hash(JsonArray(works.map { JsonPrimitive(it) }).toString()))
+        }
         assertEquals(30, works.size)
         assertEquals(30, works.toSet().size)
-        assertEquals(corpusSha, hash(JsonArray(works.map { JsonPrimitive(it) }).toString()))
+        val indices = if (mixed) {
+            shardIndices.filter { lockedRows[it - 1].jsonObject.getValue("originalLanguage").jsonPrimitive.content == profile }
+        } else {
+            shardIndices
+        }
+        require(indices.isNotEmpty())
         val plan = if (catalogScope == "explicit_plan") {
-            val planName = if (japanese) {
-                "mangaall-japanese-manga-30-catalog-plan.json"
-            } else {
-                "mangaall-frozen30-catalog-plan.json"
+            val planName = when {
+                mixed -> "mangaall-fv30-verified-catalog-plan.json"
+                japanese -> "mangaall-japanese-manga-30-catalog-plan.json"
+                else -> "mangaall-frozen30-catalog-plan.json"
             }
             val planText = instrument.context.assets.open(planName)
                 .bufferedReader().use { it.readText() }
             assertEquals(requireNotNull(args.getString("mangaAllCanonicalPlanSha256")), hash(planText))
             val doc = Json.parseToJsonElement(planText).jsonObject
             assertEquals(corpusSha, doc.getValue("corpusSha256").jsonPrimitive.content)
-            assertEquals("RESEARCH_EXPLICIT_OWNERS_NO_FALLBACK", doc.getValue("scope").jsonPrimitive.content)
+            assertEquals(
+                if (mixed) "FV30_VERIFIED_EDITIONS_EXPLICIT_OWNERS" else "RESEARCH_EXPLICIT_OWNERS_NO_FALLBACK",
+                doc.getValue("scope").jsonPrimitive.content,
+            )
             val rows = doc.getValue("works").jsonArray.map { it.jsonObject }
             assertEquals((1..30).toList(), rows.map { it.getValue("index").jsonPrimitive.content.toInt() })
             rows
@@ -221,7 +265,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             catalogScope
         }
 
-        val attestedIdentities = if (japanese && !japaneseDiagnostic) {
+        val attestedIdentities = if (mixed || (japanese && !japaneseDiagnostic)) {
             val doc = instrument.context.assets.open("attested-identities.json")
                 .bufferedReader().use { Json.parseToJsonElement(it.readText()).jsonObject }
             assertEquals("1", doc.getValue("schemaVersion").jsonPrimitive.content)
@@ -245,18 +289,28 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
         }
 
         fun matchesAttestedOwner(index: Int, provider: String, externalId: String): Boolean =
-            !japanese || japaneseDiagnostic || hash("$provider:$externalId") == attestedIdentities[index - 1]
+            (!japanese && !mixed) || japaneseDiagnostic || hash("$provider:$externalId") == attestedIdentities[index - 1]
 
-        fun nativeTitle(index: Int): String? = plan.getOrNull(index - 1)
-            ?.get("searchTitle")?.jsonPrimitive?.content
+        fun nativeTitle(index: Int): String? = if (mixed) {
+            null
+        } else {
+            plan.getOrNull(index - 1)?.get("searchTitle")?.jsonPrimitive?.content
+        }
 
-        val bytes = instrument.context.assets.open("mangaall-dual-source-code11-unsigned-research.zip")
+        val packageName = if (mixed) {
+            "mangaall-fv30-$profile-unsigned-research.zip"
+        } else {
+            "mangaall-dual-source-code11-unsigned-research.zip"
+        }
+        val bytes = instrument.context.assets.open(packageName)
             .use { it.readBytes() }
         val parsed = ProviderPackageParser().parse(bytes)
         val manifest = parsed.manifest
         assertEquals("app.tsuzuki.mangaall", manifest.id)
         assertEquals(11L, manifest.version.code)
-        if (japanese) assertEquals("MangaAll — frozen 30 manga source research", manifest.name)
+        if (japanese || profile == "ja") assertEquals("MangaAll — frozen 30 manga source research", manifest.name)
+        if (profile == "ko") assertEquals("MangaAll — frozen 30 manhwa source research", manifest.name)
+        if (profile == "zh") assertEquals("MangaAll — manhua source research", manifest.name)
         val origins = requireNotNull(manifest.permissions.network).origins
         assertTrue(origins.none { it.contains("mangafire", true) || it.contains("mfcdn", true) })
         val id = ProviderId(manifest.id)
@@ -284,7 +338,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             configurationFingerprint = "frozen30-canonical-research",
         )
         val registry = DefaultProviderRegistry(registrations = { listOf(registration) })
-        val runtimeRoot = File(context.cacheDir, "mangaall-frozen30-canonical-runtime")
+        val runtimeRoot = File(context.cacheDir, "mangaall-frozen30-canonical-runtime${if (mixed) "-$profile" else ""}")
         val gateway = ScriptProviderReadingGateway(
             registry = registry,
             packageSource = ActiveProviderScriptPackageSource { requested ->
@@ -489,6 +543,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             }
         }
         val receiptNamespace = when {
+            mixed -> "mangaall-fv30-$profile"
             japaneseRemainingTwo -> "mangaall-japanese-manga-2-diagnostic"
             japaneseDiagnostic -> "mangaall-japanese-manga-28-diagnostic"
             japanese -> "mangaall-japanese-manga-30"
@@ -588,10 +643,17 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
             } else {
                 emptyList()
             }
-            val editionTitle = plan.getOrNull(index - 1)?.get("identityTitle")?.jsonPrimitive?.content
-                ?: works[index - 1]
-            val creatorAliases = plan.getOrNull(index - 1)?.get("creatorAliases")?.jsonObject
-                ?.mapValues { (_, aliases) -> aliases.jsonObject.keys.toList() }.orEmpty()
+            val editionTitle = if (mixed) {
+                works[index - 1]
+            } else {
+                plan.getOrNull(index - 1)?.get("identityTitle")?.jsonPrimitive?.content ?: works[index - 1]
+            }
+            val creatorAliases = if (mixed) {
+                emptyMap()
+            } else {
+                plan.getOrNull(index - 1)?.get("creatorAliases")?.jsonObject
+                    ?.mapValues { (_, aliases) -> aliases.jsonObject.keys.toList() }.orEmpty()
+            }
             var identity = bootstrap.execute(
                 editionTitle,
                 expectedFormat,
@@ -652,7 +714,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                 return compact.takeIf { it.isNotEmpty() && it.all { char -> char in '가'..'힣' } }
             }
             val publishedNames = listOf(owner.title) + owner.titles.values
-            val references = plan.getOrNull(index - 1)?.get("reviewedCreatorReferences")?.jsonArray.orEmpty()
+            val references = plan.getOrNull(index - 1)?.takeUnless { mixed }?.get("reviewedCreatorReferences")?.jsonArray.orEmpty()
                 .mapNotNull { raw ->
                     val entry = raw.jsonObject
                     val native = nativeKey(entry.getValue("nativeTitle").jsonPrimitive.content)
