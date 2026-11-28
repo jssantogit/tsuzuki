@@ -44,3 +44,5 @@ jobs:
             fi
             sleep "$((attempt * 45))"
           done
+
+# Retry after the test name exceeds the line-length lint.
