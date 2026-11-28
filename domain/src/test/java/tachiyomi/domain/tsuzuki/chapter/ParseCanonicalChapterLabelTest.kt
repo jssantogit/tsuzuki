@@ -36,6 +36,18 @@ class ParseCanonicalChapterLabelTest {
     }
 
     @Test
+    fun `chapter title may start with a letter in any script`() {
+        for (label in listOf("Ch. 1 音楽", "Ch. 1 시작", "Ch. 1 Начало", "Ch. 1 Música")) {
+            val parsed = parse.execute(label, numericHint = 1.0)
+            parsed.identity shouldBe parse.execute("Ch. 1").identity
+            parsed.confidence shouldBe 1.0
+        }
+        for (label in listOf("Ch. 1 2", "Ch. 1 part 2 3", "Ch. 1 - 2")) {
+            parse.execute(label, numericHint = 1.0).type shouldBe CanonicalChapterType.UNKNOWN
+        }
+    }
+
+    @Test
     fun `decimal label preserves part as a structured component`() {
         val chapter = parse.execute("12.5")
 

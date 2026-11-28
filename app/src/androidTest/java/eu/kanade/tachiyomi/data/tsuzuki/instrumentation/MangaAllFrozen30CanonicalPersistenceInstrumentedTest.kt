@@ -878,7 +878,7 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                         put(association.ref.evidenceProducerId(), proof)
                     }
                 }
-                val mappedIds = mappedRows.filter {
+                val scopedEvidence = mappedRows.filter {
                     val producer = it.evidence.producerId
                     producer in producers ||
                         (
@@ -886,7 +886,26 @@ class MangaAllFrozen30CanonicalPersistenceInstrumentedTest {
                                 proofs[producer] == it.evidence.providerMetadata?.catalogWorkFingerprint
                             )
                 }
-                    .mapNotNull { it.mappedCanonicalChapterId }.toSet()
+                val mappedIds = scopedEvidence.mapNotNull { it.mappedCanonicalChapterId }.toSet()
+                val parser = ParseCanonicalChapterLabel()
+                val rawOnes = scopedEvidence.filter { it.evidence.rawNumber == 1.0 }
+                val parsedOnes = rawOnes.count { row ->
+                    val parsed = parser.execute(row.evidence.rawLabel, row.evidence.rawNumber)
+                    parsed.type == CanonicalChapterType.REGULAR && parsed.baseNumber == 1 &&
+                        parsed.part == null && parsed.alphaSuffix == null
+                }
+                instrument.sendStatus(
+                    1,
+                    Bundle().apply {
+                        putString(
+                            "stream",
+                            "MANGAALL_EVIDENCE_RANGE|index=$index|source=$source|observed=${scopedEvidence.size}" +
+                                "|mappedRows=${scopedEvidence.count { it.mappedCanonicalChapterId != null }}" +
+                                "|rawOne=${rawOnes.size}|parsedOne=$parsedOnes" +
+                                "|mappedOne=${rawOnes.count { it.mappedCanonicalChapterId != null }}",
+                        )
+                    },
+                )
                 val regular = chapterRows.filter { it.id in mappedIds && it.type == CanonicalChapterType.REGULAR }
                 val numbers = regular.mapNotNull { it.baseNumber }.filter { it in 0..1_000_000 }
                 val exactOnes = chapterOnes.count { it.id in mappedIds }

@@ -241,6 +241,28 @@ def collect_ranges(log, shard, focused=False):
     return [rows[k] for k in sorted(rows)]
 
 
+def collect_evidence_ranges(log, shard, focused=False):
+    pattern = (
+        r"MANGAALL_EVIDENCE_RANGE\|index=(\d+)\|source=(mangadex|mangadot)"
+        r"\|observed=(\d+)\|mappedRows=(\d+)\|rawOne=(\d+)\|parsedOne=(\d+)"
+        r"\|mappedOne=(\d+)(?=\s|$)"
+    )
+    rows = {}
+    for match in re.finditer(pattern, log):
+        index, source, observed, mapped, raw_one, parsed, mapped_one = match.groups()
+        index, observed, mapped, raw_one, parsed, mapped_one = map(
+            int, (index, observed, mapped, raw_one, parsed, mapped_one))
+        key = (index, source)
+        if (index not in expected_indices(shard, focused) or key in rows
+                or not 0 <= mapped <= observed <= 1_000_000
+                or not 0 <= parsed <= raw_one <= observed
+                or not 0 <= mapped_one <= min(raw_one, mapped)):
+            return []
+        rows[key] = dict(index=index, source=source, observed=observed, mappedRows=mapped,
+                         rawOne=raw_one, parsedOne=parsed, mappedOne=mapped_one)
+    return [rows[k] for k in sorted(rows)]
+
+
 OPTION_REJECTION_REASONS = {
     "CHAPTER_IDENTITY_REJECTED", "MISSING_CHAPTER_KEY", "SOURCE_NOT_AUTHORIZED",
     "CATALOG_PROOF_MISMATCH", "SOURCE_LANGUAGE_MISSING", "SOURCE_LANGUAGE_MISMATCH",
@@ -389,6 +411,7 @@ def invoke(shard, phase, catalog, reader=False, focused=False, cohort=None):
         parsed["lookupFailures"] = collect_lookup_failures(log, shard, focused)
         parsed["diagnostics"] = collect_diagnostics(log, shard, focused)
         parsed["ranges"] = collect_ranges(log, shard, focused)
+        parsed["evidenceRanges"] = collect_evidence_ranges(log, shard, focused)
         parsed["acquisition"] = collect_acquisition(log, shard, focused)
         parsed["optionRejections"] = collect_option_rejections(log, shard, focused)
     if reader and phase == "RESTORE":
@@ -450,6 +473,8 @@ def run(shard, catalog, reader=False, focused=False, cohort=None):
             print("MANGAALL_CATALOG_SEARCH_FAILURE|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("diagnostics", []):
             print("MANGAALL_CANONICAL_DIAGNOSTIC|" + "|".join(f"{key}={value}" for key, value in row.items()))
+        for row in report["collect"].get("evidenceRanges", []):
+            print("MANGAALL_EVIDENCE_RANGE|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("ranges", []):
             print("MANGAALL_CANONICAL_RANGE|" + "|".join(f"{key}={value}" for key, value in row.items()))
         for row in report["collect"].get("acquisition", []):
@@ -599,6 +624,13 @@ def selftest():
     assert collect_ranges(range_row, 1) == []
     assert collect_ranges(range_row.replace("min=40", "min=43"), 0) == []
     assert collect_ranges(range_row + "|id=foreign", 0) == []
+    evidence_range = ("MANGAALL_EVIDENCE_RANGE|index=1|source=mangadot|observed=164"
+                      "|mappedRows=7|rawOne=1|parsedOne=0|mappedOne=0")
+    assert collect_evidence_ranges(evidence_range, 0)[0]["rawOne"] == 1
+    assert collect_evidence_ranges(evidence_range, 1) == []
+    assert collect_evidence_ranges(evidence_range + "\n" + evidence_range, 0) == []
+    assert collect_evidence_ranges(evidence_range.replace("parsedOne=0", "parsedOne=2"), 0) == []
+    assert collect_evidence_ranges(evidence_range + "|label=foreign", 0) == []
     acquisition = ("MANGAALL_CANONICAL_ACQUISITION|index=1|source=MANGADOT"
                    "|event=PROVIDER_READING_SOURCE_ASSOCIATION|outcome=CANDIDATES"
                    "|reason=AUTHOR_CONFLICT|candidates=0|count=2")
