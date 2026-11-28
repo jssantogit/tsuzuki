@@ -65,6 +65,7 @@ class MangaUpdatesIntegrationProvider private constructor(
         val nativeType = when (query.format) {
             CatalogItemFormat.MANGA -> "Manga"
             CatalogItemFormat.MANHWA -> "Manhwa"
+            CatalogItemFormat.MANHUA -> "Manhua"
             else -> null
         }
         val page = api.searchWindow(text, offset, limit, nativeType)
