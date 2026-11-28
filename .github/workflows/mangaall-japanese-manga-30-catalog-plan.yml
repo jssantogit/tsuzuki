@@ -234,3 +234,5 @@ jobs:
           test '${{ needs.independent-catalog.result }}' = 'success'
 
 # Strict gate for integrated diagnostics and provider authorization guards, frozen Japanese corpus.
+
+# Reattest the immutable Japanese cohort after approved pagination and parser changes.
