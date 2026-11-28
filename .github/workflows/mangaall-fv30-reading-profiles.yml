@@ -1,0 +1,31 @@
+name: MangaALL FV30 reading profile package contract
+on:
+  push:
+    branches: ['research/mangaall-fv30-reading-profiles-20261128']
+    paths: ['.github/workflows/mangaall-fv30-reading-profiles.yml']
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-fv30-reading-profiles
+  cancel-in-progress: false
+jobs:
+  offline-package-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: future-code11-source
+          persist-credentials: false
+      - name: Check three language profiles against pinned source without network reading
+        run: |
+          set -euo pipefail
+          test "$(git -C future-code11-source rev-parse HEAD)" = '89b5979fff297c2a099359258c9f9249e0089db4'
+          python3 .github/scripts/test_mangaall_fv30_reading_profiles.py future-code11-source
+          node .github/scripts/test_mangaall_mangadot_creator_evidence.mjs
+          node .github/scripts/test_mangaall_mangadot_search_policy.mjs
