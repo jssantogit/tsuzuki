@@ -2733,6 +2733,91 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `provisional source preserves progress only for recoverable failures`() = runTest {
+        val errors = listOf(
+            ProviderError(ProviderErrorCode.TIMEOUT, retryable = true),
+            ProviderError(ProviderErrorCode.PERMISSION_DENIED, retryable = false),
+            ProviderError(ProviderErrorCode.NETWORK_POLICY, retryable = false),
+            ProviderError(ProviderErrorCode.CHAPTER_IDENTITY_UNVERIFIED, retryable = false),
+            ProviderError(ProviderErrorCode.MALFORMED_RESULT, retryable = false),
+            ProviderError(
+                ProviderErrorCode.SOURCE_READ_ERROR,
+                retryable = false,
+                sourceFailureCode = ProviderLookupFailureCode.INVALID_RESPONSE,
+            ),
+        )
+        for (failure in errors) {
+            val id = IntegrationId("mal")
+            val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+            coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+                canonicalTitleId = canonicalTitle.id,
+                configurationFingerprint = "current",
+                metadata = ResolvedMetadata(
+                    authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "mal-verified"),
+                    externalIds = mapOf(id to "mal-verified"),
+                ),
+                refreshedAt = 42L,
+            )
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(canonicalTitle),
+                providerRegistry = registry(),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf("healthy-hid", "failed-hid").map { workId ->
+                                    ProviderWorkCandidate(
+                                        externalWorkId = workId,
+                                        title = "Dandadan",
+                                        language = "en",
+                                        authors = listOf("Hiromu Arakawa"),
+                                        detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                        coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                        coverageObservedCount = 1,
+                                        coverageMinMilli = 1_000,
+                                        coverageMaxMilli = 1_000,
+                                        coverageHasMore = false,
+                                    )
+                                },
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = { request ->
+                        val work = request.binding.externalWorkId
+                        if (request.cursor != null) {
+                            ProviderCallResult.Failure(failure)
+                        } else {
+                            ProviderCallResult.Success(
+                                ProviderPage(
+                                    items = listOf(
+                                        ProviderChapterObservation("chapter-$work", "Chapter 1", rawNumber = 1.0),
+                                    ),
+                                    nextCursor = if (work == "failed-hid") ProviderCursor("more") else null,
+                                ),
+                            )
+                        }
+                    },
+                ),
+                bindingRepository = MemoryBindingRepository(),
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+                canonicalMetadataSnapshotRepository = metadata,
+                workSourceAssociationRepository = MemoryWorkSourceAssociationRepository(),
+            )
+
+            val result = collector.execute(canonicalTitle.id)
+            val recoverable = failure.code == ProviderErrorCode.TIMEOUT
+            result.complete shouldBe false
+            result.bindingCount shouldBe 0
+            result.snapshots shouldBe emptyList()
+            result.partialEvidence.mapNotNull { it.externalChapterKey }.toSet() shouldBe
+                if (recoverable) setOf("chapter-healthy-hid", "chapter-failed-hid") else setOf("chapter-healthy-hid")
+            result.cursorProgress.any { it.ref.externalWorkId == "failed-hid" } shouldBe recoverable
+        }
+    }
+
+    @Test
     fun `multi HIDs yield separate provisional chapter evidence`() = runBlocking<Unit> {
         val id = IntegrationId("mal")
         val metadata = mockk<CanonicalMetadataSnapshotRepository>()

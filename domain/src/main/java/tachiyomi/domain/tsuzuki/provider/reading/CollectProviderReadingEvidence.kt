@@ -1947,10 +1947,9 @@ class CollectProviderReadingEvidence private constructor(
                     allowPartialPageLimit = true,
                 )
             }
-            if (result is ProviderCallResult.Failure &&
-                result.error.code in setOf(ProviderErrorCode.MALFORMED_RESULT, ProviderErrorCode.RESOURCE_LIMIT)
-            ) {
-                // A structural error invalidates this HID's pending pages.
+            if (result is ProviderCallResult.Failure && !canRetainProvisionalPages(result.error)) {
+                // Authorization, identity, policy and structural failures invalidate
+                // this HID's pending pages. Other independent source lanes survive.
                 trustedPages.clear()
             }
             when (result) {
@@ -2741,6 +2740,10 @@ class CollectProviderReadingEvidence private constructor(
             retryable = false,
         ),
     )
+
+    private fun canRetainProvisionalPages(error: ProviderError): Boolean =
+        error.code in RECOVERABLE_LOOKUP_ERRORS &&
+            error.sourceFailureCode != ProviderLookupFailureCode.INVALID_RESPONSE
 
     private data class LookupSnapshot(
         val items: List<ProviderWorkCandidate>,
