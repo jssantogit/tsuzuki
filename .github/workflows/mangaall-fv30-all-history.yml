@@ -1,0 +1,38 @@
+name: MangaALL FV30 A/B/C historical integrity
+on:
+  push:
+    branches: ['research/mangaall-fv30-parallel-20261128']
+    paths: ['.github/workflows/mangaall-fv30-all-history.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  consolidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify immutable source runs and consolidate all three histories
+        run: |
+          set -euo pipefail
+          gh api repos/$GH_REPO/actions/runs/46134549640 | jq -e '.head_sha=="dd30ef5233d2c0ed94a0e64c4d914b9c9762a442" and .conclusion=="success"'
+          gh api repos/$GH_REPO/actions/runs/46136665066 | jq -e '.head_sha=="1fc216da90ed13b45a564fcdb702ebe5488304d6" and .conclusion=="failure"'
+          gh api repos/$GH_REPO/actions/runs/46137565150 | jq -e '.head_sha=="4a4cef1b677b7e56c29065cdf56a8ae37e7d3791" and .conclusion=="success"'
+          gh run download 46134549640 --name fv30-accumulated-candidate-receipts --dir fv30-all-history/a
+          for cohort in fv30b fv30c; do
+            gh run download 46136665066 --name "$cohort-first-pass-summary" --dir "fv30-all-history/$cohort"
+          done
+          gh run download 46137565150 --name fv30-bc-focused-summary --dir fv30-all-history/focused
+          python3 .github/scripts/verify_mangaall_fv30_all_history.py
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: fv30-abc-historical-summary
+          path: fv30-all-history/summary.json
+          if-no-files-found: error
+          retention-days: 90
