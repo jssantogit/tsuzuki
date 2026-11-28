@@ -1,0 +1,35 @@
+name: MangaALL FV30 historical receipt integrity
+on:
+  push:
+    branches: ['research/mangaall-fv30-20261128']
+    paths: ['.github/workflows/mangaall-fv30-catalog-history.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  historical-receipts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate origin and download previous receipts without live calls
+        run: |
+          set -euo pipefail
+          gh api repos/$GH_REPO/actions/runs/46107669239 | jq -e '.head_sha=="8738bb9fd6f4bcb4fbd00bed9dbfb85885d2ada8" and .conclusion=="failure"'
+          gh api repos/$GH_REPO/actions/runs/46132114609 | jq -e '.head_sha=="9d37b5937ab409639609095c639cf811ab4910cf" and .conclusion=="success"'
+          for s in 0 1 2; do
+            gh run download 46107669239 --name "fv30-first-pass-shard-$s" --dir "fv30-historical-artifacts/initial-$s"
+          done
+          gh run download 46132114609 --name fv30-focused-summary --dir fv30-historical-artifacts/focused
+          python3 .github/scripts/verify_mangaall_fv30_catalog_history.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: fv30-accumulated-candidate-receipts
+          path: fv30-historical-artifacts/candidate-receipts.json
+          if-no-files-found: error
+          retention-days: 90
